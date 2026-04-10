@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import '../styles/dashboard.scss'; 
 
 const menuItems = [
