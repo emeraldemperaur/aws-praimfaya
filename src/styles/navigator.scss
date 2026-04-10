@@ -1,0 +1,359 @@
+.ux-btn {
+  display: block;
+  background-color: var(--primary-color);
+  color: var(--white);
+  text-align: center;
+  padding: 0.6rem 1.4rem;
+  font-size: 1rem;
+  font-weight: 500;
+  border-radius: 5px;
+}
+
+.icon {
+  padding: 0.5rem;
+  background-color: var(--light-grey);
+  border-radius: 10px;
+}
+
+.logo {
+  margin-right: 1.5rem;
+  text-decoration: none;
+}
+
+#nav-menu {
+  border-bottom: var(--border);
+  font-family: "Barlow", sans-serif !important;
+}
+
+.ux-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1600px;
+  margin: 0 auto;
+  column-gap: 2rem;
+  height: 90px;
+  padding: 1.2rem 3rem;
+  box-shadow: 1px 2px 2px 1px rgba(0, 0, 0, 0.3);
+  position: sticky;
+}
+
+.ux-menu {
+  position: relative;
+  background: var(--white);
+}
+
+.ux-menu-bar li:first-child .ux-dropdown {
+  flex-direction: initial;
+  min-width: 480px;
+}
+
+.ux-menu-bar li:first-child ul:nth-child(1) {
+  border-right: var(--border);
+}
+
+.ux-menu-bar li:nth-child(n + 2) ul:nth-child(1) {
+  border-bottom: var(--border);
+}
+
+.ux-menu-bar .ux-dropdown-link-title {
+  font-weight: 600;
+  font-family: "Bodoni Moda Variable", sans-serif;
+}
+
+
+.ux-menu-bar .ux-nav-link {
+  font-size: 1.2rem;
+  font-weight: 400;
+  letter-spacing: 0.06px;
+  padding: 0.3rem;
+  min-width: 60px;
+  margin: 0 0.6rem;
+  font-family: "Bodoni Moda Variable", sans-serif !important;
+}
+
+.ux-menu-bar .ux-nav-link:hover,
+.ux-dropdown-link:hover {
+  //color: var(--primary-color);
+  color: #800020 !important;
+}
+
+.nav-start,
+.nav-end,
+.ux-menu-bar,
+.right-container,
+.right-container .search {
+  display: flex;
+  align-items: center;
+}
+
+.ux-dropdown {
+  display: flex;
+  flex-direction: column;
+  min-width: 230px;
+  background-color: var(--white);
+  border-radius: 10px;
+  position: absolute;
+  top: 36px;
+  z-index: 1;
+  visibility: hidden;
+  opacity: 0;
+  transform: scale(0.97) translateX(-5px);
+  transition: 0.1s ease-in-out;
+  box-shadow: var(--shadow);
+  letter-spacing: 0.10em !important;
+  margin-top: 23px;
+}
+
+.ux-dropdown-dark {
+  display: flex;
+  flex-direction: column;
+  min-width: 230px;
+  background-color: #1b1c1d;
+  border-radius: 10px;
+  position: absolute;
+  top: 36px;
+  z-index: 1;
+  visibility: hidden;
+  opacity: 0;
+  transform: scale(0.97) translateX(-5px);
+  transition: 0.1s ease-in-out;
+  box-shadow: var(--shadow);
+  letter-spacing: 0.10em !important;
+  margin-top: 23px;
+}
+
+.ux-dropdown.active {
+  visibility: visible;
+  opacity: 1;
+  transform: scale(1) translateX(5px);
+}
+
+.ux-dropdown ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.2rem;
+  font-size: 0.95rem;
+}
+
+.ux-dropdown-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.15rem;
+  font-size: 1.2rem;
+}
+
+.ux-dropdown-link {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-radius: 7px;
+  transition: 0.1s ease-in-out;
+}
+
+.ux-dropdown-link p {
+  font-size: 0.8rem;
+  color: inherit; 
+  opacity: 0.8;
+}
+
+.right-container {
+  display: flex;
+  align-items: center;
+  column-gap: 1rem;
+}
+
+.right-container .search {
+  position: relative;
+}
+
+.right-container img {
+  border-radius: 50%;
+}
+
+.search input {
+  background-color: var(--ash);
+  border: none;
+  border-radius: 6px;
+  padding: 0.7rem;
+  padding-left: 2.4rem;
+  font-size: 16px;
+  width: 100%;
+  border: var(--border);
+}
+
+.search .bx-search {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  font-size: 1.3rem;
+  transform: translateY(-50%);
+  opacity: 0.6;
+}
+
+#hamburger {
+  display: none;
+  padding: 0.1rem;
+  margin-left: 1rem;
+  font-size: 1.9rem;
+}
+
+@media (max-width: 1100px) {
+  #hamburger {
+    display: block;
+  }
+
+  .ux-container {
+    padding: 1.2rem;
+  }
+
+  .ux-menu {
+    display: none;
+    position: absolute;
+    top: 87px;
+    left: 0;
+    min-height: 100vh;
+    width: 100vw;
+  }
+
+  .ux-menu-bar li:first-child ul:nth-child(1) {
+    border-right: none;
+    border-bottom: var(--border);
+    text-decoration: none;
+  }
+
+  .ux-dropdown {
+    display: none;
+    min-width: 100%;
+    border: none !important;
+    border-radius: 5px;
+    position: unset;
+    top: 0;
+    left: 0;
+    visibility: visible;
+    opacity: 1;
+    transform: none;
+    box-shadow: none;
+    letter-spacing: 0.10em !important;
+    overflow-y: scroll;
+    font-family: "Bodoni Moda Variable", sans-serif;
+  }
+
+  .ux-menu.show,
+  .ux-dropdown.active {
+    display: block;
+    overflow-y: scroll;
+    height: 400px;
+    
+  }
+
+  .ux-dropdown ul {
+    padding-left: 0.3rem;
+  }
+
+  .ux-menu-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    row-gap: 1rem;
+    padding: 1rem;
+    
+  }
+
+  .ux-menu-bar .ux-nav-link {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    font-weight: 600;
+    font-size: 1.2rem;
+    margin: 0;
+  }
+
+  .ux-menu-bar li:first-child .ux-dropdown {
+    min-width: 100%;
+  }
+
+  .ux-menu-bar > li:not(:last-child) {
+    padding-bottom: 0.5rem;
+    border-bottom: var(--border);
+  }
+}
+
+.ux-menu-icons{
+    font-size: 23px;
+}
+
+.menu-logo{
+    font-family: "Bodoni Moda Variable", sans-serif;
+    font-weight: 700;
+    font-size: 21px;
+    text-transform:capitalize;
+    letter-spacing: 0.33em;
+    color: #0B0B45;
+    text-decoration: none !important;
+}
+
+
+@media (max-width: 600px) {
+  .right-container {
+    display: none;
+  }
+
+  .ux-menu.show,
+  .ux-dropdown.active {
+    display: block;
+    overflow-y: scroll !important;
+    height: 400px !important;
+    
+  }
+}
+
+#nav-menu a, 
+#nav-menu .NavLink {
+  text-decoration: none;
+  font-family: "Bodoni Moda Variable", sans-serif;
+}
+
+#nav-menu a:hover, 
+#nav-menu .NavLink:hover {
+  text-decoration: none;
+  color: #800020 !important;
+}
+
+#nav-menu ul {
+  list-style-type: none; 
+}
+
+#nav-menu button {
+  font-size: 1.2rem;
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;    
+  color: inherit;    
+  cursor: pointer;  
+  outline: none;   
+}
+
+.ux-menu-bar-dark .ux-nav-link-dark {
+ 
+    color: #ffffff !important;
+  
+}
+
+.ux-menu-bar-dark .ux-nav-link-dark:hover {
+ 
+    color: #800020 !important;
+}
+
+
+body.dark-theme #nav-menu a:hover, 
+body.dark-theme #nav-menu .NavLink:hover,
+body.dark-theme #nav-menu .ux-menu-bar .ux-nav-link:hover, 
+body.dark-theme #nav-menu .ux-dropdown-link:hover,
+body.dark-theme #nav-menu .ux-dropdown-btn:hover {
+  color: #a9a9a9 !important; 
+}

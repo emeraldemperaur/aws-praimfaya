@@ -1,0 +1,269 @@
+.praimfaya-dark{
+  body{
+    background-color: #000000;
+  }
+}
+
+.praimfaya-light{
+  body{
+    background-color: #000000;
+  }
+}
+
+
+.praimfaya-toast {
+  /* Toast Layout */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin-bottom: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 16px;
+}
+
+.praimfaya-toast-dark {
+  /* Toast Layout (Dark Theme) */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin-bottom: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 16px;
+}
+
+.test{
+  background-color: #000000;
+}
+
+.toast-success {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.toast-error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.toast-default {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #1f2937;
+}
+
+.praimfaya-toast-progress {
+  background-color: rgba(0, 0, 0, 0.1) !important; 
+}
+
+.praimfaya-toast-progress-dark {
+  background-color: rgba(0, 0, 0, 0.1) !important; 
+}
+
+/* Toast Enter Animation */
+@keyframes animFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px); 
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.praimfaya-toast-enter {
+  animation: myFadeInUp 0.3s ease-out forwards;
+}
+
+/* Toast Exit Animation */
+@keyframes animFadeOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%); 
+  }
+}
+
+.praimfaya-toast-exit {
+  animation: myFadeOutRight 0.3s ease-in forwards;
+}
+
+.error-fallback-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100dvh; 
+  width: 100%;
+  box-sizing: border-box; 
+  text-align: center;
+  padding: 2rem;
+  background-color: #fafafa;
+
+  h1 {
+    font-size: 33px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.33em;
+    color: #0B0B45;
+    margin-bottom: 1rem;
+    font-family: "Bodoni Moda Variable" !important;
+  }
+
+  h2 {
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 0.33em;
+    text-transform: uppercase;
+    color: grey;
+    font-family: "Bodoni Moda Variable" !important;
+  }
+
+  p {
+    color: #4a5568;
+    max-width: 500px;
+    margin-bottom: 2rem;
+    font-family: "Google Sans Code" !important;
+  }
+
+  button {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: 0.13em;
+    color: #ffffff;
+    background-color: #0B0B45;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background-color 0.2s ease;
+    font-family: "Bodoni Moda Variable" !important;
+
+    &:hover {
+      background-color: #2d3748;
+    }
+  }
+}
+
+.error-fallback-container-dark {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100dvh; 
+  width: 100%;
+  box-sizing: border-box; 
+  text-align: center;
+  padding: 2rem;
+  background-color: #1b1c1d;
+
+  h1 {
+    font-size: 33px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.33em;
+    color: #FFFFFF;
+    margin-bottom: 1rem;
+    font-family: "Bodoni Moda Variable" !important;
+  }
+
+  h2 {
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 0.33em;
+    text-transform: uppercase;
+    color: grey;
+    font-family: "Bodoni Moda Variable" !important;
+  }
+
+  p {
+    color: #f9f9f9;
+    max-width: 500px;
+    margin-bottom: 2rem;
+    font-family: "Google Sans Code" !important;
+  }
+
+  button {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: 0.13em;
+    color: #ffffff;
+    background-color: #0B0B45;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background-color 0.2s ease;
+    font-family: "Bodoni Moda Variable" !important;
+
+    &:hover {
+      background-color: #2d3748;
+    }
+  }
+}
+
+.floating-action-button {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;    
+  position: fixed;
+  right: 50px;
+  bottom: 50px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+
+  i, svg {
+    font-size: 35px;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  &.light-mode {
+    background-color: #0B0B45;
+    color: white;
+    box-shadow: 0 6px 10px 0 rgba(102, 102, 102, 0.5);
+
+    &:hover {
+      box-shadow: 0 8px 15px 0 rgba(102, 102, 102, 0.7);
+      transform: scale(1.05);
+    }
+  }
+
+  &.dark-mode {
+    background-color: #ffffff; 
+    color: #1b1c1d;            
+    box-shadow: 0 6px 10px 0 rgba(0, 0, 0, 0.6); 
+
+    &:hover {
+      box-shadow: 0 8px 15px 0 rgba(0, 0, 0, 0.9);
+      transform: scale(1.05);
+    }
+  }
+}
