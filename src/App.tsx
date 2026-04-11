@@ -14,6 +14,20 @@ import TerminalConsoleUI from './pages/terminalconsole';
 import LoaderGate from './components/loadergate';
 import './styles/styles.scss';
 import './App.scss';
+import { generateClient } from 'aws-amplify/api';
+import type { Schema } from '../amplify/data/resource';
+import { Amplify } from 'aws-amplify';
+
+const apiClient = generateClient<Schema>();
+
+async function testAmplify() {
+  try {
+    const result = await apiClient.queries.Chronos({ name: "TestChronosFunction" });
+    console.log("API Result:", result);
+  } catch (error) {
+    console.error("Error calling Chronos function:", error);
+  }
+}
 
 function App() {
   const { logUser, userLog, isAuthenticated } = usePraimfaya();
@@ -25,6 +39,9 @@ function App() {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
     document.body.style.color = darkMode ? "#f9fafb" : "#1f2937";
     document.body.style.transition = "background-color 0.3s ease, color 0.3s ease";
+    console.log('Amplify.configure:');
+    console.log(Amplify.getConfig());
+    testAmplify();
   }, [darkMode]); 
   
   const toggleDarkMode = () => { setDarkMode(!darkMode)}

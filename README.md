@@ -96,6 +96,16 @@ Add AWS Amplify to existing Vite base project.
 npm create amplify@latest
 ```
 
+#### Mount AWS Amplify into App 
+
+<p align="justify">
+Mount AWS Amplify to the application instance with the auto-generated <code>amplify_outputs.json</code> in project root</p>
+
+```typescript
+import { Amplify } from 'aws-amplify';
+import amplifyOutputs from '../amplify_outputs.json';
+```
+
 #### Run AWS Amplify Sandbox 
 
 <p align="justify">
@@ -363,6 +373,29 @@ jobs:
         }
     ]
 }
+```
+
+#### AWS Amplify Hosting (amplify.yml) Build Dependency Fix
+```yaml
+version: 1
+backend:
+  phases:
+    build:
+      commands:
+        - npm install --cache .npm --prefer-offline
+        - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
+frontend:
+  phases:
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - .npm/**/*
 ```
 
 #### Resource References

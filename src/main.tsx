@@ -8,6 +8,10 @@ import './index.scss'
 import App from './App.tsx'
 import { PraimfayaProvider } from './contexts/index.tsx'
 import { BrowserRouter } from 'react-router-dom';
+import { Amplify } from 'aws-amplify';
+import amplifyOutputs from '../amplify_outputs.json'
+
+Amplify.configure(amplifyOutputs);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
