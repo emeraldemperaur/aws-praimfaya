@@ -2,9 +2,11 @@ import React, { useState, createContext, useContext } from "react";
 
 export interface PraimfayaContextType {
   localeDate: string;
-  logUser: string[];
+  logUser: string;
   logKey: string;
-  userLog: (loginUser: string, loginKey: string) => void;
+  logUUID: string;
+  userLog: (loginUser: string, loginKey: string, loginUUID: string) => void;
+  userLogout: () => void;
   isAuthenticated: boolean;
 }
 
@@ -16,24 +18,33 @@ interface PraimfayaProviderProps {
 
 const PraimfayaProvider = ({ children }: PraimfayaProviderProps) => {
   const [localeDate] = useState<string>(getLocalTime);
-  const [logUser, setLogUser] = useState<string[]>([]); 
+  const [logUser, setLogUser] = useState<string>(""); 
   const [logKey, setLogKey] = useState<string>("");
+  const [logUUID, setLogUUID] = useState<string>("");
 
-  const logUserLogin = (loginUser: string, loginKey: string): void => {
-    setLogUser((prevState) => [...prevState, loginUser]);
+  const logUserLogin = (loginUser: string, loginKey: string, loginUUID: string): void => {
+    setLogUser(loginUser);
     setLogKey(loginKey);
+    setLogUUID(loginUUID);
   };
 
-  const isAuthentiacated = logUser.length > 0 && logKey !== '';
+  const logUserLogout = (): void => {
+    setLogUser("");
+    setLogKey("");
+  };
+
+  const isAuthenticated = logUser !== "" && logKey !== "";
 
   return (
     <PraimfayaContext.Provider
       value={{
-        localeDate: localeDate,
-        logUser: logUser,
-        logKey: logKey,
+        localeDate,
+        logUser,
+        logKey,
+        logUUID,
         userLog: logUserLogin,
-        isAuthenticated: isAuthentiacated,
+        userLogout: logUserLogout,
+        isAuthenticated,
       }}
     >
       {children}
