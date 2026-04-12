@@ -1,10 +1,11 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { usePraimfaya } from './contexts';
-import { ToastContainer } from 'react-toastify/unstyled';
+import { ToastContainer } from 'react-toastify';
+//import 'react-toastify/dist/ReactToastify.css';
 import Praimfaya404 from './pages/404';
 import AuthenticationUI from './pages/authentication';
 import DashboardUI from './pages/dashboard';
-import { contextCSSClass, ErrorIcon, FluidToastAnimation, InfoIcon, SuccessIcon, WarningIcon } from './utils/voltaire';
+import { FluidToastAnimation } from './utils/voltaire';
 import { ErrorBoundary } from './utils/errorboundary';
 import { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
@@ -56,24 +57,16 @@ function App() {
         />
     </Helmet>
     <div className={`App ${darkMode ? 'praimfaya-dark' : 'praimfaya-light'}` }>
-      <ToastContainer stacked 
-      toastClassName={(context) =>
-        `praimfaya-toast${darkMode ? '-dark' : ''} ${contextCSSClass[context?.type || "default"]}`
-      }
-      progressClassName={`praimfaya-toast-progress${darkMode ? '-dark' : ''}`}
-      position="top-right"
-      autoClose={3000}
-      hideProgressBar={false}
-      transition={FluidToastAnimation}
-      icon={({ type }) => {
-        switch (type) {
-          case "success": return <SuccessIcon />;
-          case "error": return <ErrorIcon />;
-          case "info": return <InfoIcon />;
-          case "warning": return <WarningIcon />;
-          default: return <InfoIcon />;
-        }
-      }}
+      <ToastContainer 
+        stacked
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        toastClassName="praimfaya-toast-shell" 
+        progressClassName="praimfaya-toast-progress"
+        transition={FluidToastAnimation}
+        icon={false}        
+        closeButton={false}
       />
       <ErrorBoundary 
       fallback={(error, reset) => (

@@ -38,7 +38,6 @@
   box-sizing: content-box !important;
 }
 
-
 .ost-container .box {
   position: absolute;
   left: 0;
@@ -100,11 +99,13 @@
   padding: 10px 15px;
 }
 
+/* --- THE FIX FOR INPUT SIZING --- */
 .ost-container input {
+  box-sizing: border-box !important; /* Overrides the global content-box bug */
   margin: 0 auto 15px;
   display: block;
   width: 80%;
-  max-width: 220px;
+  max-width: 250px; /* Adjusted to natively absorb the 30px padding safely */
   -moz-transition: all 0.3s;
   -o-transition: all 0.3s;
   -webkit-transition: all 0.3s;
@@ -233,7 +234,6 @@
   opacity: 0;
 }
 
-
 .ost-container.active {
   width: 260px;
   height: 140px;
@@ -256,7 +256,9 @@
   opacity: 1;
 }
 
+/* Updated to ensure the password wrappers hide when logged in successfully */
 .ost-container.active input,
+.ost-container.active .password-input-wrapper, 
 .ost-container.active .ost-btn,
 .ost-container.active .info-item {
   display: none;
@@ -285,7 +287,6 @@
   fill: #fff;
 }
 
-
 .login-form-title {
   font-family: 'Bodoni Moda Variable';
   font-weight: 300;
@@ -302,7 +303,6 @@
   font-weight: 400;
   letter-spacing: 0.21em;
 }
-
 
 @media (max-width: 650px) {
   .ost-container {
@@ -343,7 +343,6 @@
   }
 }
 
-
 .auth-validation-error{
   color: #800020;
   font-size: 13px;
@@ -352,4 +351,47 @@
   font-weight: 500;
   font-family: "Bodoni Moda Variable";
   margin-left: 23px;
+}
+
+/* --- THE BULLETPROOF WRAPPER --- */
+.password-input-wrapper {
+    position: relative;
+    display: block;
+    /* Exactly mirrors the external constraints of a normal input */
+    width: 80%;       
+    max-width: 250px; 
+    margin: 0 auto 15px; 
+    
+    input {
+        width: 100% !important; 
+        max-width: 100% !important; 
+        margin: 0 !important; /* Margin is handled by the wrapper now */
+        padding-right: 45px !important; /* Carves out space so text doesn't hide under the eye */
+    }
+
+    .password-toggle-icon {
+        position: absolute;
+        right: 15px; /* Locked safely inside the input's right boundary */
+        top: 50%;
+        transform: translateY(-50%);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        
+        /* Hardcoded text color so it never vanishes against the white input background */
+        color: #6b7280; 
+        transition: color 0.2s ease;
+
+        svg {
+            width: 20px;
+            height: 20px;
+            display: block;
+        }
+
+        &:hover {
+            color: #111827; /* Darkens on hover */
+        }
+    }
 }

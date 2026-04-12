@@ -1,5 +1,4 @@
-import React, { useContext, useRef, useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
+import { useContext, useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PraimfayaContext } from '../contexts';
 import { signIn, signUp, confirmSignUp, getCurrentUser, fetchUserAttributes, autoSignIn } from 'aws-amplify/auth';
@@ -7,31 +6,32 @@ import devLogoDark from '../assets/me-devlogo-white.png';
 import devLogoLight from '../assets/me-devlogo-black.png';
 import '../styles/authenticator.scss';
 import '../styles/styles.scss';
+import { showToast } from '../utils/toastService';
+import { EyeIcon, EyeSlashIcon } from '../utils/voltaire';
 
-const Authenticator = ({darkMode}: {darkMode: boolean}) => {
+const Authenticator = ({ darkMode }: { darkMode: boolean }) => {
     let navigator = useNavigate();
     const contextPraimfaya = useContext(PraimfayaContext);
-    
+
     const loginUsername = useRef<HTMLInputElement>(null);
     const loginUserPassword = useRef<HTMLInputElement>(null);
     const signupUsername = useRef<HTMLInputElement>(null);
     const signupUserPassword = useRef<HTMLInputElement>(null);
     const confirmUserPassword = useRef<HTMLInputElement>(null);
-    
     const verificationCode = useRef<HTMLInputElement>(null);
-    
-    const loginButton = useRef<HTMLDivElement>(null);
-    const signupButton = useRef<HTMLDivElement>(null);
-    
+
     const [usernameLoginError, setUsernameLoginError] = useState([false, '']);
     const [passwordLoginError, setPasswordLoginError] = useState([false, '']);
     const [usernameSignUpError, setUsernameSignUpError] = useState([false, '']);
     const [passwordSignUpError, setPasswordSignUpError] = useState([false, '']);
     const [passwordConfirmError, setPasswordConfirmError] = useState([false, '']);
-    
+
     const [isConfirming, setIsConfirming] = useState(false);
-    
     const [isSignUpView, setIsSignUpView] = useState(false);
+
+    const [showLoginPassword, setShowLoginPassword] = useState(false);
+    const [showSignUpPassword, setShowSignUpPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     useEffect(() => {
         checkAuthStatus();
@@ -43,78 +43,56 @@ const Authenticator = ({darkMode}: {darkMode: boolean}) => {
             const attributes = await fetchUserAttributes();
             contextPraimfaya.userLog(attributes.email || 'aws-user', 'verified', username);
             navigator('/dashboard');
-        } catch (err) {
-            // User is not logged in.
-        }
+        } catch (err) { /* Not logged in */ }
     };
 
     const isValidEmail = (email: string): boolean => {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return emailRegex.test(email);
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     };
-
-    const onInputChangeHandler = (event: React.ChangeEvent<HTMLInputElement>) => {
-        console.log('Input Detected: ' + event.target.value);
-    }
 
     const validateInput = (emailValue: string, passwordValue: string, login: boolean, confirmPasswordValue?: string) => {
         setUsernameLoginError([false, '']); setPasswordLoginError([false, '']); setUsernameSignUpError([false, '']);
         setPasswordSignUpError([false, '']); setPasswordConfirmError([false, '']);
-        
+
         if (emailValue?.trim() === '' || !isValidEmail(emailValue)) {
             const errorMessage = emailValue?.trim() === '' ? 'Email Required' : 'Valid email address required';
             login ? setUsernameLoginError([true, errorMessage]) : setUsernameSignUpError([true, errorMessage]);
-            login ? toast.error('Valid Login Credentials Required', {
-                position: "top-right",
-                closeOnClick: true
-            }) : null;
+            if (login) showToast.error('Valid Login Credentials Required');
             return false;
         }
 
         if (passwordValue.trim() === '') {
             login ? setPasswordLoginError([true, 'Password Required']) : setPasswordSignUpError([true, 'Password Required']);
-            login ? toast.error('Login Credentials Required', {
-                position: "top-right",
-                closeOnClick: true
-            }) : null;
+            if (login) showToast.error('Login Credentials Required');
             return false;
         }
 
-        if (!login && confirmPasswordValue?.trim() === '' || !login && passwordValue.trim() !== confirmPasswordValue?.trim()) {
-            !login && confirmPasswordValue?.trim() === '' ? setPasswordConfirmError([true, 'Password Required']) : null;
-            !login && passwordValue.trim() !== confirmPasswordValue?.trim() ? setPasswordConfirmError([true, 'Password does not match']) : null;
+        if (!login && (confirmPasswordValue?.trim() === '' || passwordValue.trim() !== confirmPasswordValue?.trim())) {
+            setPasswordConfirmError([true, confirmPasswordValue?.trim() === '' ? 'Password Required' : 'Password does not match']);
             return false;
         }
 
         return true;
     }
 
-   
-
     const onLoginClickHandler = async () => {
         const email = loginUsername.current?.value || '';
         const password = loginUserPassword.current?.value || '';
-        const validated = validateInput(email, password, true);
-        
-        if (validated) {
-            setUsernameLoginError([false, '']);
-            setPasswordLoginError([false, '']);
-            
+        if (validateInput(email, password, true)) {
             try {
                 const { isSignedIn, nextStep } = await signIn({ username: email, password });
-                
                 if (isSignedIn) {
                     const { userId } = await getCurrentUser();
-                    toast.success("Successfully logged in!");
+                    showToast.success("Successfully logged in!");
                     contextPraimfaya.userLog(email, 'verified', userId);
                     navigator('/dashboard');
                 } else if (nextStep.signInStep === 'CONFIRM_SIGN_UP') {
-                    toast.info("Please verify your email address first.");
+                    showToast.info("Please verify your email address first.");
                     setIsSignUpView(true);
                     setIsConfirming(true);
                 }
             } catch (error: any) {
-                toast.error(error.message || "Failed to log in.");
+                showToast.error(error.message || "Failed to log in.");
                 setPasswordLoginError([true, "Authentication failed."]);
             }
         }
@@ -124,31 +102,18 @@ const Authenticator = ({darkMode}: {darkMode: boolean}) => {
         const email = signupUsername.current?.value || '';
         const password = signupUserPassword.current?.value || '';
         const confirmPw = confirmUserPassword.current?.value || '';
-        
-        const validated = validateInput(email, password, false, confirmPw);
-        
-        if (validated) {
-            setUsernameSignUpError([false, '']);
-            setPasswordSignUpError([false, '']);
-            setPasswordConfirmError([false, '']);
-            
+        if (validateInput(email, password, false, confirmPw)) {
             try {
                 const { nextStep } = await signUp({
-                    username: email,
-                    password,
-                    options: { 
-                        userAttributes: { email },
-                        
-                        autoSignIn: true 
-                    }
+                    username: email, password,
+                    options: { userAttributes: { email }, autoSignIn: true }
                 });
-                
                 if (nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
-                    toast.success("Verification code sent to your email!");
-                    setIsConfirming(true); 
+                    showToast.success("Verification code sent to your email!");
+                    setIsConfirming(true);
                 }
             } catch (error: any) {
-                toast.error(error.message || "Failed to sign up.");
+                showToast.error(error.message || "Failed to sign up.");
                 setUsernameSignUpError([true, "Sign up failed."]);
             }
         }
@@ -157,141 +122,103 @@ const Authenticator = ({darkMode}: {darkMode: boolean}) => {
     const onConfirmSignUpHandler = async () => {
         const email = signupUsername.current?.value || '';
         const code = verificationCode.current?.value || '';
-        
-        if (!code) {
-            toast.error("Please enter the verification code.");
-            return;
-        }
-
+        if (!code) { showToast.error("Please enter the verification code."); return; }
         try {
-            const { isSignUpComplete, nextStep } = await confirmSignUp({
-                username: email,
-                confirmationCode: code
-            });
-            
+            const { isSignUpComplete, nextStep } = await confirmSignUp({ username: email, confirmationCode: code });
             if (nextStep?.signUpStep === 'COMPLETE_AUTO_SIGN_IN') {
                 await autoSignIn();
-                toast.success("Email verified and automatically logged in!");
+                showToast.success("Email verified and logged in!");
                 const { userId } = await getCurrentUser();
                 setIsConfirming(false);
                 contextPraimfaya.userLog(email, 'verified', userId);
                 navigator('/dashboard');
-                
             } else if (isSignUpComplete) {
-                toast.success("Email verified! Please log in.");
+                showToast.success("Email verified! Please log in.");
                 setIsConfirming(false);
-                setIsSignUpView(false); 
+                setIsSignUpView(false);
             }
-
-        } catch (error: any) {
-            toast.error(error.message || "Invalid verification code.");
-        }
+        } catch (error: any) { showToast.error(error.message || "Invalid verification code."); }
     }
 
     return (
-        <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            minHeight: '100vh', 
-            width: '100%',
-            padding: '20px', 
-            boxSizing: 'border-box',
-            overflowX: 'hidden'
-        }}>
+        <div className="auth-page-wrapper" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', width: '100%', padding: '20px', boxSizing: 'border-box' }}>
             
             <div style={{ textAlign: 'center', marginBottom: '69px', fontFamily: 'Bodoni Moda Variable' }}>
-                <h1 style={{ margin: 0, color: darkMode ? '#ffffff' : '#002C51', fontSize: '2.5rem', fontWeight: 300, transition: 'color 0.3s ease' }}>
-                    Welcome to Praimfaya
-                </h1>
-                <h2 style={{ margin: '0px 0 33px 0', color: darkMode ? '#9ca3af' : '#666', fontSize: '1.19rem', fontWeight: 400, letterSpacing: '0.1em', transition: 'color 0.3s ease' }}>
-                    Retrieval-Augmented Generation Chatbot
-                </h2>
-                <h3 style={{ margin: '10px 0px 0px 0', color: darkMode ? '#9ca3af' : '#666', fontSize: '1rem', fontWeight: 400, letterSpacing: '0.1em', transition: 'color 0.3s ease' }}>
-                    Please Log In or Sign Up to continue
-                </h3>
+                <h1 style={{ margin: 0, color: darkMode ? '#ffffff' : '#002C51', fontSize: '2.5rem', fontWeight: 300 }}>Welcome to Praimfaya</h1>
+                <h2 style={{ margin: '0px 0 33px 0', color: darkMode ? '#9ca3af' : '#666', fontSize: '1.19rem', fontWeight: 400 }}>Retrieval-Augmented Generation Chatbot</h2>
+                <h3 style={{ margin: '10px 0px 0px 0', color: darkMode ? '#9ca3af' : '#666', fontSize: '1rem', fontWeight: 400 }}>Please Log In or Sign Up to continue</h3>
             </div>
 
-            <div 
-                className={`ost-container ${isSignUpView ? "log-in" : ""}`} 
-                style={{ flexShrink: 0, margin: '0 auto', top: 'auto' }}
-            >
-                <div style={{ marginTop: "0" }} className="box"></div>
+            <div className={`ost-container ${isSignUpView ? "log-in" : ""}`} style={{ flexShrink: 0, margin: '0 auto' }}>
+                <div className="box"></div>
                 <div className="ost-container-forms ostiary-font">
-
+                    
                     <div className="ost-container-info">
                         <div className="info-item">
-                            <div className="table">
-                                <div className="table-cell">
-                                    <p className="ost-highlight">Have an account?</p>
-                                    <div className="ost-btn" onClick={() => { setIsSignUpView(false); setIsConfirming(false); }}>
-                                        Log in
-                                    </div>
-                                </div>
-                            </div>
+                            <div className="table"><div className="table-cell">
+                                <p className="ost-highlight">Have an account?</p>
+                                <div className="ost-btn" onClick={() => { setIsSignUpView(false); setIsConfirming(false); }}>Log in</div>
+                            </div></div>
                         </div>
                         <div className="info-item">
-                            <div className="table">
-                                <div className="table-cell">
-                                    <p className="ost-highlight">Need an account?</p>
-                                    <div className="ost-btn" onClick={() => setIsSignUpView(true)}>
-                                        Sign Up
-                                    </div>
-                                </div>
-                            </div>
+                            <div className="table"><div className="table-cell">
+                                <p className="ost-highlight">Need an account?</p>
+                                <div className="ost-btn" onClick={() => setIsSignUpView(true)}>Sign Up</div>
+                            </div></div>
                         </div>
                     </div>
 
                     <div className="ost-container-form">
-                        
                         <div className="form-item log-in">
-                            <div className="table">
-                                <div className="table-cell">
-                                    <input ref={loginUsername} className="ostiary-font" name="Username" placeholder="Email Address" type="text" maxLength={40} autoComplete="email" />
-                                    {usernameLoginError[0] ? <p className='auth-validation-error'>{usernameLoginError[1]}</p> : null}
-                                    
-                                    <input ref={loginUserPassword} className="ostiary-font" name="Password" placeholder="Password" type="password" maxLength={33} autoComplete="current-password" />
-                                    {passwordLoginError[0] ? <p className='auth-validation-error'>{passwordLoginError[1]}</p> : null}
-                                    
-                                    <div ref={loginButton} className="ost-btn ostiary-font" onClick={onLoginClickHandler}>
-                                        Log in
-                                    </div>
+                            <div className="table"><div className="table-cell">
+                                <input ref={loginUsername} className="ostiary-font" name="Username" placeholder="Email Address" type="text" maxLength={40} />
+                                {usernameLoginError[0] && <p className='auth-validation-error'>{usernameLoginError[1]}</p>}
+                                
+                                <div className="password-input-wrapper">
+                                    <input ref={loginUserPassword} className="ostiary-font" name="Password" placeholder="Password" type={showLoginPassword ? "text" : "password"} maxLength={33} />
+                                    <span className="password-toggle-icon" onClick={() => setShowLoginPassword(!showLoginPassword)}>
+                                        {showLoginPassword ? <EyeSlashIcon /> : <EyeIcon />}
+                                    </span>
                                 </div>
-                            </div>
+                                {passwordLoginError[0] && <p className='auth-validation-error'>{passwordLoginError[1]}</p>}
+                                
+                                <div className="ost-btn" onClick={onLoginClickHandler}>Log in</div>
+                            </div></div>
                         </div>
 
                         <div className="form-item sign-up">
-                            <div className="table">
-                                <div className="table-cell">
-                                    
-                                    {isConfirming ? (
-                                        <>
-                                            <p style={{ color: '#fff', marginBottom: '15px' }}>We sent a 6-digit code to your email.</p>
-                                            <input ref={verificationCode} className="ostiary-font" name="code" placeholder="Verification Code" type="text" maxLength={6} />
-                                            <div className="ost-btn" onClick={onConfirmSignUpHandler}>
-                                                Verify Code
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <input onChange={onInputChangeHandler} ref={signupUsername} className="ostiary-font" name="userEmail" placeholder="Email" type="text" maxLength={69} autoComplete="email" />
-                                            {usernameSignUpError[0] ? <p className='auth-validation-error'>{usernameSignUpError[1]}</p> : null}
-                                            
-                                            <input onChange={onInputChangeHandler} ref={signupUserPassword} className="ostiary-font" name="userPassword" placeholder="Password" type="password" maxLength={33} autoComplete="new-password" />
-                                            {passwordSignUpError[0] ? <p className='auth-validation-error'>{passwordSignUpError[1]}</p> : null}
-                                            
-                                            <input onChange={onInputChangeHandler} ref={confirmUserPassword} className="ostiary-font" name="confirmUserPassword" placeholder="Confirm Password" type="password" maxLength={33} autoComplete="new-password" />
-                                            {passwordConfirmError[0] ? <p className='auth-validation-error'>{passwordConfirmError[1]}</p> : null}
-                                            
-                                            <div ref={signupButton} className="ost-btn" onClick={onSignUpClickHandler}>
-                                                Sign Up
-                                            </div>
-                                        </>
-                                    )}
-
-                                </div>
-                            </div>
+                            <div className="table"><div className="table-cell">
+                                {isConfirming ? (
+                                    <>
+                                        <p style={{ color: '#fff', marginBottom: '15px' }}>Enter the 6-digit code sent to your email.</p>
+                                        <input ref={verificationCode} className="ostiary-font" placeholder="Verification Code" type="text" maxLength={6} />
+                                        <div className="ost-btn" onClick={onConfirmSignUpHandler}>Verify Code</div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <input ref={signupUsername} className="ostiary-font" placeholder="Email" type="text" maxLength={69} />
+                                        {usernameSignUpError[0] && <p className='auth-validation-error'>{usernameSignUpError[1]}</p>}
+                                        
+                                        <div className="password-input-wrapper">
+                                            <input ref={signupUserPassword} className="ostiary-font" placeholder="Password" type={showSignUpPassword ? "text" : "password"} maxLength={33} />
+                                            <span className="password-toggle-icon" onClick={() => setShowSignUpPassword(!showSignUpPassword)}>
+                                                {showSignUpPassword ? <EyeSlashIcon /> : <EyeIcon />}
+                                            </span>
+                                        </div>
+                                        {passwordSignUpError[0] && <p className='auth-validation-error'>{passwordSignUpError[1]}</p>}
+                                        
+                                        <div className="password-input-wrapper">
+                                            <input ref={confirmUserPassword} className="ostiary-font" placeholder="Confirm Password" type={showConfirmPassword ? "text" : "password"} maxLength={33} />
+                                            <span className="password-toggle-icon" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
+                                                {showConfirmPassword ? <EyeSlashIcon /> : <EyeIcon />}
+                                            </span>
+                                        </div>
+                                        {passwordConfirmError[0] && <p className='auth-validation-error'>{passwordConfirmError[1]}</p>}
+                                        
+                                        <div className="ost-btn" onClick={onSignUpClickHandler}>Sign Up</div>
+                                    </>
+                                )}
+                            </div></div>
                         </div>
                     </div>
 
@@ -299,23 +226,14 @@ const Authenticator = ({darkMode}: {darkMode: boolean}) => {
             </div>
 
             <div style={{ textAlign: 'center', marginTop: '40px', fontFamily: 'Montserrat' }}>
-                <p style={{ margin: '13px 0 15px 0', color: darkMode ? '#9ca3af' : '#666', fontSize: '1rem', letterSpacing: '0.1em', transition: 'color 0.3s ease' }}>
-                    Secure Access Portal
-                </p>
-                <p style={{ margin: '33px 0px 13px 0px', color: darkMode ? '#ffffff' : '#002C51', fontSize: '0.9rem', fontWeight: 500, fontFamily: 'Bodoni Moda Variable', transition: 'color 0.3s ease' }}>
-                    BUILD by
-                </p>
-                <a href="https://www.mekaegwim.ca" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                <img 
-                    src={darkMode ? devLogoDark : devLogoLight} 
-                    alt="Praimfaya Logo" 
-                    style={{ width: '80px', height: 'auto', opacity: 0.8, transition: 'opacity 0.3s ease' }} 
-                />
+                <p style={{ margin: '13px 0 15px 0', color: darkMode ? '#9ca3af' : '#666', fontSize: '1rem' }}>Secure Access Portal</p>
+                <p style={{ margin: '33px 0px 13px 0px', color: darkMode ? '#ffffff' : '#002C51', fontSize: '0.9rem', fontWeight: 500, fontFamily: 'Bodoni Moda Variable' }}>BUILD by</p>
+                <a href="https://www.mekaegwim.ca" target="_blank" rel="noopener noreferrer">
+                    <img src={darkMode ? devLogoDark : devLogoLight} alt="Logo" style={{ width: '80px', opacity: 0.8 }} />
                 </a>
             </div>
-
         </div>
-    )
+    );
 }
 
 export default Authenticator;
