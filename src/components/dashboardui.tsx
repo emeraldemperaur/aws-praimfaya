@@ -5,8 +5,8 @@ const menuItems = [
     { id: 'overview', icon: 'bx bx-grid-alt', label: 'System Overview' },
     { id: 'analytics', icon: 'bx bx-line-chart', label: 'AI Analytics' },
     { id: 'nodes', icon: 'bx bx-network-chart', label: 'Agent Nodes' },
-    { id: 'transactions', icon: 'bx bx-transfer', label: 'Transactions' },
-    { id: 'settings', icon: 'bx bx-cog', label: 'Settings' }
+    { id: 'transactions', icon: 'bx bx-transfer', label: 'RAG Transactions' },
+    { id: 'settings', icon: 'bx bx-cog', label: 'Account Settings' }
 ];
 
 const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
@@ -61,7 +61,7 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
                 <div className="sidebar-header">
                     <div className="logo-placeholder">
                         <div className="logo-icon"><i className="bx bx-cube-alt"></i></div>
-                        <span className="logo-text">Praimfaya OS</span>
+                        <span className="logo-text">Polaris <em>OS</em></span>
                     </div>
                     <button 
                         className="ft-toggle-btn" 
@@ -92,7 +92,7 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
                 <header className="content-header">
                     <div>
                         <span className="breadcrumb">Dashboard / {menuItems.find(i => i.id === activeTab)?.label}</span>
-                        <h2>{menuItems.find(i => i.id === activeTab)?.label}</h2>
+                        <h2 className='dashboard-content-title'>{menuItems.find(i => i.id === activeTab)?.label}</h2>
                     </div>
                     <div className="header-actions">
                         <div className="search-bar">

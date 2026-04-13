@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import terminalIcon from '../assets/console-icon.png';
-import aiChipIcon from '../assets/aichip-icon.png';
-import agenticIcon from '../assets/agentic-icon.png';
-import cubeIcon from '../assets/neu-components-icon.png';
-import mediaIcon from '../assets/media-icon.png';
-import controlsIcon from '../assets/touch-control-icon.png';
-import mcpIcon from '../assets/mcp-icon.png';
-import web3Icon from '../assets/ethereum-icon.png';
+import novaIcon from '../assets/nova-icon.png';
+import claudeIcon from '../assets/claude-icon.png';
+import llamaIcon from '../assets/llama-icon.png';
+import gemmaIcon from '../assets/google-icon.png';
+import gptIcon from '../assets/gpt-oss-icon.png';
+import cpuIcon from '../assets/cpu-icon.png';
+import analyticsIcon from '../assets/analytics-icon.png';
+import transactionsIcon from '../assets/rag-transactions-icon.png';
+import systemOverviewIcon from '../assets/system-overview-icon.png';
 import '../styles/navigator.scss';
 
 const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void, darkMode: boolean}) => {
@@ -116,10 +117,10 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
         };
     };
 
-    const staticDropLinkStyle = {
-        color: darkMode ? '#ffffff' : '#0B0B45',
-        textDecoration: 'none'
-    };
+    //const staticDropLinkStyle = {
+    //    color: darkMode ? '#ffffff' : '#0B0B45',
+    //    textDecoration: 'none'
+    //};
 
     const titleStyle = {
         color: 'inherit',
@@ -170,36 +171,36 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
                         <ul role="menu">
                             <li role="menuitem">
                             <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="dashboard" onClick={() => closeDropDowns()}>
-                                <img style={{width: '40px', height: '40px'}} src={terminalIcon} className="icon" alt="Terminal" />
+                                <img style={{width: '40px', height: '40px'}} src={systemOverviewIcon} className="icon" alt="System Overview" />
                                 <div>
-                                <span className="ux-dropdown-link-title" style={titleStyle}>Getting Started</span>
+                                <span className="ux-dropdown-link-title" style={titleStyle}>System Overview</span>
                                 <p>Elevate your UI with Neumorphic components</p>
                                 </div>
                             </NavLink>
                             </li>
                             <li role="menuitem">
-                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="ai-components" onClick={() => closeDropDowns()}>
-                                <img style={{width: '40px', height: '40px'}} src={aiChipIcon} className="icon" alt="AI Chip" />
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="/dashboard/ai-analytics" onClick={() => closeDropDowns()}>
+                                <img style={{width: '40px', height: '40px'}} src={analyticsIcon} className="icon" alt="AI Chip" />
                                 <div>
-                                <span className="ux-dropdown-link-title" style={titleStyle}>AI Components</span>
+                                <span className="ux-dropdown-link-title" style={titleStyle}>AI Analytics</span>
                                 <p>Building blocks for AI/RAG user experiences</p>
                                 </div>
                             </NavLink>
                             </li>
                             <li role="menuitem">
-                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="neu-components" onClick={() => closeDropDowns()}>
-                                <img style={{width: '40px', height: '40px'}} src={cubeIcon} className="icon" alt="Cube" />
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="/dashboard/agent-nodes" onClick={() => closeDropDowns()}>
+                                <img style={{width: '40px', height: '40px'}} src={cpuIcon} className="icon" alt="CPU" />
                                 <div>
-                                <span className="ux-dropdown-link-title" style={titleStyle}>Neucorporeal Components</span>
+                                <span className="ux-dropdown-link-title" style={titleStyle}>Agent Nodes</span>
                                 <p>Skeuomorphic components for elevated user experiences</p>
                                 </div>
                             </NavLink>
                             </li>
                             <li role="menuitem">
-                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="agentic-ai" onClick={() => closeDropDowns()}>
-                                <img style={{width: '40px', height: '40px'}} src={agenticIcon} className="icon" alt="Agentic" />
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="/dashboard/rag-transactions" onClick={() => closeDropDowns()}>
+                                <img style={{width: '40px', height: '40px'}} src={transactionsIcon} className="icon" alt="RAG Transactions" />
                                 <div>
-                                <span className="ux-dropdown-link-title" style={titleStyle}>Model Context Protocol & AI Agents</span>
+                                <span className="ux-dropdown-link-title" style={titleStyle}>RAG Transactions</span>
                                 <p>Reconnoitre and develop interfaces with Agentic AIs</p>
                                 </div>
                             </NavLink>
@@ -208,36 +209,36 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
 
                         <ul role="menu">
                             <li className="ux-dropdown-title">
-                            <span className="ux-dropdown-link-title" style={{ color: darkMode ? '#ffffff' : '#0B0B45' }}>Browse by Category</span>
+                            <span className="ux-dropdown-link-title" style={{ color: darkMode ? '#ffffff' : '#0B0B45' }}>Browse by Foundation Model</span>
                             </li>
                             <li role="menuitem">
-                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="ai-components" onClick={() => closeDropDowns()}>
-                                <img style={{width: '34px', height: '34px'}} src={aiChipIcon} alt="AI" />
-                                AI/RAG
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="/dashboard/nova" onClick={() => closeDropDowns()}>
+                                <img style={{width: '34px', height: '34px'}} src={novaIcon} alt="Nova" />
+                                Nova
                             </NavLink>
                             </li>
                             <li role="menuitem">
-                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="neu-components#ui-controls" onClick={() => closeDropDowns()}>
-                                <img style={{width: '30px', height: '30px'}} src={controlsIcon} alt="Controls" />
-                                UI Controls
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="/dashboard/claude" onClick={() => closeDropDowns()}>
+                                <img style={{width: '30px', height: '30px'}} src={claudeIcon} alt="Claude" />
+                                Claude
                             </NavLink>
                             </li>
                             <li role="menuitem">
-                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="neu-components#multimedia" onClick={() => closeDropDowns()}>
-                                <img style={{width: '30px', height: '30px'}} src={mediaIcon} alt="Media" />
-                                Multimedia
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="/dashboard/llama" onClick={() => closeDropDowns()}>
+                                <img style={{width: '30px', height: '30px'}} src={llamaIcon} alt="Llama" />
+                                Llama
                             </NavLink>
                             </li>
                             <li role="menuitem">
-                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="agentic-ai" onClick={() => closeDropDowns()}>
-                                <img style={{width: '25px', height: '25px'}} src={mcpIcon} alt="MCP" />
-                                Model Context Protocol
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="/dashboard/gpt-oss" onClick={() => closeDropDowns()}>
+                                <img style={{width: '25px', height: '25px'}} src={gptIcon} alt="GPT-OSS" />
+                                GPT-OSS
                             </NavLink>
                             </li>
                             <li role="menuitem">
-                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="neu-components#web3" onClick={() => closeDropDowns()}>
-                                <img style={{width: '25px', height: '25px'}} src={web3Icon} alt="Web3" />
-                                Blockchain (Web3)
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="/dashboard/gemma" onClick={() => closeDropDowns()}>
+                                <img style={{width: '30px', height: '30px'}} src={gemmaIcon} alt="Gemma" />
+                                Gemma
                             </NavLink>
                             </li>
                         </ul>
@@ -262,30 +263,30 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
                         <div id="dropdown2" className={`ux-dropdown ${isLaboratory[1]}`} style={{ background: darkMode ? '#1b1c1d' : '#ffffff' }}>
                         <ul role="menu">
                             <li>
-                            <span className="ux-dropdown-link-title" style={{ color: darkMode ? '#ffffff' : '#0B0B45' }}>Apotheosis Design System</span>
+                            <span className="ux-dropdown-link-title" style={{ color: darkMode ? '#ffffff' : '#0B0B45' }}>RAG Context</span>
                             </li>
                             <li role="menuitem">
-                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="neu-laboratory#desktop" onClick={() => closeDropDowns()}>Desktop Deism</NavLink>
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="context-profiles" onClick={() => closeDropDowns()}>Context Profiles</NavLink>
                             </li>
                             <li role="menuitem">
-                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="neu-laboratory#mobile" onClick={() => closeDropDowns()}>Mobile Múses</NavLink>
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="vector-collections" onClick={() => closeDropDowns()}>Vector Collections</NavLink>
                             </li>
                         </ul>
                         <ul role="menu">
                             <li>
-                            <span className="ux-dropdown-link-title" style={{ color: darkMode ? '#ffffff' : '#0B0B45' }}>Learn</span>
+                            <span className="ux-dropdown-link-title" style={{ color: darkMode ? '#ffffff' : '#0B0B45' }}>LLM Integration</span>
                             </li>
                             <li role="menuitem">
-                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="pantheon" onClick={() => closeDropDowns()}>Pantheon Playground</NavLink>
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="foundation-models" onClick={() => closeDropDowns()}>Foundation Models</NavLink>
                             </li>
                             <li role="menuitem">
-                            <a className="ux-dropdown-link" style={staticDropLinkStyle} href="https://www.neumorphism.io" target='_blank' rel="noreferrer" onClick={() => closeDropDowns()}>Neumorphism.io</a>
+                            <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="amazon-bedrock" onClick={() => closeDropDowns()}>Amazon Bedrock</NavLink>
                             </li>
                         </ul>
                         </div>
                     </li>
                     <li>
-                        <NavLink style={navLinkStyle} to="terminal" onClick={() => closeDropDowns()}>
+                        <NavLink style={navLinkStyle} to="console-terminal" onClick={() => closeDropDowns()}>
                          <button style={{ fontSize: '1.2rem', color: 'inherit' }} className="ux-nav-link ux-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="raison-detre">
                                 Console Terminal
                         </button></NavLink>

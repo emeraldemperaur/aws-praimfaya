@@ -110,11 +110,13 @@ $transition-speed: 0.3s;
   }
 
   .logo-text {
-    font-weight: 700;
+    font-weight: 300;
+    font-family: 'Bodoni Moda Variable';
     font-size: 1.1rem;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.13em;
     transition: all 0.2s ease;
     white-space: nowrap;
+    text-transform: uppercase;
   }
 }
 
@@ -170,6 +172,8 @@ $transition-speed: 0.3s;
   color: $text-muted;
   font-size: 0.95rem;
   font-weight: 500;
+  font-family: 'Bodoni Moda Variable';
+  letter-spacing: 0.13em;
   transition: all 0.2s ease;
   white-space: nowrap;
   border-left: 3px solid transparent;
@@ -215,6 +219,7 @@ $transition-speed: 0.3s;
     color: $text-muted;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    margin-top: 6px;
     margin-bottom: 4px;
     display: block;
   }
@@ -380,4 +385,9 @@ $transition-speed: 0.3s;
 }
 @media (max-width: 768px) {
   .ft-sidebar { position: absolute; left: 0; top: 0; height: 100%; transform: translateX(-100%); z-index: 100; }
+}
+
+.dashboard-content-title{
+  font-family: "Bodoni Moda Variable";
+  letter-spacing: 0.09em !important;
 }

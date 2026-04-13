@@ -8,6 +8,8 @@ RAG (Retrieval-Augmented Generation) chatbot interface web application leveragin
 </p>
 
 ### Showcase URL
+<a href="https://prometheus.d3ewnfblgo4740.amplifyapp.com/" target="_blank">Praimfaya :: RAG (Retrieval Augmented Generation) Chatbot</a>
+
 
 
 ### UI Screenshots

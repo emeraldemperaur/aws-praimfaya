@@ -89,7 +89,7 @@ function App() {
             <Route path='context-profiles' element={
               isAuthenticated ? <ContextProfilesUI darkMode={darkMode}/> : <Navigate to="/" replace />
             }/>
-            <Route path='terminal' element={
+            <Route path='console-terminal' element={
               isAuthenticated ? <TerminalConsoleUI darkMode={darkMode}/> : <Navigate to="/" replace />
             }/> 
             <Route path='*' element={<Praimfaya404 darkMode={darkMode}/>}/>
