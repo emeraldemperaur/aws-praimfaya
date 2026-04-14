@@ -1,0 +1,116 @@
+.xl-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1.5rem; 
+  box-sizing: border-box;
+  animation: overlayFadeIn 0.2s ease-out forwards;
+
+  --overlay-bg: rgba(0, 0, 0, 0.5);
+  --modal-bg: #ffffff;
+  --modal-text: #212529;
+  --modal-border: #e5e7eb;
+  --close-color: #6b7280;
+  --close-hover: #111827;
+  --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  &.dark-mode {
+    --overlay-bg: rgba(0, 0, 0, 0.75);
+    --modal-bg: #1f2937; 
+    --modal-text: #f9fafb;
+    --modal-border: #374151;
+    --close-color: #9ca3af;
+    --close-hover: #ffffff;
+    --shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  }
+
+  background-color: var(--overlay-bg);
+}
+
+.xl-modal-container {
+  width: 100%;
+  max-width: 1140px; 
+  max-height: 100%;  
+  background-color: var(--modal-bg);
+  color: var(--modal-text);
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  animation: modalPopIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.xl-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--modal-border);
+  flex-shrink: 0;
+
+  .xl-modal-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 500;
+    font-family: inherit;
+  }
+
+  .xl-modal-close {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--close-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+
+    svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    &:hover {
+      color: var(--close-hover);
+    }
+  }
+}
+
+.xl-modal-body {
+  flex-grow: 1;
+  padding: 1.5rem;
+  overflow-y: auto; 
+  font-family: inherit;
+}
+
+.xl-modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--modal-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalPopIn {
+  from { 
+    opacity: 0;
+    transform: scale(0.95) translateY(20px); 
+  }
+  to { 
+    opacity: 1;
+    transform: scale(1) translateY(0); 
+  }
+}

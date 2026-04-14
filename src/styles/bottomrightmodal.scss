@@ -1,0 +1,112 @@
+.bottom-right-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  display: block; 
+  animation: overlayFadeIn 0.2s ease-out forwards;
+  --overlay-bg: rgba(0, 0, 0, 0.4); 
+  --modal-bg: #ffffff;
+  --modal-text: #212529;
+  --modal-border: #e5e7eb;
+  --close-color: #6b7280;
+  --close-hover: #111827;
+  --shadow: -5px 0 25px rgba(0, 0, 0, 0.15); 
+
+  &.dark-mode {
+    --overlay-bg: rgba(0, 0, 0, 0.6); 
+    --modal-bg: #1f2937; 
+    --modal-text: #f9fafb;
+    --modal-border: #374151;
+    --close-color: #9ca3af;
+    --close-hover: #ffffff;
+    --shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
+  }
+
+  background-color: var(--overlay-bg);
+}
+
+.bottom-right-modal-container {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  
+  width: 100%;
+  max-width: 400px;
+  height: auto;
+  max-height: 100vh; 
+  margin: 0; 
+  border-top-left-radius: 0.5rem;
+  background-color: var(--modal-bg);
+  color: var(--modal-text);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+.bottom-right-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--modal-border);
+  flex-shrink: 0;
+
+  .bottom-right-modal-title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 500;
+    font-family: inherit;
+  }
+
+  .bottom-right-modal-close {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--close-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+
+    svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    &:hover {
+      color: var(--close-hover);
+    }
+  }
+}
+
+.bottom-right-modal-body {
+  flex-grow: 1;
+  padding: 1.25rem;
+  overflow-y: auto; 
+  font-family: inherit;
+  font-size: 0.95rem; 
+}
+
+.bottom-right-modal-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--modal-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}

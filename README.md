@@ -14,9 +14,9 @@ RAG (Retrieval-Augmented Generation) chatbot interface web application leveragin
 
 ### UI Screenshots
 #### Light & Dark Mode
-![AuthenticationUILight](./screenshots/authentication-ui-light.png)
+![AuthenticationUILight](./screenshots/authentication-ui-light-theme.png)
 <br/>&nbsp;
-![AuthenticationUIDark](./screenshots/authentication-ui-dark.png)
+![AuthenticationUIDark](./screenshots/authentication-ui-dark-theme.png)
 
 ### System Design & Architecture
 <ol>
@@ -27,12 +27,12 @@ RAG (Retrieval-Augmented Generation) chatbot interface web application leveragin
 </li>
 <li>
 <p align="justify">
-<strong>AWS Amplify Backend:</strong> Serverless orchestration and Infrastructure as Code (IaC) layer. Securely bridges the frontend user client with convenience methods and functions for interfacing with AWS backend microservices, environment configurations and managing API routing (REST/GraphQL) to provide a seamless integration with cloud-native services.
+<strong>AWS AppSync & Amazon S3 Storage Backend:</strong> Serverless orchestration and Infrastructure as Code (IaC) layer. Securely bridges the frontend user client with convenience methods and functions for interfacing with AWS backend microservices, environment configurations and managing API routing (REST/GraphQL) to provide a seamless integration with cloud-native services.
 </p>
 </li>
 <li>
 <p align="justify">
-<strong>AWS Cognito User Identity Pool, Authentication and Authorization:</strong> User identity, authentication and authorization managed with AWS Cognito & OAuth 2.0.
+<strong>Amazon Cognito User Identity Pool, Authentication and Authorization:</strong> User identity, authentication and authorization managed with AWS Cognito & OAuth 2.0. Customer Identity and Access Management (CIAM) cloud-based service for authenticating and authorizing users.
 </p>
 </li>
 <li>
@@ -147,6 +147,122 @@ Run help command for a list of available Amplify CLI commands.
 ```bash
 npx ampx help
 ```
+
+#### Cognito User Pool: Force Password Change
+
+<p align="justify">
+To force a password change for a Cognito user via AWS CLI, use the <code>admin-set-user-password</code> command with the <code>--permanent</code> or <code>--password-reset-required</code> flag.
+
+<code>--password-reset-required</code> flag sets a temporary password and forces a <code>NEW_PASSWORD_REQUIRED</code> challenge upon the next sign-in.
+
+</p>
+
+```shell
+aws cognito-idp admin-set-user-password \
+    --user-pool-id <YOUR_USER_POOL_ID> \
+    --username <YOUR_USERNAME> \
+    --password <TEMPORARY_PASSWORD> \
+    --permanent
+```
+```shell
+aws cognito-idp admin-set-user-password \
+    --user-pool-id <YOUR_USER_POOL_ID> \
+    --username <YOUR_USERNAME> \
+    --password <TEMPORARY_PASSWORD> \
+    --password-reset-required
+```
+
+#### AWS Amplify: Using extant Cognito Resources
+
+<p align="justify">
+Manually configure AWS Amplify application instance to use an extant User Pool and Identity Pool.
+</p>
+
+```typescript
+Amplify.configure({
+  Auth: {
+    Cognito: {
+      userPoolId: 'XX-XXXX-X_abcd1234',
+      userPoolClientId: 'a1b2c3d4e5f6g7h8i9j0k1l2m3',
+      identityPoolId: 'XX-XXXX-X:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+    }
+  }
+});
+```
+
+#### AWS Amplify Auth: Convenience Methods
+<p align="justify">
+Amplify Auth convenience <a href="https://docs.amplify.aws/react/frontend/auth/manage-user-sessions/">methods</a> for seamlessly integrating user authentication via Amazon Cognito.
+</p>
+
+##### getCurrentUser()
+<p align="justify">
+Returns a lightweight credential object comprised of extant <code>username</code>, <code>userId</code> and a <code>signInDetails</code> object containing details about how the extant user signed: <code>loginId</code> & <code>authFlowType</code>.
+
+<code>getCurrentUser()</code> reads from the browser's local storage/memory and doesn't make a fresh HTTP request to AWS network.
+</p>
+
+```typescript
+import { getCurrentUser } from 'aws-amplify/auth';
+
+const { userId, username, signInDetails } = await getCurrentUser();
+```
+
+##### fetchUserAttributes()
+<p align="justify">
+Returns extant user attributes such as <code>name</code>, <code>email</code>, <code>phone_number</code>.
+</p>
+
+```typescript
+import { fetchUserAttributes } from 'aws-amplify/auth';
+
+const attributes = await fetchUserAttributes();
+const phone = attributes.phone_number;
+console.log(phone);
+```
+
+##### fetchAuthSession()
+<p align="justify">
+Returns a comprehensive object that comprises of extant user authentication details such as <code>accessToken</code>, <code>idToken</code>, <code>refreshToken</code>, <code>userSub</code>, <code>credentials</code>
+
+<ul>
+<li>
+<code>tokens</code>: Amazon Contains <code>accessToken</code>, <code>idToken</code> and <code>refreshToken</code>
+</li>
+<li>
+<code>userSub</code>: Cognito unique identifier for the extant user.
+</li>
+<li>
+<code>credentials</code>: Temporary AWS IAM Identity Pool credentials, if identity pools are configured.
+</li>
+</ul>
+
+NOTE: If <code>fetchAuthSession()</code> is called and the extant user credentials have expired, Amplify will automatically utilize the <code>refreshToken</code> behind the scenes to refresh and update the active <code>accessToken</code>.
+</p>
+
+```typescript
+import { fetchAuthSession } from 'aws-amplify/auth';
+
+const session = await fetchAuthSession();
+
+// Enable forceRefresh to always bypass cache and fetch new token.
+const session = await fetchAuthSession({ forceRefresh: true });
+
+// JWT Tokens
+const accessToken = session.tokens?.accessToken?.toString();
+const idToken = session.tokens?.idToken?.toString();
+
+// Inspect Token Payload
+const userGroups = session.tokens?.accessToken?.payload['cognito:groups'];
+const email = session.tokens?.idToken?.payload?.email;
+
+// Get AWS Identity Pool Credentials (if configured)
+const accessKeyId = session.credentials?.accessKeyId;
+const secretAccessKey = session.credentials?.secretAccessKey;
+const sessionToken = session.credentials?.sessionToken;
+const identityId = session.identityId;
+```
+
 
 #### AWS Amplify GitHub Actions Workflow
 
