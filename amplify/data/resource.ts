@@ -1,18 +1,23 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { chronos } from '../functions/chronos/resource';
 
+const headerRBAC = (allow: any) => [
+  allow.owner(),
+  allow.groups(['superadmin', 'root', 'admin', 'heda']),
+];
+
 const schema = a.schema({
   Todo: a
     .model({
       content: a.string(),
     })
-    .authorization((allow) => [allow.publicApiKey()]),
+    .authorization((allow) => [allow.owner()]),
     
   Chronos: a.query()
     .arguments({ name: a.string() })
     .returns(a.string())
     .handler(a.handler.function(chronos))
-    .authorization((allow) => [allow.publicApiKey()]),
+    .authorization((allow) => [allow.authenticated()]),
 
 
   ContextProfile: a
@@ -27,7 +32,7 @@ const schema = a.schema({
       isActive: a.boolean(),
       terminals: a.hasMany('ConsoleTerminal', 'contextProfileId'),
     })
-    .authorization((allow) => [allow.publicApiKey()]),
+    .authorization(headerRBAC),
 
 
   ConsoleTerminal: a
@@ -41,7 +46,7 @@ const schema = a.schema({
       contextProfile: a.belongsTo('ContextProfile', 'contextProfileId'),
       messages: a.hasMany('TerminalMessage', 'terminalId'),
     })
-    .authorization((allow) => [allow.publicApiKey()]),
+    .authorization(headerRBAC),
 
 
   TerminalMessage: a
@@ -52,7 +57,29 @@ const schema = a.schema({
       terminalId: a.id(),
       terminal: a.belongsTo('ConsoleTerminal', 'terminalId'),
     })
-    .authorization((allow) => [allow.publicApiKey()]),
+    .authorization(headerRBAC),
+
+  VectorCollection: a
+    .model({
+      name: a.string().required(),
+      description: a.string(),
+      embeddingModel: a.string().required(), 
+      vectorDimension: a.integer().required(), 
+      profiles: a.hasMany('ContextProfile', 'vectorCollectionId'),
+      documents: a.hasMany('VectorDocument', 'collectionId'),
+    })
+    .authorization(headerRBAC),
+
+  VectorDocument: a
+    .model({
+      collectionId: a.id(),
+      collection: a.belongsTo('VectorCollection', 'collectionId'),
+      textContent: a.string().required(), 
+      // JSON metadata (e.g., {"source": "pdf", "page": 4, "url": "..."})
+      sourceMetadata: a.json(), 
+      externalVectorId: a.string(), 
+    })
+    .authorization(headerRBAC),
 });
 
 export type Schema = ClientSchema<typeof schema>;
@@ -60,6 +87,6 @@ export type Schema = ClientSchema<typeof schema>;
 export const data = defineData({
   schema,
   authorizationModes: {
-    defaultAuthorizationMode: 'apiKey',
+    defaultAuthorizationMode: 'userPool',
   },
 });

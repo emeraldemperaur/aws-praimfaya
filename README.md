@@ -27,17 +27,34 @@ RAG (Retrieval-Augmented Generation) chatbot interface web application leveragin
 </li>
 <li>
 <p align="justify">
-<strong>AWS AppSync & Amazon S3 Storage Backend:</strong> Serverless orchestration and Infrastructure as Code (IaC) layer. Securely bridges the frontend user client with convenience methods and functions for interfacing with AWS backend microservices, environment configurations and managing API routing (REST/GraphQL) to provide a seamless integration with cloud-native services.
-</p>
-</li>
-<li>
-<p align="justify">
 <strong>Amazon Cognito User Identity Pool, Authentication and Authorization:</strong> User identity, authentication and authorization managed with AWS Cognito & OAuth 2.0. Customer Identity and Access Management (CIAM) cloud-based service for authenticating and authorizing users.
+
+RBAC (Role Based Access Control) for granular <code>superadmin</code>, <code>root</code>, <code>heda</code>, <code>admin</code>, <code>user</code> and <code>guest</code> user persmissions enabled leveraging Cognito User Pool user groups in tandem with a Post Confirmation Lambda trigger and an optional AWS <code>admin-add-user-to-group</code> CLI command for secure admin user role elevation. 
+
+```shell
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id us-east-1_xxxxxxxxx \
+  --username user_email@domain.com \
+  --group-name specified-user-group-name
+```
+
 </p>
 </li>
 <li>
 <p align="justify">
 <strong>User Subscriptions:</strong> User subscriptions facilitated by Stripe API in tandem with Stripe Webhooks.
+</p>
+</li>
+<li>
+<p align="justify">
+<strong>AWS AppSync & Amazon S3 Storage Backend:</strong> Serverless orchestration and Infrastructure as Code (IaC) layer. Securely bridges the frontend user client with convenience methods and functions for interfacing with AWS backend microservices, environment configurations and managing API routing (REST/GraphQL) to provide a seamless integration with cloud-native services.
+
+AppSync Model schema, types & operations defined for <code>ContextProfile</code>, <code>VectorCollection</code>, <code>VectorDocument</code>, <code>ConsoleTerminal</code> and <code>TerminalMessage</code> metadata tables utilize Amazon DynamoDB with Cognito User Pool user group's to seamlessly manage granular user CRUD permissions to respective resources.
+</p>
+</li>
+<li>
+<p align="justify">
+<strong>Vector Embeddings, Collections & Database:</strong> 
 </p>
 </li>
 <li>
