@@ -10,8 +10,6 @@ RAG (Retrieval-Augmented Generation) chatbot interface web application leveragin
 ### Showcase URL
 <a href="https://prometheus.d3ewnfblgo4740.amplifyapp.com/" target="_blank">Praimfaya :: RAG (Retrieval Augmented Generation) Chatbot</a>
 
-
-
 ### UI Screenshots
 #### Light & Dark Mode
 ![AuthenticationUILight](./screenshots/authentication-ui-light-theme.png)
@@ -54,7 +52,13 @@ AppSync Model schema, types & operations defined for <code>ContextProfile</code>
 </li>
 <li>
 <p align="justify">
-<strong>Vector Embeddings, Collections & Database:</strong> 
+<strong>Vector Embeddings, Collections & Database: </strong>   
+
+<strong>Vector Embeddings: </strong> 
+
+<strong>Vector Collections: </strong> 
+
+<strong>Vector Database: </strong> Amazon OpenSearch
 </p>
 </li>
 <li>
@@ -269,7 +273,7 @@ const session = await fetchAuthSession({ forceRefresh: true });
 const accessToken = session.tokens?.accessToken?.toString();
 const idToken = session.tokens?.idToken?.toString();
 
-// Inspect Token Payload
+// Inspect Tokens Payload
 const userGroups = session.tokens?.accessToken?.payload['cognito:groups'];
 const email = session.tokens?.idToken?.payload?.email;
 
