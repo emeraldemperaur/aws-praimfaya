@@ -1,0 +1,181 @@
+.table-responsive-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+
+  --tbl-bg: #ffffff;
+  --tbl-text: #212529;
+  --tbl-border: #f3f4f6;
+  --tbl-header-bg: #f9fafb;
+  --tbl-header-text: #6b7280;
+  --tbl-hover: #f9fafb;
+  --tbl-secondary-text: #6b7280;
+
+  &.dark-mode {
+    --tbl-bg: #1f2937;
+    --tbl-text: #f9fafb;
+    --tbl-border: #374151;
+    --tbl-header-bg: #111827;
+    --tbl-header-text: #9ca3af;
+    --tbl-hover: #374151;
+    --tbl-secondary-text: #9ca3af;
+  }
+
+  background-color: var(--tbl-bg);
+}
+
+.custom-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-family: inherit;
+
+  th, td {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--tbl-border);
+    white-space: nowrap; 
+  }
+
+  .table-header th {
+    background-color: var(--tbl-header-bg);
+    color: var(--tbl-header-text);
+    font-size: 0.80rem;
+    text-transform: uppercase;
+    font-family: "Bodoni Moda Variable", sans-serif;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+
+  .table-body tr {
+    background-color: var(--tbl-bg);
+    color: var(--tbl-text);
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background-color: var(--tbl-hover);
+    }
+  }
+
+  .empty-state {
+    text-align: center;
+    color: var(--tbl-secondary-text);
+    padding: 2rem;
+  }
+}
+
+.tbl-cell-user {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+
+  img {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .user-info {
+    display: flex;
+    flex-direction: column;
+    font-family: "Bodoni Moda Variable", sans-serif;
+
+    .primary-text { font-weight: 600; color: var(--tbl-text); }
+    .secondary-text { font-size: 0.875rem; color: var(--tbl-secondary-text); }
+  }
+}
+
+.tbl-cell-stacked {
+  display: flex;
+  flex-direction: column;
+  font-family: "Bodoni Moda Variable", sans-serif;
+  .primary-text { color: var(--tbl-text); }
+  .secondary-text { font-size: 0.875rem; color: var(--tbl-secondary-text); }
+}
+
+.tbl-badge {
+  padding: 0.25rem 0.6rem;
+  border-radius: 9999px; 
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  display: inline-block;
+  font-family: "Bodoni Moda Variable", sans-serif;
+
+  &.success { background-color: rgba(16, 185, 129, 0.15); color: #10b981; }
+  &.warning { background-color: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+  &.danger  { background-color: rgba(239, 68, 68, 0.15); color: #ef4444; }
+  &.info    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+}
+
+.tbl-action-btn {
+  background: transparent;
+  border: none;
+  color: #3b82f6; 
+  cursor: pointer;
+  font-weight: 700 !important;
+  font-size: 0.875rem;
+  padding: 0;
+  text-transform: uppercase;
+  font-family: "Bodoni Moda Variable", sans-serif;
+
+  &:hover { 
+    text-decoration: none !important; 
+  }
+}
+
+.checkbox-cell {
+  width: 40px; 
+  text-align: center;
+  padding-right: 0 !important; 
+}
+
+.tbl-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #3b82f6; 
+}
+
+.custom-data-table .table-body tr.selected-row {
+  background-color: rgba(59, 130, 246, 0.05); 
+}
+
+.table-responsive-wrapper.dark-mode .custom-data-table .table-body tr.selected-row {
+  background-color: rgba(59, 130, 246, 0.1); 
+}
+
+.tbl-action-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem; 
+}
+
+.tbl-action-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-weight: 700 !important;
+  font-size: 0.875rem;
+  padding: 0;
+  text-transform: uppercase;
+  transition: opacity 0.2s ease;
+
+  &:hover { 
+    text-decoration: underline;
+    opacity: 0.8;
+  }
+
+  &.view-btn { color: #6b7280; } 
+  &.edit-btn { color: #3b82f6; } 
+  &.delete-btn { color: #ef4444; } 
+}
+
+.table-responsive-wrapper.dark-mode {
+  .tbl-action-btn {
+    &.view-btn { color: #9ca3af; }
+    &.edit-btn { color: #60a5fa; }
+    &.delete-btn { color: #f87171; }
+  }
+}

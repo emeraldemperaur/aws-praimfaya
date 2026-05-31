@@ -58,7 +58,7 @@
     margin: 0;
     font-size: 1.25rem;
     font-weight: 500;
-    font-family: inherit;
+    font-family: 'Bodoni Moda Variable', serif;
   }
 
   .xl-modal-close {
@@ -86,8 +86,8 @@
 .xl-modal-body {
   flex-grow: 1;
   padding: 1.5rem;
-  overflow-y: auto; 
-  font-family: inherit;
+  //overflow-y: none; 
+  font-family: 'Bodoni Moda Variable', serif !important;
 }
 
 .xl-modal-footer {

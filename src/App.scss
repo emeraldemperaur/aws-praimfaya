@@ -25,3 +25,21 @@ body {
   $inner-shadow: inset .2rem .2rem .5rem var(--greyLight-2), 
   inset -.2rem -.2rem .5rem var(--white);
 }
+
+::-webkit-scrollbar {
+  width: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1; 
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #0B0B45; 
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555; 
+}

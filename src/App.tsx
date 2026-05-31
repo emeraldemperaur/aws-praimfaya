@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { usePraimfaya } from './contexts';
 import { ToastContainer } from 'react-toastify';
-//import 'react-toastify/dist/ReactToastify.css';
 import Praimfaya404 from './pages/404';
 import AuthenticationUI from './pages/authentication';
 import DashboardUI from './pages/dashboard';
@@ -18,6 +17,11 @@ import './App.scss';
 import { generateClient } from 'aws-amplify/api';
 import type { Schema } from '../amplify/data/resource';
 import { Amplify } from 'aws-amplify';
+import VectorCollectionsUI from './pages/vectorcollections';
+import AmazonBedrockUI from './pages/amazonbedrock';
+import FoundationModelsUI from './pages/foundationmodels';
+import UserProfile from './pages/userprofile';
+import TerminalSessionUI from './pages/terminalsession';
 
 const apiClient = generateClient<Schema>();
 
@@ -31,7 +35,8 @@ async function testAmplify() {
 }
 
 function App() {
-  const { logUser, userLog, isAuthenticated } = usePraimfaya();
+  const { logUser, userLog } = usePraimfaya();
+  const isAuthenticated = true;
   const systemPreferenceDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const [darkMode, setDarkMode] = useState<boolean>(systemPreferenceDark);
   console.log(`Context :: ${logUser} : ${userLog}`);
@@ -89,8 +94,26 @@ function App() {
             <Route path='context-profiles' element={
               isAuthenticated ? <ContextProfilesUI darkMode={darkMode}/> : <Navigate to="/" replace />
             }/>
+            <Route path='vector-collections' element={
+              isAuthenticated ? <VectorCollectionsUI darkMode={darkMode}/> : <Navigate to="/" replace />
+            }/>
+            <Route path='vector-collections' element={
+              isAuthenticated ? <VectorCollectionsUI darkMode={darkMode}/> : <Navigate to="/" replace />
+            }/>
+            <Route path='foundation-models' element={
+              isAuthenticated ? <FoundationModelsUI darkMode={darkMode}/> : <Navigate to="/" replace />
+            }/>
+            <Route path='amazon-bedrock' element={
+              isAuthenticated ? <AmazonBedrockUI darkMode={darkMode}/> : <Navigate to="/" replace />
+            }/>
             <Route path='console-terminal' element={
               isAuthenticated ? <TerminalConsoleUI darkMode={darkMode}/> : <Navigate to="/" replace />
+            }/> 
+            <Route path='console-terminal/session/:sessionId' element={
+              isAuthenticated ? <TerminalSessionUI darkMode={darkMode}/> : <Navigate to="/" replace />
+            }/>
+            <Route path='user-profile' element={
+              isAuthenticated ? <UserProfile darkMode={darkMode}/> : <Navigate to="/" replace />
             }/> 
             <Route path='*' element={<Praimfaya404 darkMode={darkMode}/>}/>
           </Routes>

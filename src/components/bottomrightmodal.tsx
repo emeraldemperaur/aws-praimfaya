@@ -5,6 +5,7 @@ interface BottomRightModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  icon?: React.ReactNode;
   children: React.ReactNode;
   darkMode?: boolean;
   footer?: React.ReactNode;
@@ -14,6 +15,7 @@ const BottomRightModal: React.FC<BottomRightModalProps> = ({
   isOpen,
   onClose,
   title,
+  icon,
   children,
   darkMode = false,
   footer
@@ -40,12 +42,12 @@ const BottomRightModal: React.FC<BottomRightModalProps> = ({
     <div 
       className={`bottom-right-modal-overlay ${darkMode ? 'dark-mode' : ''}`}
       onClick={handleOverlayClick}
-      aria-hidden="true"
+      aria-hidden="false"
     >
       <div className="bottom-right-modal-container" role="dialog" aria-modal="true">
         
         <div className="bottom-right-modal-header">
-          {title && <h2 className="bottom-right-modal-title">{title}</h2>}
+          {title && <h2 className="bottom-right-modal-title">{icon && <>{icon}&nbsp;</>}{title}</h2>}
           <button className="bottom-right-modal-close" onClick={onClose} aria-label="Close Modal">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

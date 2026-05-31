@@ -6,6 +6,9 @@ const headerRBAC = (allow: any) => [
   allow.groups(['superadmin', 'root', 'admin', 'heda']),
 ];
 
+const ModelProviders = ['AMAZON', 'ANTHROPIC', 'META', 'GOOGLE', 'OPENAI', 'COHERE', 'MISTRAL'] as const;
+const ModelModality = ['TEXT', 'MULTIMODAL', 'EMBEDDING', 'IMAGE'] as const;
+
 const schema = a.schema({
   Todo: a
     .model({
@@ -81,7 +84,27 @@ const schema = a.schema({
       externalVectorId: a.string(), 
     })
     .authorization(headerRBAC),
+
+    FoundationModel: a
+    .model({
+      provider: a.enum(ModelProviders),
+      name: a.string().required(),
+      
+      // Bedrock/API Identifier String (e.g., "meta.llama3-8b-instruct-v1:0")
+      apiIdentifier: a.string().required(), 
+      
+      modality: a.enum(ModelModality),
+      contextWindowTokens: a.integer(),
+      isActive: a.boolean(),
+
+      // Relationship back to ContextProfile
+      profiles: a.hasMany('ContextProfile', 'llmModelId'),
+    })
+    .authorization(headerRBAC),
+
 });
+
+
 
 export type Schema = ClientSchema<typeof schema>;
 

@@ -288,7 +288,7 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
                     <li>
                         <NavLink style={navLinkStyle} to="console-terminal" onClick={() => closeDropDowns()}>
                          <button style={{ fontSize: '1.2rem', color: 'inherit' }} className="ux-nav-link ux-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="raison-detre">
-                                Console Terminal
+                                Console Terminals
                         </button></NavLink>
                     </li>
                     <li>
@@ -302,9 +302,12 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
                     <button style={{ color: darkMode ? '#ffffff' : '#0B0B45' }} className="ux-nav-link ux-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="github" onClick={closeDropDowns}>
                                <a style={{ color: 'inherit' }} href="https://github.com/emeraldemperaur/aws-praimfaya" target='_blank' rel="noreferrer"><i className="ux-menu-icons fa-brands fa-github"></i></a>
                     </button>
-                    <button style={{marginRight: '33px', color: darkMode ? '#ffffff' : '#0B0B45' }} 
+                    <button style={{marginRight: '0px', color: darkMode ? '#ffffff' : '#0B0B45' }} 
                     className="ux-nav-link ux-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="dark-mode-toggle" onClick={() => { darkModeToggle(); closeDropDowns(); }}>
                     <a><i className={`ux-menu-icons ${darkMode ? 'fa-regular fa-lightbulb'  : 'fa-regular fa-moon'}`}></i></a>
+                    </button>
+                    <button style={{marginRight: '33px', color: darkMode ? '#ffffff' : '#0B0B45' }} className="ux-nav-link ux-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="github" onClick={closeDropDowns}>
+                               <NavLink style={{ color: 'inherit' }} to="user-profile"><i className="ux-menu-icons fa-regular fa-user"></i></NavLink>
                     </button>
                 </div>
 

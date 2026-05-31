@@ -45,6 +45,7 @@
   display: flex;
   flex-direction: column;
   animation: slideInRight 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+  font-family: 'Bodoni Moda Variable', serif;
 }
 
 .bottom-right-modal-header {
@@ -59,7 +60,7 @@
     margin: 0;
     font-size: 1.15rem;
     font-weight: 500;
-    font-family: inherit;
+    font-family: 'Bodoni Moda Variable', serif;
   }
 
   .bottom-right-modal-close {
@@ -88,8 +89,12 @@
   flex-grow: 1;
   padding: 1.25rem;
   overflow-y: auto; 
-  font-family: inherit;
+  font-family: 'Bodoni Moda Variable', serif;
   font-size: 0.95rem; 
+}
+
+.bottom-right-modal-button{
+  font-family: 'Bodoni Moda Variable', serif !important;
 }
 
 .bottom-right-modal-footer {
@@ -99,6 +104,7 @@
   justify-content: flex-end;
   gap: 0.75rem;
   flex-shrink: 0;
+  font-family: 'Bodoni Moda Variable', serif !important;
 }
 
 @keyframes overlayFadeIn {
