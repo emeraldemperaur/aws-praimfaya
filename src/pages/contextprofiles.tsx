@@ -36,12 +36,12 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
     isActive: true,
     createdAt: new Date().toISOString(),
   });
-  //const [recordsCount] = useState(5);
 
   const [editContextProfileData, setEditContextProfileData] = useState<Partial<ContextProfile>>({});
 
   const contextProfilesClient = generateClient<Schema>().models.ContextProfile;
   const [contextProfiles, setContextProfiles] = useState<ContextProfileType[]>([]);
+  
   useEffect(() => {
         document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
       }, [darkMode, contextProfiles]);
@@ -119,7 +119,6 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
             <button 
               className="tbl-action-btn view-btn" 
               onClick={() => {
-                console.log('View button clicked for context profile:', row.id);
                 setViewContextProfile(row);
                 setIsViewModalOpen(true);
               }}
@@ -151,8 +150,6 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
       }
     ];
   
-    
-  
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setNewContextProfileData((prev) => ({ ...prev, [name]: value }));
@@ -174,9 +171,6 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
 
   const handleCreateSubmit = async () => {
     console.log('Saving New Context Profile:', newContextProfileData);
-    // TODO: Add Amplify Data API call here
-    // await client.models.ContextProfile.create({ ...newContextProfileData, createdBy: currentUser });
-    
     setIsCreateModalOpen(false);
   };
 
@@ -201,37 +195,26 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
 
   const handleEditSubmit = async () => {
     console.log('Saving Edit Context Profile:', editContextProfile?.id, editContextProfileData);
-    // TODO: Add Amplify Data API call here
     setIsEditModalOpen(false);
   };
 
   const handleDeleteContextProfile = () => {
     if (!deleteContextProfile) return;
-
     console.log('Deleting context profile:', deleteContextProfile.id);
-    // Add API call here
-    
-    // Clear and close after submitting
     setDeleteContextProfile(null);
     setIsDeleteModalOpen(false);
   };
 
-  //const handleCreateNewContextProfile = () => {
-  //  contextProfilesClient.create({
-  //    name: `New Context Profile ${contextProfiles.length + 1}`,
-  //    systemPrompt: "You are a helpful assistant.",
-  //    llmModelId: "gpt-3.5-turbo",
-  //  });
-  //}
-
-  const inputStyle = {
+  // --- ADDED boxSizing: 'border-box' HERE ---
+  const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '0.75rem',
     borderRadius: '0.375rem',
     border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
     backgroundColor: darkMode ? '#1f2937' : '#ffffff',
     color: darkMode ? '#f9fafb' : '#111827',
-    fontFamily: 'inherit'
+    fontFamily: 'inherit',
+    boxSizing: 'border-box' 
   };
 
   const labelStyle = {
@@ -269,11 +252,13 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
           1.31-3.72H11c6.07 0 11-4.93 11-11V3c0-.33-.16-.64-.43-.82M20 7c0 4.96-4.04 9-9 9H8.24C10.26 
           12.16 13.87 7.31 20 4.5zM5 10h2V7h3V5H7V2H5v3H2v2h3z"></path>
         </svg>} />
+
+      {/* --- VIEW MODAL (Extra Large / Read-Only) --- */}
       <ExtraLargeModal
         isOpen={isViewModalOpen}
         onClose={() => setIsViewModalOpen(false)}
         title={`Inspect Profile: ${viewContextProfile?.name}`}
-        icon={<i className="bx bx-user-circle"></i>} 
+        icon={<i className="bx bx-user-circle"></i>}
         darkMode={darkMode}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -362,7 +347,7 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
 
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
             <div style={{ marginBottom: '1rem' }}>
               <h4 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827', fontSize: '1rem' }}>System Prompt</h4>
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
@@ -380,7 +365,7 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
               fontSize: '0.9rem',
               lineHeight: 1.6,
               overflowY: 'auto',
-              whiteSpace: 'pre-wrap', 
+              whiteSpace: 'pre-wrap',
               fontFamily: 'monospace' 
             }}>
               {viewContextProfile?.systemPrompt || 'No prompt defined.'}
@@ -389,6 +374,8 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
 
         </div>
       </ExtraLargeModal>
+
+      {/* --- CREATE MODAL (Extra Large) --- */}
       <ExtraLargeModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -422,7 +409,6 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
       >
         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
           
-          {/* Left Column: Heavy Text Inputs */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div>
               <label style={labelStyle}>Profile Name <span style={{ color: '#ef4444' }}>*</span></label>
@@ -542,6 +528,8 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
 
         </div>
       </ExtraLargeModal>
+
+      {/* --- EDIT MODAL (Full Screen) --- */}
       <FullScreenModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
@@ -575,14 +563,14 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
       >
         <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: '2rem', height: '100%' }}>
           
-          {/* Left Sidebar: Settings & Meta Configuration */}
           <div style={{ 
             display: 'flex', 
             flexDirection: 'column', 
             gap: '1.5rem', 
             paddingRight: '2rem',
             borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-            overflowY: 'auto'
+            overflowY: 'auto',
+            overflowX: 'hidden' // <-- ADDED overflow safeguard
           }}>
             
             <div style={{ backgroundColor: darkMode ? '#374151' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}` }}>
@@ -682,7 +670,7 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}> {/* <-- ADDED minWidth: 0 HERE */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <div>
                 <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>System Prompt <span style={{ color: '#ef4444' }}>*</span></h3>
@@ -709,6 +697,7 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
 
         </div>
       </FullScreenModal>
+
       <BottomRightModal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
