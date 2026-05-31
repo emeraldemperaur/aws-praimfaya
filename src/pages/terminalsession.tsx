@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
@@ -14,7 +14,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     console.log("Fetching data for Session ID:", sessionId);
     // TODO: Call Amplify Data to fetch the selected ConsoleTerminal where id === sessionId
     
-  }, [sessionId, navigate]);
+  }, [sessionId, navigate, darkMode]);
 
    return (
    <>
