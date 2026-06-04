@@ -244,7 +244,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
       const { username, userId } = await getCurrentUser();
       const attributes = await fetchUserAttributes();
       const { data: newTerminal, errors } = await client.models.ConsoleTerminal.create({
-        title: newConsoleTerminalData.title,
+        title: newConsoleTerminalData.title!.trim(),
         contextProfileId: newConsoleTerminalData.contextProfileId,
         status: 'ACTIVE',
         totalTokensUsed: 0,

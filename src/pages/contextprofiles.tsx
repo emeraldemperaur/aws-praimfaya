@@ -258,9 +258,9 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     }
     try {
       const { data: newProfile, errors } = await contextProfilesClient.create({
-        name: newContextProfileData.name!,
-        description: newContextProfileData.description || null,
-        systemPrompt: newContextProfileData.systemPrompt!,
+        name: newContextProfileData.name!.trim(),
+        description: newContextProfileData.description?.trim() || null,
+        systemPrompt: newContextProfileData.systemPrompt!.trim(),
         llmModelId: newContextProfileData.llmModelId!,
         vectorCollectionId: newContextProfileData.vectorCollectionId ? newContextProfileData.vectorCollectionId : undefined,
         temperature: newContextProfileData.temperature,
@@ -305,9 +305,9 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     try {
       const { data: updatedProfile, errors } = await contextProfilesClient.update({
         id: editContextProfile.id,
-        name: editContextProfileData.name!,
-        description: editContextProfileData.description || null,
-        systemPrompt: editContextProfileData.systemPrompt!,
+        name: editContextProfileData.name!.trim(),
+        description: editContextProfileData.description?.trim() || null,
+        systemPrompt: editContextProfileData.systemPrompt!.trim(),
         llmModelId: editContextProfileData.llmModelId!,
         vectorCollectionId: editContextProfileData.vectorCollectionId ? editContextProfileData.vectorCollectionId : undefined,
         temperature: editContextProfileData.temperature,

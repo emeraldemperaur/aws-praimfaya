@@ -22,6 +22,7 @@ import AmazonBedrockUI from './pages/amazonbedrock';
 import FoundationModelsUI from './pages/foundationmodels';
 import UserProfile from './pages/userprofile';
 import TerminalSessionUI from './pages/terminalsession';
+import SystemBootstrap from './components/systembootstrap';
 
 const apiClient = generateClient<Schema>();
 
@@ -82,6 +83,9 @@ function App() {
         </div>
       )}>
         <LoaderGate darkMode={darkMode}>
+        
+        {isAuthenticated && <SystemBootstrap />}
+        
         {isAuthenticated && <NavigationMenu darkMode={darkMode} darkModeToggle={toggleDarkMode}/>}
           <Routes>
             <Route path='/' element={
@@ -92,9 +96,6 @@ function App() {
             }/>
             <Route path='context-profiles' element={
               isAuthenticated ? <ContextProfilesUI darkMode={darkMode}/> : <Navigate to="/" replace />
-            }/>
-            <Route path='vector-collections' element={
-              isAuthenticated ? <VectorCollectionsUI darkMode={darkMode}/> : <Navigate to="/" replace />
             }/>
             <Route path='vector-collections' element={
               isAuthenticated ? <VectorCollectionsUI darkMode={darkMode}/> : <Navigate to="/" replace />

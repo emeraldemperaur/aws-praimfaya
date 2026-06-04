@@ -228,8 +228,8 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
 
     try {
       const { data: newCollection, errors } = await vectorCollectionsClient.create({
-        name: newCollectionData.name!,
-        description: newCollectionData.description || null,
+        name: newCollectionData.name!.trim(),
+        description: newCollectionData.description?.trim() || null,
         embeddingModel: newCollectionData.embeddingModel!,
         vectorDimension: newCollectionData.vectorDimension!,
         createdBy: getUserEmail ? await getUserEmail() : 'Unknown User',
@@ -262,8 +262,8 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
     try {
       const { data: updatedCollection, errors } = await vectorCollectionsClient.update({
         id: editVectorCollection.id,
-        name: editVectorCollectionData.name!,
-        description: editVectorCollectionData.description || null,
+        name: editVectorCollectionData.name!.trim(),
+        description: editVectorCollectionData.description?.trim() || null,
         embeddingModel: editVectorCollectionData.embeddingModel!,
         vectorDimension: editVectorCollectionData.vectorDimension!,
         updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User',
