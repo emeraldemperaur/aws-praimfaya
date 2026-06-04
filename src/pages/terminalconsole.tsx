@@ -3,48 +3,83 @@ import FAButton from "../components/floatingactionbutton";
 import TitleRibbon from "../components/titleribbon";
 import SearchRibbon from "../components/searchribbon";
 import type { ColumnDef } from "../components/datatable";
-import type { ConsoleTerminal } from "../data/consoleterminal";
-import novaIcon from '../assets/nova-icon.png';
-import gptIcon from '../assets/gpt-oss-icon.png';
 import DataTable from "../components/datatable";
 import BottomRightModal from "../components/bottomrightmodal";
-import { availableProfiles, seedDataConsoleTerminals } from "../data/seeddata";
 import ExtraLargeModal from "../components/extralargemodal";
 import FullScreenModal from "../components/fullscreenmodal";
 import { useNavigate } from "react-router-dom";
-import { inputStyle, labelStyle } from "../utils/voltaire";
+import { getModelIcon, inputStyle, labelStyle } from "../utils/voltaire";
+import { generateClient } from "aws-amplify/api";
+import type { UIConsoleTerminal } from "../data/consoleterminal";
+import { fetchUserAttributes, getCurrentUser } from 'aws-amplify/auth';
+import { getUserEmail } from "../utils/asimov";
 
-const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
+const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchBy, setSearchBy] = useState('name');
+  const [searchBy, setSearchBy] = useState('title');
+  const [isLoading, setIsLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [viewConsoleTerminal, setViewConsoleTerminal] = useState<ConsoleTerminal | null>(null);
-  const [deleteConsoleTerminal, setDeleteConsoleTerminal] = useState<ConsoleTerminal | null>(null);
-  const [newConsoleTerminalData, setNewConsoleTerminalData] = useState<ConsoleTerminal>({
-    sessionId: '',
-    userId: '',
+  const [viewConsoleTerminal, setViewConsoleTerminal] = useState<UIConsoleTerminal | null>(null);
+  const [deleteConsoleTerminal, setDeleteConsoleTerminal] = useState<UIConsoleTerminal | null>(null);
+  const [editConsoleTerminal, setEditConsoleTerminal] = useState<UIConsoleTerminal | null>(null);
+  const [newConsoleTerminalData, setNewConsoleTerminalData] = useState<Partial<UIConsoleTerminal>>({
     title: '',
-    status: 'ACTIVE', 
     contextProfileId: '',
-    messages: [],
-    totalTokensUsed: 0,
-    createdAt: new Date().toISOString(),
+    status: 'ACTIVE',
   });
-  //const [recordsCount] = useState(1);
-  const [editTerminalConsoleData, setEditTerminalConsoleData] = useState<{title: string, status: 'ACTIVE' | 'ARCHIVED'}>({
+
+  const [editTerminalConsoleData, setEditTerminalConsoleData] = useState<{ title: string, status: 'ACTIVE' | 'ARCHIVED' }>({
     title: '',
     status: 'ACTIVE'
   });
-  const [editConsoleTerminal, setEditConsoleTerminal] = useState<ConsoleTerminal | null>(null);
+
   const navigator = useNavigate();
 
+  const client = generateClient() as any;
+  const [consoleTerminals, setConsoleTerminals] = useState<UIConsoleTerminal[]>([]);
+  const [contextProfiles, setContextProfiles] = useState<any[]>([]); 
+  const [foundationModels, setFoundationModels] = useState<any[]>([]); // Added for local lookups
+
   useEffect(() => {
-        document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
-      }, 
-      [darkMode]);
+    document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
+  }, [darkMode]);
+
+  useEffect(() => {
+    const terminalsSub = client.models.ConsoleTerminal.observeQuery({
+      selectionSet: [
+        'id', 'userId', 'title', 'totalTokensUsed', 'status', 'contextProfileId', 'createdAt', 'updatedAt',
+        'contextProfile.*', 'messages.*'
+      ]
+    }).subscribe({
+      next: (data: any) => {
+        setConsoleTerminals(data.items as UIConsoleTerminal[]);
+        setIsLoading(false);
+      },
+      error: (err: any) => {
+        console.error("Error fetching terminals:", err);
+        setIsLoading(false);
+      }
+    });
+
+    const profilesSub = client.models.ContextProfile.observeQuery({
+      selectionSet: ['id', 'name', 'description', 'llmModelId', 'temperature', 'systemPrompt', 'vectorCollection.*', 'foundationModel.*']
+    }).subscribe({
+      next: (data: any) => setContextProfiles(data.items.filter((p: any) => p.isActive !== false))
+    });
+
+    const fmSub = client.models.FoundationModel.observeQuery().subscribe({
+      next: (data: any) => setFoundationModels(data.items),
+    });
+
+    return () => {
+      terminalsSub.unsubscribe();
+      profilesSub.unsubscribe();
+      fmSub.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (editConsoleTerminal) {
@@ -56,132 +91,181 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
   }, [editConsoleTerminal]);
     
   const filterOptions = [
-    { label: 'Name', value: 'name' },
-    { label: 'Context', value: 'context' },
-    { label: 'Foundation Model', value: 'foundationModel' },
-    { label: 'Creator', value: 'creator' },
-    { label: 'Date Created', value: 'date' },
+    { label: 'Session Title', value: 'title' },
+    { label: 'Session Unique ID', value: 'id' },
+    { label: 'Context Profile', value: 'contextProfile' },
+    { label: 'Messages', value: 'messages' },
+    { label: 'Status', value: 'status' },
+    { label: 'Date', value: 'createdAt' },
   ];
 
-  const columns: ColumnDef<ConsoleTerminal>[] = [
-        {
-          header: 'RAG Session',
-          accessor: 'session',
-          render: (row) => (
-            <div className="tbl-cell-user">
-              <img src={row.contextProfile?.llmModelId.toLocaleLowerCase().includes('amazon') ? novaIcon : gptIcon} alt={row.contextProfile?.llmModelId} />
-              <div className="user-info">
-                <span className="primary-text">{row.title}</span>
-                <span className="secondary-text">{row.sessionId}</span>
-                <span className="secondary-text">{row.userId}</span>
-              </div>
+  const filteredTerminals = useMemo(() => {
+    if (!searchTerm.trim()) return consoleTerminals;
+    const lowerTerm = searchTerm.toLowerCase();
+
+    return consoleTerminals.filter(terminal => {
+      switch (searchBy) {
+        case 'title':
+          return terminal.title?.toLowerCase().includes(lowerTerm);
+        case 'id':
+          return terminal.id?.toLowerCase().includes(lowerTerm);
+        case 'contextProfile':
+          return terminal.contextProfile?.name?.toLowerCase().includes(lowerTerm);
+        case 'messages':
+          return terminal.messages?.some(msg => msg.content?.toLowerCase().includes(lowerTerm)) || false;
+        case 'status':
+          return terminal.status?.toLowerCase().includes(lowerTerm);
+        case 'createdAt':
+          const dateString = terminal.createdAt ? new Date(terminal.createdAt).toLocaleDateString() : '';
+          return terminal.createdAt?.toLowerCase().includes(lowerTerm) || dateString.includes(lowerTerm);
+        default:
+          return true;
+      }
+    });
+  }, [consoleTerminals, searchTerm, searchBy]);
+
+  const columns: ColumnDef<UIConsoleTerminal>[] = [
+    {
+      header: 'RAG Session',
+      accessor: 'title',
+      sortable: true,
+      render: (row) => {
+        const linkedProfile = contextProfiles.find(p => p.id === row.contextProfileId) || row.contextProfile;
+        const linkedModel = foundationModels.find(m => m.id === linkedProfile?.llmModelId) || linkedProfile?.foundationModel;
+        const apiIdentifier = linkedModel?.apiIdentifier;
+
+        return (
+          <div className="tbl-cell-user">
+            <img src={getModelIcon(apiIdentifier)} alt={linkedModel?.name || 'AI Model'} />
+            <div className="user-info">
+              <span className="primary-text">{row.title}</span>
+              <span className="secondary-text">{row.id}</span>
+              <span className="secondary-text">{row.userId ? row.userId.split('@')[0] : 'Anonymous'}</span>
             </div>
-          )
-        },
-        {
-          header: 'Context',
-          accessor: 'context',
-          render: (row) => (
-            <div className="tbl-cell-stacked">
-              <span className="primary-text">{row.contextProfile?.name}</span>
-              <span className="secondary-text">{row.messages?.length || 0} Messages</span>
-              <span className="secondary-text">{row.totalTokensUsed || 0} Tokens Used</span>
-            </div>
-          )
-        },
-        {
-          header: 'Status',
-          accessor: 'status',
-          render: (row) => {
-            let badgeClass = 'info';
-            if (row.status === 'ACTIVE') badgeClass = 'success';
-            if (row.status === 'ARCHIVED') badgeClass = 'warning';
-    
-            return <span className={`tbl-badge ${badgeClass}`}>{row.status}</span>;
-          }
-        },
-        {
-          header: 'Actions',
-          accessor: 'actions',
-          render: (row) => (
-            <div className="tbl-action-group">
-              <button 
-                className="tbl-action-btn view-btn" 
-                onClick={() => {
-                  if (row.status === 'ACTIVE') {
-                    console.log('Navigating to live chat interface for session:', row.sessionId);
-                    // TODO: Route to your chat page -> navigate(`/terminal/${row.sessionId}`)
-                    navigator(`/console-terminal/session/${row.sessionId}`);
-                  } else {
-                    console.log('Opening read-only view modal for session:', row.sessionId);
-                    setViewConsoleTerminal(row);
-                    setIsViewModalOpen(true);
-                  }
-                }}
-                style={{ 
-                  color: row.status === 'ACTIVE' ? '#10b981' : undefined, 
-                  fontWeight: row.status === 'ACTIVE' ? 600 : 400
-                }}
-              >
-                {row.status === 'ACTIVE' ? 'Resume' : 'Review'}
-              </button>
-              <button 
-                className="tbl-action-btn edit-btn" 
-                onClick={() => {
-                  setEditConsoleTerminal(row);
-                  setIsEditModalOpen(true);
-                }}
-              >
-                Emend
-              </button>
-              <button 
-                className="tbl-action-btn delete-btn" 
-                onClick={() => {
-                  console.log('Delete button clicked for console terminal:', row.sessionId);
-                  setDeleteConsoleTerminal(row);
-                  setIsDeleteModalOpen(true);
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          )
-        }
-      ];
+          </div>
+        );
+      }
+    },
+    {
+      header: 'Context',
+      accessor: 'totalTokensUsed',
+      sortable: true,
+      render: (row) => (
+        <div className="tbl-cell-stacked">
+          <span className="primary-text">{row.contextProfile?.name || 'Unlinked Profile'}</span>
+          <span className="secondary-text">{row.messages?.length || 0} Messages</span>
+          <span className="secondary-text">{row.totalTokensUsed || 0} Tokens Used</span>
+        </div>
+      )
+    },
+    {
+      header: 'Status',
+      accessor: 'status',
+      sortable: true,
+      render: (row) => {
+        let badgeClass = 'info';
+        if (row.status === 'ACTIVE') badgeClass = 'success';
+        if (row.status === 'ARCHIVED') badgeClass = 'warning';
+
+        return <span className={`tbl-badge ${badgeClass}`}>{row.status}</span>;
+      }
+    },
+    {
+      header: 'Actions',
+      accessor: 'actions',
+      render: (row) => (
+        <div className="tbl-action-group">
+          <button 
+            className="tbl-action-btn view-btn" 
+            onClick={() => {
+              if (row.status === 'ACTIVE') {
+                console.log('Navigating to live chat interface for session:', row.id);
+                navigator(`/console-terminal/session/${row.id}`);
+              } else {
+                setViewConsoleTerminal(row);
+                setIsViewModalOpen(true);
+              }
+            }}
+            style={{ 
+              color: row.status === 'ACTIVE' ? '#10b981' : undefined, 
+              fontWeight: row.status === 'ACTIVE' ? 600 : 400
+            }}
+          >
+            {row.status === 'ACTIVE' ? 'Resume' : 'Review'}
+          </button>
+          <button 
+            className="tbl-action-btn edit-btn" 
+            onClick={() => {
+              setEditConsoleTerminal(row);
+              setIsEditModalOpen(true);
+            }}
+          >
+            Emend
+          </button>
+          <button 
+            className="tbl-action-btn delete-btn" 
+            onClick={() => {
+              setDeleteConsoleTerminal(row);
+              setIsDeleteModalOpen(true);
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      )
+    }
+  ];
     
   const selectedProfile = useMemo(() => {
-      return availableProfiles.find(p => p.id === newConsoleTerminalData.contextProfileId);
-    }, [newConsoleTerminalData.contextProfileId]);
+      return contextProfiles.find(p => p.id === newConsoleTerminalData.contextProfileId);
+  }, [newConsoleTerminalData.contextProfileId, contextProfiles]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const { name, value } = e.target;
       setNewConsoleTerminalData(prev => ({ ...prev, [name]: value }));
   };
 
-  const isNewConsoleTerminalValid = newConsoleTerminalData.title.trim() !== '' && newConsoleTerminalData.contextProfileId !== '';
+  const normalizedNewTitle = newConsoleTerminalData.title?.trim().toLowerCase() || '';
+  const isTitleDuplicate = normalizedNewTitle !== '' && consoleTerminals.some(
+    terminal => terminal.title.toLowerCase() === normalizedNewTitle
+  );
+
+  const isNewConsoleTerminalValid = newConsoleTerminalData.title?.trim() !== '' && 
+                                    newConsoleTerminalData.contextProfileId !== '' &&
+                                    !isTitleDuplicate;
 
   const handleStartSession = async () => {
     if (!selectedProfile) return;
+    if (isTitleDuplicate) {
+      alert("A Terminal Session with this title already exists. Please choose a unique title.");
+      return;
+    }
+    try {
+      const { username, userId } = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
+      const { data: newTerminal, errors } = await client.models.ConsoleTerminal.create({
+        title: newConsoleTerminalData.title,
+        contextProfileId: newConsoleTerminalData.contextProfileId,
+        status: 'ACTIVE',
+        totalTokensUsed: 0,
+        userId: attributes.email || userId || username || 'Anonymous'
+      });
 
-    const newTerminalSession: Partial<ConsoleTerminal> = {
-      // sessionId: UUID generated by backend
-      // userId: Extracted from Cognito auth context on backend
-      contextProfileId: newConsoleTerminalData.contextProfileId,
-      title: newConsoleTerminalData.title,
-      messages: [],
-      totalTokensUsed: 0,
-      status: 'ACTIVE',
-    };
-
-    console.log('Initializing Terminal Session:', newTerminalSession);
-    // TODO: Send to API to create the session, then navigate to the chat interface
-    
-    // Reset and close
-    setNewConsoleTerminalData({ 
-      title: '', contextProfileId: '', sessionId: '', userId: '', 
-      messages: [], totalTokensUsed: 0, status: 'ACTIVE', 
-      createdAt: new Date().toISOString() });
-    setIsCreateModalOpen(false);
+      if (errors) throw new Error(errors[0].message);
+      
+      setConsoleTerminals(prev => {
+        const alreadyExists = prev.some(terminal => terminal.id === newTerminal.id);
+        if (alreadyExists) return prev;
+        return [newTerminal, ...prev];
+      });
+      
+      console.log('Successfully created Terminal Session:', newTerminal);
+      setNewConsoleTerminalData({ title: '', contextProfileId: '', status: 'ACTIVE' });
+      setIsCreateModalOpen(false);
+      navigator(`/console-terminal/session/${newTerminal.id}`);
+    } catch (error) {
+      console.error('Failed to create terminal session', error);
+    }
   };
 
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -192,47 +276,67 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
   const isEditValid = editTerminalConsoleData.title.trim() !== '';
 
   const handleEditSubmit = async () => {
-    console.log('Saving Terminal Updates:', editConsoleTerminal?.sessionId, editTerminalConsoleData);
-    // TODO: Add Amplify Data API call here
-    setIsEditModalOpen(false);
+    if (!editConsoleTerminal?.id) return;
+    try {
+      const { data: updatedTerminal, errors } = await client.models.ConsoleTerminal.update({
+        id: editConsoleTerminal.id,
+        title: editTerminalConsoleData.title,
+        status: editTerminalConsoleData.status,
+        updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User'
+      });
+      if (errors) throw new Error(errors[0].message);
+      setConsoleTerminals(prev => prev.map(item => 
+        item.id === updatedTerminal.id 
+          ? { ...item, ...updatedTerminal } 
+          : item
+      ));
+      setIsEditModalOpen(false);
+      setEditConsoleTerminal(null);
+    } catch (error) {
+      console.error("Failed to update terminal metadata:", error);
+    }
   };
-    
 
-  const handleDeleteConsoleTerminal = () => {
-      if (!deleteConsoleTerminal) return;
-
-      console.log('Deleting console terminal:', deleteConsoleTerminal.sessionId);
-      // Add API call here
-      
-      // Clear and close after submitting
+  const handleDeleteConsoleTerminal = async () => {
+    if (!deleteConsoleTerminal?.id) return;
+    try {
+      const { errors } = await client.models.ConsoleTerminal.delete({
+        id: deleteConsoleTerminal.id
+      });
+      if (errors) throw new Error(errors[0].message);
+      setConsoleTerminals(prev => prev.filter(item => item.id !== deleteConsoleTerminal.id));
       setDeleteConsoleTerminal(null);
       setIsDeleteModalOpen(false);
+    } catch (error) {
+      console.error("Failed to delete console terminal:", error);
+    }
   };
 
-  
-
-
-
-    return(
+  return(
     <>
      <TitleRibbon title="Console Terminals" darkMode={darkMode} typewriterFX textAlignment="right"/>
      <SearchRibbon 
-              darkMode={darkMode}
-              recordCount={seedDataConsoleTerminals.length}
-              recordLabel="Console Terminals"
-              searchTerm={searchTerm}
-              onSearchChange={setSearchTerm}
-              selectedFilter={searchBy}
-              onFilterChange={setSearchBy}
-              filterOptions={filterOptions}
+        darkMode={darkMode}
+        recordCount={filteredTerminals.length}
+        recordLabel="Console Terminals"
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        selectedFilter={searchBy}
+        onFilterChange={setSearchBy}
+        filterOptions={filterOptions}
       />
       <div style={{ padding: '2rem' }}>
-              <DataTable 
-                columns={columns} 
-                data={seedDataConsoleTerminals} 
-                darkMode={darkMode} 
-                selectable={true}
-              />
+        <DataTable 
+          columns={columns} 
+          data={filteredTerminals} 
+          darkMode={darkMode} 
+          selectable={true}
+          isLoading={isLoading}
+          initialSort={{ key: 'createdAt', direction: 'desc' }}
+          pagination={true}
+          defaultPageSize={10}
+          pageSizeOptions={[10, 25, 50, 100]}
+        />
       </div>
       <FAButton darkMode={darkMode} onClick={() => setIsCreateModalOpen(true)} 
       icon={
@@ -244,7 +348,6 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
         .83.67 1.5 1.5 1.5m.5-6h4v4H5zm13-2h-2v3h-3v2h3v3h2v-3h3v-2h-3z"></path>
       </svg>} />
       
-      {/* --- VIEW MODAL (Audit Log) --- */}
       <ExtraLargeModal
         isOpen={isViewModalOpen}
         onClose={() => setIsViewModalOpen(false)}
@@ -284,7 +387,7 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
             borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
             paddingRight: '1.5rem', 
             overflowY: 'auto',
-            overflowX: 'hidden' // <-- Added explicit safeguard
+            overflowX: 'hidden' 
           }}>
             
             <div>
@@ -311,14 +414,14 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
               <div style={{ marginBottom: '1rem' }}>
                 <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Session ID</span>
                 <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#4b5563', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                  {viewConsoleTerminal?.sessionId}
+                  {viewConsoleTerminal?.id}
                 </span>
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
                 <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>User ID</span>
                 <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#4b5563', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                  {viewConsoleTerminal?.userId}
+                  {viewConsoleTerminal?.userId || 'Anonymous'}
                 </span>
               </div>
 
@@ -381,7 +484,7 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
                     borderBottomLeftRadius: msg.role === 'ASSISTANT' || msg.role === 'SYSTEM' ? '0' : '0.5rem',
                   }}>
                     <div style={{ fontSize: '0.75rem', marginBottom: '0.5rem', opacity: 0.7, textTransform: 'uppercase' }}>
-                      {msg.role} • {new Date(msg.timestamp).toLocaleTimeString()}
+                      {msg.role} • {new Date(msg.createdAt || Date.now()).toLocaleTimeString()}
                     </div>
                     <div style={{ fontSize: '0.875rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                       {msg.content}
@@ -426,7 +529,7 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
               disabled={!isNewConsoleTerminalValid}
               style={{ 
                 padding: '0.75rem 1.5rem', 
-                backgroundColor: '#0B0B45', // Purple for terminal execution
+                backgroundColor: '#0B0B45', 
                 color: 'white', 
                 border: 'none', 
                 borderRadius: '4px',
@@ -451,14 +554,23 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
               <input 
                 type="text" 
                 name="title"
-                value={newConsoleTerminalData.title}
+                value={newConsoleTerminalData.title || ''}
                 onChange={handleInputChange}
                 placeholder="e.g., Debugging DynamoDB Schema"
-                style={inputStyle(darkMode)}
+                style={{
+                  ...inputStyle(darkMode),
+                  borderColor: isTitleDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
+                }}
               />
-              <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
-                A descriptive title to help you find this chat in your history.
-              </p>
+              {isTitleDuplicate ? (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>
+                  A session with this title already exists.
+                </p>
+              ) : (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
+                  A descriptive title to help you find this chat in your history.
+                </p>
+              )}
             </div>
 
             <div>
@@ -467,12 +579,12 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
               </label>
               <select 
                 name="contextProfileId"
-                value={newConsoleTerminalData.contextProfileId}
+                value={newConsoleTerminalData.contextProfileId || ''}
                 onChange={handleInputChange}
                 style={inputStyle(darkMode)}
               >
                 <option value="">-- Choose AI Personality --</option>
-                {availableProfiles.map(profile => (
+                {contextProfiles.map(profile => (
                   <option key={profile.id} value={profile.id}>
                     {profile.name}
                   </option>
@@ -511,7 +623,8 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
                   <div>
                     <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Model</span>
                     <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '0.25rem 0.5rem', backgroundColor: darkMode ? '#374151' : '#e5e7eb', borderRadius: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151' }}>
-                      {selectedProfile.llmModelId}
+                      {/* Local lookup ensures the modal maps the correct Model Name instead of UUID */}
+                      {foundationModels.find(fm => fm.id === selectedProfile.llmModelId)?.name || selectedProfile.foundationModel?.name || selectedProfile.llmModelId}
                     </span>
                   </div>
                   <div>
@@ -524,7 +637,7 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
                     <div style={{ gridColumn: 'span 2' }}>
                       <span style={{ display: 'block', fontSize: '0.75rem', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>RAG Enabled</span>
                       <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151' }}>
-                        Linked to: {selectedProfile.vectorCollection?.name || 'Unknown Collection'}
+                        Linked to: {selectedProfile.vectorCollection?.name || 'Database Collection'}
                       </span>
                     </div>
                   )}
@@ -559,7 +672,7 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
       <FullScreenModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        title={`Emend Terminal Session: ${editConsoleTerminal?.sessionId || ''}`}
+        title={`Emend Terminal Session: ${editConsoleTerminal?.id || ''}`}
         darkMode={darkMode}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', width: '100%' }}>
@@ -620,8 +733,8 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
                 onChange={handleEditChange}
                 style={inputStyle(darkMode)}
               >
-                <option value="ACTIVE">ACTIVE - Open for interaction</option>
-                <option value="ARCHIVED">ARCHIVED - Read-only history</option>
+                <option value="ACTIVE">Active: Open Interaction</option>
+                <option value="ARCHIVED">Archived: Read Only</option>
               </select>
             </div>
 
@@ -631,7 +744,7 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
                 
                 <div style={{ marginBottom: '0.75rem' }}>
                   <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>User ID</span>
-                  <span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontFamily: 'monospace' }}>{editConsoleTerminal.userId || 'Unknown'}</span>
+                  <span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontFamily: 'monospace' }}>{editConsoleTerminal.userId || 'Anonymous'}</span>
                 </div>
 
                 <div style={{ marginBottom: '0.75rem' }}>
@@ -697,7 +810,7 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
                     borderBottomLeftRadius: msg.role === 'ASSISTANT' || msg.role === 'SYSTEM' ? '0' : '0.5rem',
                   }}>
                     <div style={{ fontSize: '0.75rem', marginBottom: '0.5rem', opacity: 0.7, textTransform: 'uppercase' }}>
-                      {msg.role} • {new Date(msg.timestamp).toLocaleTimeString()}
+                      {msg.role} • {new Date(msg.createdAt || Date.now()).toLocaleTimeString()}
                     </div>
                     <div style={{ fontSize: '0.875rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                       {msg.content}
@@ -711,13 +824,11 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
                 ))
               )}
 
-              {editConsoleTerminal?.status === 'ACTIVE' && (
+              {editTerminalConsoleData.status === 'ACTIVE' && (
                 <div style={{ marginTop: 'auto', paddingTop: '2rem' }}>
                   <button 
                     onClick={() => {
-                      console.log('Navigating to live chat interface for session:', editConsoleTerminal.sessionId);
-                      // TODO: Route to your chat page -> navigate(`/terminal/${editConsoleTerminal.sessionId}`)
-                      navigator(`/console-terminal/${editConsoleTerminal.sessionId}`);
+                      navigator(`/console-terminal/session/${editConsoleTerminal?.id}`);
                     }}
                     style={{
                       width: '100%',
@@ -798,7 +909,7 @@ const TerminalConsoleUI = ({darkMode}: {darkMode: boolean}) =>{
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}>
-            Deleting RAG Session: <strong><em>{deleteConsoleTerminal?.title}</em></strong> <em>{deleteConsoleTerminal?.sessionId}</em> from database records. 
+            Deleting RAG Session: <strong><em>{deleteConsoleTerminal?.title}</em></strong> <em>{deleteConsoleTerminal?.id}</em> from database records. 
           </p>
           <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}> 
             Are you sure you want to proceed? 

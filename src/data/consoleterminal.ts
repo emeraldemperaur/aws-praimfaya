@@ -11,6 +11,7 @@ export interface ConsoleTerminal {
     status: 'ACTIVE' | 'ARCHIVED';   // State of the chat
     createdAt: string;               // ISO Timestamp
     updatedAt?: string;               // ISO Timestamp
+    updatedBy?: string | null;        // Email or username of the last person who updated this terminal
 }
 
 export interface TerminalMessage {
@@ -19,4 +20,17 @@ export interface TerminalMessage {
     content: string;                 // The actual text payload
     contextSources?: string[];       // Optional array of document references the RAG retrieved for this specific answer
     timestamp: string;               // ISO Timestamp
+}
+
+export interface UIConsoleTerminal {
+  id: string; 
+  userId?: string | null;
+  title: string;
+  totalTokensUsed?: number | null;
+  status: 'ACTIVE' | 'ARCHIVED';
+  contextProfileId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  contextProfile?: any | null;
+  messages?: any[] | null;
 }

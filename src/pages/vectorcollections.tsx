@@ -1,68 +1,85 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import FAButton from "../components/floatingactionbutton";
 import TitleRibbon from "../components/titleribbon";
 import SearchRibbon from "../components/searchribbon";
 import type { ColumnDef } from "../components/datatable";
-import type { VectorCollection, VectorDocument } from "../data/vectorcollection";
 import DataTable from "../components/datatable";
-import novaIcon from '../assets/nova-icon.png';
-import gptIcon from '../assets/gpt-oss-icon.png';
 import BottomRightModal from "../components/bottomrightmodal";
 import ExtraLargeModal from "../components/extralargemodal";
-import { AddVectorCollectionSVG } from "../utils/voltaire";
-import { seedDataVectorCollections } from "../data/seeddata";
+import { AddVectorCollectionSVG, getModelIcon } from "../utils/voltaire";
 import { uploadData } from 'aws-amplify/storage';
 import FullScreenModal from "../components/fullscreenmodal";
+import { generateClient } from "aws-amplify/api";
+import type { UIVectorCollection } from "../data/vectorcollection";
+import { getUserEmail } from "../utils/asimov";
+
+const DEFAULT_COLLECTION_STATE = {
+  name: '',
+  description: '',
+  embeddingModel: '',
+  vectorDimension: 1536,
+};
 
 const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchBy, setSearchBy] = useState('name');
+  const [isLoading, setIsLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [viewVectorCollection, setViewVectorCollection] = useState<VectorCollection | null>(null);
-  const [deleteVectorCollection, setDeleteVectorCollection] = useState<VectorCollection | null>(null);
-  const [newCollectionData, setNewCollectionData] = useState<VectorCollection>({
-    name: '',
-    description: '',
-    embeddingModel: 'amazon-bedrock',
-    vectorDimension: 1536,
-    createdAt: new Date().toISOString(),
-  });
-  const [editVectorCollection, setEditVectorCollection] = useState<VectorCollection | null>(null);
-  const [editVectorCollectionData, setEditVectorCollectionData] = useState<VectorCollection>({ 
-    name: '', 
-    description: '', 
-    embeddingModel: 'amazon-bedrock', 
-    vectorDimension: 1536, 
-    createdAt: new Date().toISOString() 
-  });
-  const [vectorDocuments, setVectorDocuments] = useState<VectorDocument[]>([
-    { 
-      id: 'doc_1', 
-      name: 'employee_handbook_2026.pdf', 
-      size: '2.4 MB',                     
-      status: 'Indexed',                  
-      collectionId: 'mock-uuid-9876-5432', 
-      textContent: 'The employee handbook for the year 2026.' 
-    },
-    { 
-      id: 'doc_2', 
-      name: 'Architecture_Diagram.md',    
-      size: '15 KB',                      
-      status: 'Indexed',                  
-      collectionId: 'mock-uuid-1234-5678', 
-      textContent: 'A diagram showing the system architecture.' 
-    },
-  ]);
-
+  const [viewVectorCollection, setViewVectorCollection] = useState<UIVectorCollection | null>(null);
+  const [deleteVectorCollection, setDeleteVectorCollection] = useState<UIVectorCollection | null>(null);
+  const [editVectorCollection, setEditVectorCollection] = useState<UIVectorCollection | null>(null);
+  const [newCollectionData, setNewCollectionData] = useState<Partial<UIVectorCollection>>(DEFAULT_COLLECTION_STATE);
+  const [editVectorCollectionData, setEditVectorCollectionData] = useState<Partial<UIVectorCollection>>({});
+  const [vectorDocuments, setVectorDocuments] = useState<any[]>([]); 
   const hiddenDirectS3Input = useRef<HTMLInputElement>(null);
-  //const [recordsCount] = useState(5);
-  
+  const client = generateClient() as any;
+  const vectorCollectionsClient = client.models.VectorCollection;
+  const [vectorCollections, setVectorCollections] = useState<UIVectorCollection[]>([]);
+  const [foundationModels, setFoundationModels] = useState<any[]>([]); 
+
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
-  }, [darkMode]);
+  }, [darkMode, vectorCollections.length]);
+
+  useEffect(() => {
+    const sub = vectorCollectionsClient.observeQuery({
+      selectionSet: [
+        'id', 
+        'name', 
+        'description', 
+        'embeddingModel', 
+        'vectorDimension', 
+        'createdAt', 
+        'updatedAt', 
+        'profiles.*', 
+        'documents.*'
+      ]
+    }).subscribe({
+      next: (data: any) => {
+        setVectorCollections(data.items as UIVectorCollection[]);
+        setIsLoading(false);
+      },
+      error: (err: any) => {
+        console.error("Error fetching vector collections:", err);
+        setIsLoading(false);
+      }
+    });
+    return () => sub.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const fmSub = client.models.FoundationModel.observeQuery().subscribe({
+      next: (data: any) => {
+        const embeddingModels = data.items.filter((m: any) => m.modality === 'EMBEDDING');
+        setFoundationModels(embeddingModels);
+      },
+      error: (err: any) => console.error("Error fetching foundation models:", err)
+    });
+    return () => fmSub.unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (editVectorCollection) {
@@ -71,39 +88,68 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
         description: editVectorCollection.description || '',
         embeddingModel: editVectorCollection.embeddingModel,
         vectorDimension: editVectorCollection.vectorDimension,
-        profiles: editVectorCollection.profiles,
-        documents: editVectorCollection.documents,
-        createdAt: editVectorCollection.createdAt,
       });
+        // Sync DB documents to local tracking array
+      setVectorDocuments(editVectorCollection.documents || []);
     }
   }, [editVectorCollection]);
 
   const filterOptions = [
     { label: 'Name', value: 'name' },
+    { label: 'Description', value: 'description' },
     { label: 'Embedding Model', value: 'embeddingModel' },
-    { label: 'Date Created', value: 'date' },
+    { label: 'Vector Dimension', value: 'vectorDimension' },
+    { label: 'Created By', value: 'createdBy' },
+    { label: 'Date', value: 'createdAt' },
   ];
 
-  const columns: ColumnDef<VectorCollection>[] = [
+  const filteredCollections = useMemo(() => {
+    if (!searchTerm.trim()) return vectorCollections;
+    const lowerTerm = searchTerm.toLowerCase();
+
+    return vectorCollections.filter(collection => {
+      switch (searchBy) {
+        case 'name':
+          return collection.name?.toLowerCase().includes(lowerTerm);
+        case 'description':
+          return collection.description?.toLowerCase().includes(lowerTerm);
+        case 'embeddingModel':
+          return collection.embeddingModel?.toLowerCase().includes(lowerTerm);
+        case 'vectorDimension':
+          return collection.vectorDimension?.toString().includes(lowerTerm);
+        case 'createdBy':
+          return collection.createdBy?.toLowerCase().includes(lowerTerm);
+        case 'createdAt':
+          const dateString = collection.createdAt ? new Date(collection.createdAt).toLocaleDateString() : '';
+          return collection.createdAt?.toLowerCase().includes(lowerTerm) || dateString.includes(lowerTerm);
+        default:
+          return true;
+      }
+    });
+  }, [vectorCollections, searchTerm, searchBy]);
+
+  const columns: ColumnDef<UIVectorCollection>[] = [
     {
       header: 'Name',
       accessor: 'name',
+      sortable: true,
       render: (row) => (
         <div className="tbl-cell-user">
-          <img src={row.embeddingModel.toLocaleLowerCase().includes('amazon') ? novaIcon : gptIcon} alt={row.name} />
+          <img src={getModelIcon(row.embeddingModel?.toLocaleLowerCase())} alt={row.name} />
           <div className="user-info">
             <span className="primary-text">{row.name}</span>
-            <span className="secondary-text">{row.vectorDimension}</span>
+            <span className="secondary-text">{row.vectorDimension} Dimensions</span>
           </div>
         </div>
       )
     },
     {
       header: 'Contexts',
-      accessor: 'contexts',
+      accessor: 'profiles',
+      sortable: true,
       render: (row) => (
         <div className="tbl-cell-stacked">
-          <span className="primary-text">{row.profiles?.length || 0} Profiles</span>
+          <span className="primary-text">{row.profiles?.length || 0} {row.profiles?.length === 1 ? 'Profile' : 'Profiles'}</span>
           <span className="secondary-text">{row.description}</span>
         </div>
       )
@@ -111,6 +157,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
     {
       header: 'Embedding Model',
       accessor: 'embeddingModel',
+      sortable: true,
       render: (row) => {
         let badgeClass = 'info';
         if (row.embeddingModel.toLocaleLowerCase().includes('amazon')) badgeClass = 'info';
@@ -127,7 +174,6 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
           <button 
            className="tbl-action-btn view-btn" 
            onClick={() => {
-                console.log('Inspect button clicked for vector collection:', row.id);
                 setViewVectorCollection(row);
                 setIsViewModalOpen(true);
               }}
@@ -137,7 +183,6 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
           <button 
             className="tbl-action-btn edit-btn" 
             onClick={() => {
-              console.log('Edit button clicked for vector collection:', row.id);
               setEditVectorCollection(row);
               setIsEditModalOpen(true);
             }}
@@ -147,13 +192,9 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
           <button 
             className="tbl-action-btn delete-btn" 
             onClick={() => {
-              console.log('Delete button clicked for vector collection:', row.id);
               setDeleteVectorCollection(row);
               setIsDeleteModalOpen(true);
-            }
-
-          }
-
+            }}
           >
             Delete
           </button>
@@ -162,52 +203,126 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
     }
   ];
 
-  
-
   const handleCreateInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setNewCollectionData(prev => ({ ...prev, [name]: value }));
+    setNewCollectionData(prev => ({ 
+      ...prev, 
+      [name]: name === 'vectorDimension' ? parseInt(value, 10) || 0 : value 
+    }));
   };
+
+  const normalizedNewName = newCollectionData.name?.trim().toLowerCase() || '';
+  const isNameDuplicate = normalizedNewName !== '' && vectorCollections.some(
+    collection => collection.name.toLowerCase() === normalizedNewName
+  );
+
+  const isCollectionValid = newCollectionData.name?.trim() !== '' && 
+                            newCollectionData.embeddingModel?.trim() !== '' && 
+                            !isNameDuplicate;
 
   const handleCreateSubmit = async () => {
-    console.log('Submitting new collection:', newCollectionData);
-    // Add API call here (e.g., Amplify Data create mutation)
-    
-    // Reset form and close modal upon success
-    setNewCollectionData({ name: '', description: '', embeddingModel: 'amazon-bedrock', vectorDimension: 1536, createdAt: new Date().toISOString() });
-    setIsCreateModalOpen(false);
+    if (isNameDuplicate) {
+      alert("A Vector Collection with this name already exists. Please choose a unique name.");
+      return;
+    }
+
+    try {
+      const { data: newCollection, errors } = await vectorCollectionsClient.create({
+        name: newCollectionData.name!,
+        description: newCollectionData.description || null,
+        embeddingModel: newCollectionData.embeddingModel!,
+        vectorDimension: newCollectionData.vectorDimension!,
+        createdBy: getUserEmail ? await getUserEmail() : 'Unknown User',
+      });
+      if (errors) throw new Error(errors[0].message);
+      setVectorCollections(prev => {
+        const alreadyExists = prev.some(collection => collection.id === newCollection.id);
+        if (alreadyExists) return prev;
+        return [newCollection, ...prev];
+      });
+      setNewCollectionData(DEFAULT_COLLECTION_STATE);
+      setIsCreateModalOpen(false);
+    } catch (error) {
+      console.error("Failed to create Vector Collection:", error);
+    }
   };
 
-  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setEditVectorCollectionData(prev => ({ ...prev, [name]: value }));
+    setEditVectorCollectionData(prev => ({ 
+      ...prev, 
+      [name]: name === 'vectorDimension' ? parseInt(value, 10) || 0 : value 
+    }));
   };
+
+  const isEditValid = editVectorCollectionData.name?.trim() !== '' && editVectorCollectionData.embeddingModel?.trim() !== '';
 
   const handleEditSubmit = async () => {
-    console.log('Saving updates for Vector Collection:', editVectorCollection?.id, editVectorCollectionData);
-    setIsEditModalOpen(false);
+    if (!editVectorCollection?.id) return;
+    try {
+      const { data: updatedCollection, errors } = await vectorCollectionsClient.update({
+        id: editVectorCollection.id,
+        name: editVectorCollectionData.name!,
+        description: editVectorCollectionData.description || null,
+        embeddingModel: editVectorCollectionData.embeddingModel!,
+        vectorDimension: editVectorCollectionData.vectorDimension!,
+        updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User',
+      });
+
+      if (errors) throw new Error(errors[0].message);
+      setVectorCollections(prev => prev.map(item => 
+        item.id === updatedCollection.id ? updatedCollection : item
+      ));
+      
+      setIsEditModalOpen(false);
+      setEditVectorCollection(null);
+    } catch (error) {
+      console.error("Failed to update Vector Collection:", error);
+    }
   };
+
+  const handleDeleteVectorCollection = async () => {
+    if (!deleteVectorCollection?.id) return;
+    try {
+      const { errors } = await vectorCollectionsClient.delete({
+        id: deleteVectorCollection.id
+      });
+
+      if (errors) throw new Error(errors[0].message);
+      setVectorCollections(prev => prev.filter(item => item.id !== deleteVectorCollection.id));
+      setDeleteVectorCollection(null);
+      setIsDeleteModalOpen(false);
+    } catch (error) {
+      console.error("Failed to delete Vector Collection:", error);
+    }
+  };  
 
   const handleDirectS3Upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !editVectorCollection) return;
+    if (!file || !editVectorCollection?.id) return;
 
     console.log(`Initiating Amplify Storage upload for: ${file.name}`);
+    
+    // Create an S3 Path key 
+    // TODO: Add Cognito permanent userId prefix to avoid cross-user collisions in the bucket
+    const s3FilePath = `vector-collections/${editVectorCollection.id}/${file.name}`;
+    const friendlySize = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+
     try {
-      // Mocking UI update
       setVectorDocuments(prev => [...prev, 
         { 
-          id: Date.now().toString(), 
+          id: 'temp-' + Date.now().toString(), 
           name: file.name, 
-          size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
-          collectionId: editVectorCollection.id || '', 
-          textContent: '',
+          size: friendlySize,
+          collectionId: editVectorCollection.id, 
+          textContent: file.name,
           status: 'Uploading...'
         }
-        ]);
+      ]);
 
+      // Execute the S3 Storage Upload
       const uploadTask = uploadData({
-        path: `vector-collections/${editVectorCollection.id}/${file.name}`,
+        path: s3FilePath,
         data: file,
         options: {
           onProgress: ({ transferredBytes, totalBytes }) => {
@@ -219,33 +334,56 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
       await uploadTask.result;
       console.log('Successfully uploaded to S3');
       
-      // Update UI to Indexing
-      setVectorDocuments(prev => prev.map(doc => doc.name === file.name ? { ...doc, status: 'Indexing...' } : doc));
+      setVectorDocuments(prev => prev.map(doc => doc.name === file.name ? { ...doc, status: 'Indexing in DB...' } : doc));
+      
+      const { data: newDbDoc, errors } = await client.models.VectorDocument.create({
+        collectionId: editVectorCollection.id,
+        textContent: file.name, // Required by schema. Overwritten later by a Lambda that parses the Document.
+        sourceMetadata: {
+          fileName: file.name,
+          fileSize: friendlySize,
+          s3Path: s3FilePath,
+          status: 'Indexed'
+        }
+      });
+
+      if (errors) throw new Error(errors[0].message);
+
+      console.log('Successfully created VectorDocument record:', newDbDoc);
+
+      setVectorDocuments(prev => prev.map(doc => 
+        doc.name === file.name ? { 
+          ...doc, 
+          id: newDbDoc.id, 
+          status: 'Indexed' 
+        } : doc
+      ));
+
     } catch (error) {
-      console.error('Error uploading file:', error);
+      console.error('Error in upload/DB creation sequence:', error);
+      setVectorDocuments(prev => prev.map(doc => doc.name === file.name ? { ...doc, status: 'Failed' } : doc));
     } finally {
-      if (hiddenDirectS3Input.current) hiddenDirectS3Input.current.value = ''; // Reset
+      if (hiddenDirectS3Input.current) hiddenDirectS3Input.current.value = ''; 
     }
   };
 
-  const handleDeleteVectorCollection = () => {
-    if (!deleteVectorCollection) return;
-
-    console.log('Deleting vector collection:', deleteVectorCollection.id);
-    // Add API call here
-    
-    // Clear and close after submitting
-    setDeleteVectorCollection(null);
-    setIsDeleteModalOpen(false);
-  };  
-  
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.75rem',
+    borderRadius: '0.375rem',
+    border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+    backgroundColor: darkMode ? '#1f2937' : '#ffffff',
+    color: darkMode ? '#f9fafb' : '#111827',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box'
+  };
 
   return (
     <>
       <TitleRibbon title="Vector Collections" darkMode={darkMode} typewriterFX textAlignment="right"/>
       <SearchRibbon 
         darkMode={darkMode}
-        recordCount={seedDataVectorCollections.length}
+        recordCount={filteredCollections.length}
         recordLabel="Vector Collections"
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
@@ -256,25 +394,27 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
       <div style={{ padding: '2rem' }}>
         <DataTable 
           columns={columns} 
-          data={seedDataVectorCollections} 
+          data={filteredCollections} 
           darkMode={darkMode} 
           selectable={true}
+          isLoading={isLoading}
+          initialSort={{ key: 'createdAt', direction: 'desc' }}
+          pagination={true}
+          defaultPageSize={6}
+          pageSizeOptions={[6, 10, 25, 50, 100]}
         />
       </div>
       <FAButton
         darkMode={darkMode}
-        onClick={() => {
-          setIsCreateModalOpen(true);
-        }}
-        icon={
-          AddVectorCollectionSVG
-        }
+        onClick={() => setIsCreateModalOpen(true)}
+        icon={AddVectorCollectionSVG}
       />
+
       <ExtraLargeModal
         isOpen={isViewModalOpen}
         onClose={() => setIsViewModalOpen(false)}
         title={`Inspect Collection: ${viewVectorCollection?.name}`}
-        icon={<i className="bx bx-data"></i>} // Database icon
+        icon={<i className="bx bx-data"></i>} 
         darkMode={darkMode}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -297,7 +437,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
       >
         <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: '2rem', minHeight: '400px' }}>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0, overflowX: 'hidden' }}>
             
             <div>
               <h3 style={{ margin: '0 0 0.5rem', color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem' }}>
@@ -347,7 +487,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
 
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflowX: 'hidden' }}>
             <div style={{ marginBottom: '1rem' }}>
               <h4 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827', fontSize: '1rem' }}>Indexed Documents</h4>
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
@@ -379,7 +519,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                   ) : (
                     viewVectorCollection.documents.map(doc => (
                       <tr key={doc.id} style={{ borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
-                        <td style={{ padding: '0.75rem 1rem', color: darkMode ? '#f9fafb' : '#111827' }}>{doc.name}</td>
+                        <td style={{ padding: '0.75rem 1rem', color: darkMode ? '#f9fafb' : '#111827' }}>{doc.name || doc.textContent?.slice(0,20)}</td>
                         <td style={{ padding: '0.75rem 1rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>{doc.size || 'Unknown'}</td>
                         <td style={{ padding: '0.75rem 1rem' }}>
                           <span style={{ 
@@ -387,7 +527,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                             backgroundColor: doc.status === 'Indexed' ? (darkMode ? '#064e3b' : '#dcfce7') : (darkMode ? '#713f12' : '#fef08a'),
                             color: doc.status === 'Indexed' ? (darkMode ? '#34d399' : '#166534') : (darkMode ? '#fde047' : '#854d0e')
                           }}>
-                            {doc.status || 'Unknown'}
+                            {doc.status || 'Indexed'}
                           </span>
                         </td>
                       </tr>
@@ -400,6 +540,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
 
         </div>
       </ExtraLargeModal>
+
       <ExtraLargeModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -417,7 +558,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
             </button>
             <button 
               onClick={handleCreateSubmit}
-              disabled={!newCollectionData.name}
+              disabled={!isCollectionValid}
               className="input-typography"
               style={{ 
                 padding: '0.75rem 1.5rem', 
@@ -425,8 +566,8 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                 color: 'white', 
                 border: 'none', 
                 borderRadius: '4px',
-                cursor: newCollectionData.name ? 'pointer' : 'not-allowed',
-                opacity: newCollectionData.name ? 1 : 0.5
+                cursor: isCollectionValid ? 'pointer' : 'not-allowed',
+                opacity: isCollectionValid ? 1 : 0.5
               }}
             >
               Create Collection
@@ -436,7 +577,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
       >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0, overflowX: 'hidden' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: darkMode ? '#ccc' : '#333' }}>Collection Name <span style={{ color: 'red' }}>*</span></label>
               <input 
@@ -447,11 +588,15 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                 className="input-typography"
                 placeholder="e.g., HR Documents 2026"
                 style={{
-                  width: '100%', padding: '0.75rem', borderRadius: '4px', 
-                  border: `1px solid ${darkMode ? '#444' : '#ccc'}`, 
-                  backgroundColor: darkMode ? '#333' : '#fff', 
-                  color: darkMode ? '#fff' : '#000' }}
+                  ...inputStyle,
+                  borderColor: isNameDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
+                }}
               />
+              {isNameDuplicate && (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>
+                  A collection with this name already exists.
+                </p>
+              )}
             </div>
 
             <div>
@@ -463,24 +608,27 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                 onChange={handleCreateInputChange}
                 placeholder="Briefly describe the contents of this vector collection..."
                 rows={5}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#444' : '#ccc'}`, backgroundColor: darkMode ? '#333' : '#fff', color: darkMode ? '#fff' : '#000', resize: 'vertical' }}
+                style={{ ...inputStyle, resize: 'vertical' }}
               />
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0, overflowX: 'hidden' }}>
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: darkMode ? '#ccc' : '#333' }}>Embedding Model</label>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: darkMode ? '#ccc' : '#333' }}>Embedding Model <span style={{ color: 'red' }}>*</span></label>
               <select 
                 name="embeddingModel"
                 className="input-typography"
-                value={newCollectionData.embeddingModel}
+                value={newCollectionData.embeddingModel || ''}
                 onChange={handleCreateInputChange}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#444' : '#ccc'}`, backgroundColor: darkMode ? '#333' : '#fff', color: darkMode ? '#fff' : '#000' }}
+                style={inputStyle}
               >
-                <option value="amazon-bedrock">Amazon Bedrock Titan Text Embeddings v2</option>
-                <option value="openai-ada">OpenAI text-embedding-ada-002</option>
-                <option value="cohere-english">Cohere English v3.0</option>
+                <option value="" disabled>Select an Embedding Model...</option>
+                {foundationModels.map((model) => (
+                  <option key={model.apiIdentifier} value={model.name}>
+                    {model.name}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -492,7 +640,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                 className="input-typography"
                 value={newCollectionData.vectorDimension}
                 onChange={handleCreateInputChange}
-                style={{ padding: '0.75rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#444' : '#ccc'}`, backgroundColor: darkMode ? '#333' : '#fff', color: darkMode ? '#fff' : '#000' }}
+                style={inputStyle}
               />
               <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: darkMode ? '#999' : '#666' }}>
                 Ensure this matches the output dimension of your selected embedding model.
@@ -502,6 +650,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
 
         </div>
       </ExtraLargeModal>
+
       <FullScreenModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
@@ -518,11 +667,11 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
             </button>
             <button 
               onClick={handleEditSubmit}
-              disabled={!editVectorCollectionData.name.trim()}
+              disabled={!isEditValid}
               className="input-typography"
               style={{ 
                 padding: '0.75rem 1.5rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px',
-                cursor: editVectorCollectionData.name.trim() ? 'pointer' : 'not-allowed', opacity: editVectorCollectionData.name.trim() ? 1 : 0.5
+                cursor: isEditValid ? 'pointer' : 'not-allowed', opacity: isEditValid ? 1 : 0.5
               }}
             >
               Save Changes
@@ -532,17 +681,25 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
       >
         <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '2rem', height: '100%' }}>
           
-          {/* Left Sidebar: Core Configuration */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingRight: '2rem', borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: '1.5rem', 
+            paddingRight: '2rem', 
+            borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+            overflowY: 'auto',
+            minWidth: 0,
+            overflowX: 'hidden'
+          }}>
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: darkMode ? '#ccc' : '#333' }}>Collection Name</label>
               <input 
                 type="text" 
                 name="name"
-                value={editVectorCollectionData.name}
+                value={editVectorCollectionData.name || ''}
                 onChange={handleEditInputChange}
                 className="input-typography"
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#444' : '#ccc'}`, backgroundColor: darkMode ? '#333' : '#fff', color: darkMode ? '#fff' : '#000' }}
+                style={inputStyle}
               />
             </div>
             <div>
@@ -553,25 +710,54 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                 onChange={handleEditInputChange}
                 className="input-typography"
                 rows={4}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#444' : '#ccc'}`, backgroundColor: darkMode ? '#333' : '#fff', color: darkMode ? '#fff' : '#000', resize: 'vertical' }}
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: darkMode ? '#ccc' : '#333' }}>Embedding Model <span style={{ color: 'red' }}>*</span></label>
+              <select 
+                name="embeddingModel"
+                className="input-typography"
+                value={editVectorCollectionData.embeddingModel || ''}
+                onChange={handleEditInputChange}
+                style={inputStyle}
+              >
+                <option value="" disabled>Select an Embedding Model...</option>
+                {foundationModels.map((model) => (
+                  <option key={model.apiIdentifier} value={model.name}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: darkMode ? '#ccc' : '#333' }}>Vector Dimension</label>
+              <input 
+                type="number" 
+                name="vectorDimension"
+                className="input-typography"
+                value={editVectorCollectionData.vectorDimension || ''}
+                onChange={handleEditInputChange}
+                style={inputStyle}
               />
             </div>
             {editVectorCollection && (
               <div style={{ backgroundColor: darkMode ? '#374151' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem' }}>
                 <h4 style={{ margin: '0 0 1rem', fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Database Specs</h4>
                 <div style={{ marginBottom: '0.75rem' }}>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Embedding Model</span>
+                  <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Current Model</span>
                   <span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 500 }}>{editVectorCollection.embeddingModel}</span>
-                </div>
-                <div>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Vector Dimension</span>
-                  <span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 500 }}>{editVectorCollection.vectorDimension}</span>
                 </div>
               </div>
             )}
+            
+            <div style={{ marginTop: 'auto', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', paddingTop: '1rem', paddingBottom: '1rem' }}>
+              <div>Created: {editVectorCollection?.createdAt ? new Date(editVectorCollection.createdAt).toLocaleString() : ''}</div>
+              {editVectorCollection?.updatedAt && <div>Last Updated: {new Date(editVectorCollection.updatedAt).toLocaleString()}</div>}
+            </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflowX: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <div>
                 <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>Data Sources</h3>
@@ -591,7 +777,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
               </div>
             </div>
 
-            <div style={{ border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', overflow: 'hidden' }}>
+            <div style={{ border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', overflowY: 'auto', flexGrow: 1 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
                 <thead style={{ backgroundColor: darkMode ? '#1f2937' : '#f9fafb', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
                   <tr>
@@ -624,15 +810,15 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                   ) : (
                     vectorDocuments.map(doc => (
                       <tr key={doc.id} style={{ borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
-                        <td style={{ padding: '0.75rem 1rem', color: darkMode ? '#f9fafb' : '#111827' }}>{doc.name}</td>
-                        <td style={{ padding: '0.75rem 1rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>{doc.size}</td>
+                        <td style={{ padding: '0.75rem 1rem', color: darkMode ? '#f9fafb' : '#111827' }}>{doc.name || doc.textContent?.slice(0, 20)}</td>
+                        <td style={{ padding: '0.75rem 1rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>{doc.size || 'Unknown'}</td>
                         <td style={{ padding: '0.75rem 1rem' }}>
                           <span style={{ 
                             padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', 
                             backgroundColor: doc.status === 'Indexed' ? (darkMode ? '#064e3b' : '#dcfce7') : (darkMode ? '#713f12' : '#fef08a'),
                             color: doc.status === 'Indexed' ? (darkMode ? '#34d399' : '#166534') : (darkMode ? '#fde047' : '#854d0e')
                           }}>
-                            {doc.status}
+                            {doc.status || 'Indexed'}
                           </span>
                         </td>
                         <td style={{ padding: '0.75rem 1rem' }}>
@@ -648,6 +834,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
 
         </div>
       </FullScreenModal>
+
       <BottomRightModal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}

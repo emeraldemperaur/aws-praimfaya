@@ -61,6 +61,8 @@
     text-align: center;
     color: var(--tbl-secondary-text);
     padding: 2rem;
+    font-family: 'Bodoni Moda Variable';
+    text-transform: capitalize;
   }
 }
 
@@ -107,6 +109,11 @@
   &.warning { background-color: rgba(245, 158, 11, 0.15); color: #f59e0b; }
   &.danger  { background-color: rgba(239, 68, 68, 0.15); color: #ef4444; }
   &.info    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+  &.amazon    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+  &.meta    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+  &.gemini    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+  &.gpt    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+  &.anthropic    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
 }
 
 .tbl-action-btn {

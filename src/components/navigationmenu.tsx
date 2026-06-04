@@ -10,16 +10,23 @@ import analyticsIcon from '../assets/analytics-icon.png';
 import transactionsIcon from '../assets/rag-transactions-icon.png';
 import systemOverviewIcon from '../assets/system-overview-icon.png';
 import '../styles/navigator.scss';
+import { getUserEmail } from '../utils/asimov';
 
 const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void, darkMode: boolean}) => {
     const [isDocumentation, setIsDocumentation] = useState<[boolean, string]>([false, '']);
     const [isLaboratory, setIsLaboratory] = useState<[boolean, string]>([false, '']);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
-    
+    const [userEmail, setUserEmail] = useState<string>('');
     const [isVisible, setIsVisible] = useState(true);
     const lastScrollY = useRef(0);
     
     const headerRef = useRef<HTMLElement | null>(null);
+
+    const getEmail = async () => {
+        const email: string = await getUserEmail();
+        setUserEmail(email);
+        return email;
+    }
 
     const toggleDocumentation = (e: React.MouseEvent) => {
         e.preventDefault(); 
@@ -62,6 +69,7 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
 
     useEffect(() => {
         document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
+        getEmail();
         if (darkMode) {
             document.body.classList.add('dark-theme');
         } else {
@@ -72,7 +80,7 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
         return () => {
             document.removeEventListener("mousedown", handleExoClick);
         }
-    }, [darkMode]);
+    }, [darkMode, userEmail]);
 
     useEffect(() => {
         const handleScroll = () => {
@@ -306,7 +314,8 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
                     className="ux-nav-link ux-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="dark-mode-toggle" onClick={() => { darkModeToggle(); closeDropDowns(); }}>
                     <a><i className={`ux-menu-icons ${darkMode ? 'fa-regular fa-lightbulb'  : 'fa-regular fa-moon'}`}></i></a>
                     </button>
-                    <button style={{marginRight: '33px', color: darkMode ? '#ffffff' : '#0B0B45' }} className="ux-nav-link ux-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="github" onClick={closeDropDowns}>
+                    <button style={{marginRight: '33px', color: darkMode ? '#ffffff' : '#0B0B45' }} title={`User (${userEmail})`}
+                    className="ux-nav-link ux-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="github" onClick={closeDropDowns}>
                                <NavLink style={{ color: 'inherit' }} to="user-profile"><i className="ux-menu-icons fa-regular fa-user"></i></NavLink>
                     </button>
                 </div>

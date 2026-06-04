@@ -27,3 +27,16 @@ export interface FoundationModel {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export interface UIFoundationModel {
+  id?: string;
+  name: string;
+  provider: string;
+  apiIdentifier: string;
+  modality: string;
+  contextWindowTokens?: number | null;
+  isActive?: boolean | null;
+  createdAt?: string;
+  updatedAt?: string;
+  profiles?: any[] | null; 
+}

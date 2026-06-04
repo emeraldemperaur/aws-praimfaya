@@ -1,57 +1,91 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import FAButton from "../components/floatingactionbutton";
-import type { Schema } from "../../amplify/data/resource";
 import { generateClient } from "aws-amplify/api";
 import TitleRibbon from "../components/titleribbon";
 import SearchRibbon from "../components/searchribbon";
-import type { ContextProfile } from "../data/contextprofile";
 import type { ColumnDef } from "../components/datatable";
-import novaIcon from '../assets/nova-icon.png';
-import gptIcon from '../assets/gpt-oss-icon.png';
 import DataTable from "../components/datatable";
 import BottomRightModal from "../components/bottomrightmodal";
 import ExtraLargeModal from "../components/extralargemodal";
-import { seedDataContextProfiles } from "../data/seeddata";
 import FullScreenModal from "../components/fullscreenmodal";
+import { getModelIcon } from "../utils/voltaire";
+import type { UIContextProfile } from "../data/contextprofile";
+import { getUserEmail } from "../utils/asimov";
 
-type ContextProfileType = Schema['ContextProfile']['type'];
+const DEFAULT_PROFILE_STATE = {
+  name: '',
+  description: '',
+  systemPrompt: '',
+  vectorCollectionId: '',
+  llmModelId: '',
+  temperature: 0.7,
+  isActive: true,
+};
 
-const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
+const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchBy, setSearchBy] = useState('name');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [viewContextProfile, setViewContextProfile] = useState<ContextProfile | null>(null);
-  const [editContextProfile, setEditContextProfile] = useState<ContextProfile | null>(null);
-  const [deleteContextProfile, setDeleteContextProfile] = useState<ContextProfile | null>(null);
-  const [newContextProfileData, setNewContextProfileData] = useState<ContextProfile>({
-    name: '',
-    description: '',
-    systemPrompt: '',
-    vectorCollectionId: '',
-    llmModelId: 'amazon.nova-pro-v1:0', // Default selection
-    temperature: 0.7,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  });
-
-  const [editContextProfileData, setEditContextProfileData] = useState<Partial<ContextProfile>>({});
-
-  const contextProfilesClient = generateClient<Schema>().models.ContextProfile;
-  const [contextProfiles, setContextProfiles] = useState<ContextProfileType[]>([]);
+  const [viewContextProfile, setViewContextProfile] = useState<UIContextProfile | null>(null);
+  const [editContextProfile, setEditContextProfile] = useState<UIContextProfile | null>(null);
+  const [deleteContextProfile, setDeleteContextProfile] = useState<UIContextProfile | null>(null);
+  const [newContextProfileData, setNewContextProfileData] = useState<Partial<UIContextProfile>>(DEFAULT_PROFILE_STATE);
+  const [editContextProfileData, setEditContextProfileData] = useState<Partial<UIContextProfile>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const client = generateClient() as any;
+  const contextProfilesClient = client.models.ContextProfile;
+  const [contextProfiles, setContextProfiles] = useState<UIContextProfile[]>([]);
+  const [foundationModels, setFoundationModels] = useState<any[]>([]);
+  const [vectorCollections, setVectorCollections] = useState<any[]>([]);
   
   useEffect(() => {
-        document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
-      }, [darkMode, contextProfiles]);
+    document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
+  }, [darkMode, contextProfiles.length]);
 
   useEffect(() => {
-       const contextProfilesSubscription = contextProfilesClient.observeQuery().subscribe({
-          next: (data) => setContextProfiles([...data.items])
-        });
-        return () => contextProfilesSubscription.unsubscribe();
-    }, []);
+    const fmSub = client.models.FoundationModel.observeQuery().subscribe({
+      next: (data: any) => setFoundationModels(data.items),
+      error: (err: any) => console.error("Error fetching models:", err)
+    });
+
+    const vcSub = client.models.VectorCollection.observeQuery().subscribe({
+      next: (data: any) => setVectorCollections(data.items),
+      error: (err: any) => console.error("Error fetching collections:", err)
+    });
+
+    return () => {
+      fmSub.unsubscribe();
+      vcSub.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    const contextProfilesSubscription = contextProfilesClient.observeQuery({
+      selectionSet: [
+        'id', 'name', 'description', 'systemPrompt', 
+        'vectorCollectionId', 'llmModelId', 'temperature', 
+        'isActive', 'createdAt', 'updatedAt', 
+        'vectorCollection.*',
+        'foundationModel.*',
+        'terminals.*'
+      ]
+    }).subscribe({
+      next: (data: any) => {
+        setContextProfiles(data.items as UIContextProfile[]);
+        setIsLoading(false);
+      },
+      error: (err: any) => {
+        console.error("Error fetching profiles:", err);
+        setIsLoading(false);
+      }
+    });
+
+    return () => contextProfilesSubscription.unsubscribe();
+  }, []);
   
   useEffect(() => {
     if (editContextProfile) {
@@ -69,46 +103,90 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
 
   const filterOptions = [
     { label: 'Name', value: 'name' },
-    { label: 'Context', value: 'context' },
+    { label: 'Description', value: 'description' },
+    { label: 'System Prompt', value: 'systemPrompt' },
     { label: 'Foundation Model', value: 'foundationModel' },
-    { label: 'Creator', value: 'creator' },
-    { label: 'Date Created', value: 'date' },
+    { label: 'Temperature', value: 'temperature' },
+    { label: 'Created By', value: 'createdBy' },
+    { label: 'Date', value: 'createdAt' },
   ];
 
-  const columns: ColumnDef<ContextProfile>[] = [
+  const filteredProfiles = useMemo(() => {
+    if (!searchTerm.trim()) return contextProfiles;
+    const lowerTerm = searchTerm.toLowerCase();
+
+    return contextProfiles.filter(profile => {
+      switch (searchBy) {
+        case 'name':
+          return profile.name?.toLowerCase().includes(lowerTerm);
+        case 'description':
+          return profile.description?.toLowerCase().includes(lowerTerm);
+        case 'systemPrompt':
+          return profile.systemPrompt?.toLowerCase().includes(lowerTerm);
+        case 'foundationModel': {
+          const fmName = foundationModels.find(fm => fm.id === profile.llmModelId)?.name || profile.foundationModel?.name || '';
+          return fmName.toLowerCase().includes(lowerTerm);
+        }
+        case 'temperature':
+          return profile.temperature?.toString().includes(lowerTerm);
+        case 'createdBy':
+          return profile.createdBy?.toLowerCase().includes(lowerTerm);
+        case 'createdAt':
+          const dateString = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : '';
+          return profile.createdAt?.toLowerCase().includes(lowerTerm) || dateString.includes(lowerTerm);
+        default:
+          return true;
+      }
+    });
+  }, [contextProfiles, searchTerm, searchBy, foundationModels]);
+
+  const columns: ColumnDef<UIContextProfile>[] = [
       {
         header: 'Name',
         accessor: 'name',
-        render: (row) => (
-          <div className="tbl-cell-user">
-            <img src={row.llmModelId.toLocaleLowerCase().includes('amazon') ? novaIcon : gptIcon} alt={row.name} />
-            <div className="user-info">
-              <span className="primary-text">{row.name}</span>
-              <span className="secondary-text">{row.description}</span>
+        sortable: true,
+        render: (row) => {
+          const linkedModel = foundationModels.find(fm => fm.id === row.llmModelId);
+          const apiIdentifier = linkedModel?.apiIdentifier || row.foundationModel?.apiIdentifier;
+          return (
+            <div className="tbl-cell-user">
+              <img src={getModelIcon(apiIdentifier)} alt={row.name} />
+              <div className="user-info">
+                <span className="primary-text">{row.name}</span>
+                <span className="secondary-text">{row.description}</span>
+              </div>
             </div>
-          </div>
-        )
+          );
+        }
       },
       {
         header: 'Context Boundary',
-        accessor: 'contextboundary',
+        accessor: 'temperature',
+        sortable: true,
         render: (row) => (
           <div className="tbl-cell-stacked">
-            <span className="primary-text">{row.temperature || 0}°</span>
-            <span className="secondary-text">{row.systemPrompt?.length || 0} System Prompt</span>
-            <span className="secondary-text">{row.terminals?.length || 0} Terminals</span>
+            <span className="primary-text">{row.temperature || 0}° <a className="secondary-text">ᵀᵉᵐᵖᵉʳᵃᵗᵘʳᵉ</a></span>
+            <span className="secondary-text">{row.systemPrompt.replace(/\s/g, "").length > 0 ? `${row.systemPrompt.replace(/\s/g, "").length} ˡᵉᵗᵗᵉʳ RAG prompt` : 'No system prompt'}</span>
           </div>
         )
       },
       {
         header: 'Vector Embeddings',
-        accessor: 'vectorembeddings',
+        accessor: 'vectorCollectionId',
+        sortable: false,
         render: (row) => {
-          let badgeClass = 'info';
-          if (row.isActive === true) badgeClass = 'success';
-          if (row.isActive === false) badgeClass = 'danger';
+          let collectionBadgeClass = 'info';
+          if (row.isActive === true) collectionBadgeClass = 'success';
+          if (row.isActive === false) collectionBadgeClass = 'danger';
+          if (!row.vectorCollection) collectionBadgeClass = 'warning'; 
+          const linkedCollection = vectorCollections.find(vc => vc.id === row.vectorCollectionId);
+          const collectionName = linkedCollection?.name || row.vectorCollection?.name || 'No Vector Collection';
   
-          return <span className={`tbl-badge ${badgeClass}`}>{row.vectorCollection?.embeddingModel || 'No Vector Collection'}</span>;
+          return (
+            <span className={`tbl-badge ${collectionBadgeClass}`}>
+              {collectionName}
+            </span>
+          );
         }
       },
       {
@@ -128,7 +206,6 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
             <button 
               className="tbl-action-btn edit-btn" 
               onClick={() => {
-                console.log('Edit button clicked for context profile:', row.id);
                 setEditContextProfile(row);
                 setIsEditModalOpen(true);
               }}
@@ -138,7 +215,6 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
             <button 
               className="tbl-action-btn delete-btn" 
               onClick={() => {
-                console.log('Delete button clicked for context profile:', row.id);
                 setDeleteContextProfile(row);
                 setIsDeleteModalOpen(true);
             }}
@@ -165,13 +241,44 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
     setNewContextProfileData((prev) => ({ ...prev, [name]: checked }));
   };
 
-  const isContextProfileValid = newContextProfileData.name.trim() !== '' && 
-                      newContextProfileData.systemPrompt.trim() !== '' && 
-                      newContextProfileData.llmModelId.trim() !== '';
+  const normalizedNewName = newContextProfileData.name?.trim().toLowerCase() || '';
+  const isNameDuplicate = normalizedNewName !== '' && contextProfiles.some(
+    profile => profile.name.toLowerCase() === normalizedNewName
+  );
+
+  const isContextProfileValid = newContextProfileData.name?.trim() !== '' && 
+                        newContextProfileData.systemPrompt?.trim() !== '' && 
+                        newContextProfileData.llmModelId?.trim() !== '' &&
+                        !isNameDuplicate;
 
   const handleCreateSubmit = async () => {
-    console.log('Saving New Context Profile:', newContextProfileData);
-    setIsCreateModalOpen(false);
+    if (isNameDuplicate) {
+      alert("A Context Profile with this name already exists. Please choose a unique name.");
+      return;
+    }
+    try {
+      const { data: newProfile, errors } = await contextProfilesClient.create({
+        name: newContextProfileData.name!,
+        description: newContextProfileData.description || null,
+        systemPrompt: newContextProfileData.systemPrompt!,
+        llmModelId: newContextProfileData.llmModelId!,
+        vectorCollectionId: newContextProfileData.vectorCollectionId ? newContextProfileData.vectorCollectionId : undefined,
+        temperature: newContextProfileData.temperature,
+        isActive: newContextProfileData.isActive,
+        createdBy: getUserEmail ? await getUserEmail() : 'Unknown User',
+      });
+      
+      if (errors) throw new Error(errors[0].message);
+      setContextProfiles(prev => {
+        const alreadyExists = prev.some(profile => profile.id === newProfile.id);
+        if (alreadyExists) return prev;
+        return [newProfile, ...prev];
+      });
+      setIsCreateModalOpen(false);
+      setNewContextProfileData(DEFAULT_PROFILE_STATE);
+    } catch (error) {
+      console.error("Failed to create profile", error);
+    }
   };
 
   const handleEditTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -194,18 +301,46 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
                       editContextProfileData.llmModelId?.trim() !== '';
 
   const handleEditSubmit = async () => {
-    console.log('Saving Edit Context Profile:', editContextProfile?.id, editContextProfileData);
-    setIsEditModalOpen(false);
+    if (!editContextProfile?.id) return;
+    try {
+      const { data: updatedProfile, errors } = await contextProfilesClient.update({
+        id: editContextProfile.id,
+        name: editContextProfileData.name!,
+        description: editContextProfileData.description || null,
+        systemPrompt: editContextProfileData.systemPrompt!,
+        llmModelId: editContextProfileData.llmModelId!,
+        vectorCollectionId: editContextProfileData.vectorCollectionId ? editContextProfileData.vectorCollectionId : undefined,
+        temperature: editContextProfileData.temperature,
+        isActive: editContextProfileData.isActive,
+        updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User',
+      });
+      if (errors) throw new Error(errors[0].message);
+      setContextProfiles(prev => prev.map(item => 
+        item.id === updatedProfile.id ? updatedProfile : item
+      ));
+      setIsEditModalOpen(false);
+      setEditContextProfile(null);
+    } catch (error) {
+      console.error("Failed to update profile", error);
+    }
   };
 
-  const handleDeleteContextProfile = () => {
-    if (!deleteContextProfile) return;
-    console.log('Deleting context profile:', deleteContextProfile.id);
-    setDeleteContextProfile(null);
-    setIsDeleteModalOpen(false);
+  const handleDeleteContextProfile = async () => {
+    if (!deleteContextProfile?.id) return;
+    try {
+      const { errors } = await contextProfilesClient.delete({
+        id: deleteContextProfile.id
+      });
+
+      if (errors) throw new Error(errors[0].message);
+      setContextProfiles(prev => prev.filter(item => item.id !== deleteContextProfile.id));
+      setDeleteContextProfile(null);
+      setIsDeleteModalOpen(false);
+    } catch (error) {
+      console.error("Failed to delete profile", error);
+    }
   };
 
-  // --- ADDED boxSizing: 'border-box' HERE ---
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '0.75rem',
@@ -225,12 +360,12 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
     color: darkMode ? '#d1d5db' : '#374151'
   };
 
-    return(
+  return(
     <>
       <TitleRibbon title="Context Profiles" darkMode={darkMode} typewriterFX textAlignment="right"/>
       <SearchRibbon 
         darkMode={darkMode}
-        recordCount={seedDataContextProfiles.length}
+        recordCount={filteredProfiles.length}
         recordLabel="Context Profiles"
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
@@ -241,9 +376,14 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
       <div style={{ padding: '2rem' }}>
       <DataTable 
           columns={columns} 
-          data={seedDataContextProfiles} 
+          data={filteredProfiles} 
           darkMode={darkMode} 
           selectable={true}
+          isLoading={isLoading}
+          initialSort={{ key: 'createdAt', direction: 'desc' }}
+          pagination={true}
+          defaultPageSize={6}
+          pageSizeOptions={[6, 10, 25, 50, 100]}
       />
       </div>
       <FAButton darkMode={darkMode} onClick={() => setIsCreateModalOpen(true)} icon={
@@ -253,11 +393,10 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
           12.16 13.87 7.31 20 4.5zM5 10h2V7h3V5H7V2H5v3H2v2h3z"></path>
         </svg>} />
 
-      {/* --- VIEW MODAL (Extra Large / Read-Only) --- */}
       <ExtraLargeModal
         isOpen={isViewModalOpen}
         onClose={() => setIsViewModalOpen(false)}
-        title={`Inspect Profile: ${viewContextProfile?.name}`}
+        title={`Inspect Context Profile: ${viewContextProfile?.name}`}
         icon={<i className="bx bx-user-circle"></i>}
         darkMode={darkMode}
         footer={
@@ -281,7 +420,7 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
       >
         <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: '2rem', minHeight: '450px' }}>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0, overflowX: 'hidden' }}>
             
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
@@ -312,7 +451,7 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
               <div style={{ marginBottom: '1rem' }}>
                 <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Foundation Model</span>
                 <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827', fontWeight: 500 }}>
-                  {viewContextProfile?.llmModelId}
+                  {viewContextProfile?.foundationModel?.name || 'Unknown Model'}
                 </span>
               </div>
 
@@ -347,7 +486,7 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
 
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, overflowX: 'hidden' }}>
             <div style={{ marginBottom: '1rem' }}>
               <h4 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827', fontSize: '1rem' }}>System Prompt</h4>
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
@@ -375,7 +514,6 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
         </div>
       </ExtraLargeModal>
 
-      {/* --- CREATE MODAL (Extra Large) --- */}
       <ExtraLargeModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -409,7 +547,7 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
       >
         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0, overflowX: 'hidden' }}>
             <div>
               <label style={labelStyle}>Profile Name <span style={{ color: '#ef4444' }}>*</span></label>
               <input 
@@ -418,8 +556,16 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
                 value={newContextProfileData.name}
                 onChange={handleTextChange}
                 placeholder="e.g., Customer Support Agent"
-                style={inputStyle}
+                style={{
+                  ...inputStyle,
+                  borderColor: isNameDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
+                }}
               />
+              {isNameDuplicate && (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>
+                  A profile with this name already exists.
+                </p>
+              )}
             </div>
 
             <div>
@@ -441,7 +587,7 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
               <label style={labelStyle}>Description</label>
               <textarea 
                 name="description"
-                value={newContextProfileData.description}
+                value={newContextProfileData.description || ''}
                 onChange={handleTextChange}
                 placeholder="Internal notes about what this profile is used for..."
                 rows={3}
@@ -450,14 +596,14 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0, overflowX: 'hidden' }}>
             
             <div style={{ backgroundColor: darkMode ? '#374151' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}` }}>
               <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                 <input 
                   type="checkbox"
                   name="isActive"
-                  checked={newContextProfileData.isActive}
+                  checked={newContextProfileData.isActive || false}
                   onChange={handleToggleChange}
                   style={{ width: '1.25rem', height: '1.25rem', marginRight: '0.75rem', cursor: 'pointer' }}
                 />
@@ -468,17 +614,19 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
             </div>
 
             <div>
-              <label style={labelStyle}>LLM Model <span style={{ color: '#ef4444' }}>*</span></label>
+              <label style={labelStyle}>LLM Engine <span style={{ color: '#ef4444' }}>*</span></label>
               <select 
                 name="llmModelId"
-                value={newContextProfileData.llmModelId}
+                value={newContextProfileData.llmModelId || ''}
                 onChange={handleTextChange}
                 style={inputStyle}
               >
-                <option value="amazon.nova-pro-v1:0">Amazon Nova Pro</option>
-                <option value="amazon.nova-lite-v1:0">Amazon Nova Lite</option>
-                <option value="anthropic.claude-3-sonnet">Claude 3 Sonnet</option>
-                <option value="meta.llama3-70b">Llama 3 (70B)</option>
+                <option value="" disabled>Select a Foundation Model...</option>
+                {foundationModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} 
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -492,10 +640,8 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
               <input 
                 type="range" 
                 name="temperature"
-                min="0" 
-                max="1" 
-                step="0.05"
-                value={newContextProfileData.temperature}
+                min="0" max="1" step="0.05"
+                value={newContextProfileData.temperature || 0}
                 onChange={handleNumberChange}
                 style={{ width: '100%', cursor: 'pointer', marginTop: '0.5rem' }}
               />
@@ -508,16 +654,19 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
             <hr style={{ borderColor: darkMode ? '#4b5563' : '#e5e7eb', borderTopWidth: 1, borderBottomWidth: 0, margin: '0.5rem 0' }} />
 
             <div>
-              <label style={labelStyle}>Vector Collection (Optional)</label>
+              <label style={labelStyle}>Linked Vector Collection (RAG)</label>
               <select 
                 name="vectorCollectionId"
-                value={newContextProfileData.vectorCollectionId}
+                value={newContextProfileData.vectorCollectionId || ''}
                 onChange={handleTextChange}
                 style={inputStyle}
               >
-                <option value="">-- None (No RAG capability) --</option>
-                <option value="col_123">HR Documents 2026</option>
-                <option value="col_456">Engineering Specs</option>
+                <option value="">-- No Document Retrieval --</option>
+                {vectorCollections.map((collection) => (
+                  <option key={collection.id} value={collection.id}>
+                    {collection.name} ({collection.vectorDimension}D)
+                  </option>
+                ))}
               </select>
               <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
                 Link this profile to a Vector Collection to enable RAG.
@@ -529,11 +678,11 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
         </div>
       </ExtraLargeModal>
 
-      {/* --- EDIT MODAL (Full Screen) --- */}
+      {/* --- EDIT MODAL --- */}
       <FullScreenModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        title={editContextProfile ? `Editing Profile: ${editContextProfile.name}` : 'Edit Profile'}
+        title={editContextProfile ? `Editing Context Profile: ${editContextProfile.name}` : 'Edit Context Profile'}
         darkMode={darkMode}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', width: '100%' }}>
@@ -570,7 +719,8 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
             paddingRight: '2rem',
             borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
             overflowY: 'auto',
-            overflowX: 'hidden' // <-- ADDED overflow safeguard
+            minWidth: 0,         
+            overflowX: 'hidden'  
           }}>
             
             <div style={{ backgroundColor: darkMode ? '#374151' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}` }}>
@@ -618,10 +768,12 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
                 onChange={handleEditTextChange}
                 style={inputStyle}
               >
-                <option value="amazon.nova-pro-v1:0">Amazon Nova Pro</option>
-                <option value="amazon.nova-lite-v1:0">Amazon Nova Lite</option>
-                <option value="anthropic.claude-3-sonnet">Claude 3 Sonnet</option>
-                <option value="meta.llama3-70b">Llama 3 (70B)</option>
+                <option value="" disabled>Select a Foundation Model...</option>
+                {foundationModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} 
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -657,20 +809,23 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
                 style={inputStyle}
               >
                 <option value="">-- No Document Retrieval --</option>
-                <option value="col_123">HR Documents 2026</option>
-                <option value="col_456">Engineering Architecture Specs</option>
+                {vectorCollections.map((collection) => (
+                  <option key={collection.id} value={collection.id}>
+                    {collection.name} ({collection.vectorDimension}D)
+                  </option>
+                ))}
               </select>
             </div>
 
             {editContextProfile && (
               <div style={{ marginTop: 'auto', paddingTop: '1rem', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
-                <div style={{ marginBottom: '0.25rem' }}>Created: {new Date(editContextProfile.createdAt).toLocaleDateString()}</div>
-                {editContextProfile.updatedAt && <div>Last Modified: {new Date(editContextProfile.updatedAt).toLocaleDateString()}</div>}
+                <div style={{ marginBottom: '0.25rem' }}>Created: {new Date(editContextProfile.createdAt || '').toLocaleDateString()}</div>
+                {editContextProfile.updatedAt && <div>Last Modified: {new Date(editContextProfile.updatedAt || '').toLocaleDateString()}</div>}
               </div>
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}> {/* <-- ADDED minWidth: 0 HERE */}
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, overflowX: 'hidden' }}> 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <div>
                 <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>System Prompt <span style={{ color: '#ef4444' }}>*</span></h3>
@@ -736,6 +891,25 @@ const ContextProfilesUI = ({darkMode}: {darkMode: boolean}) =>{
           <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}>
             Deleting Context Profile: <strong>{deleteContextProfile?.name}</strong> from database records. 
           </p>
+
+          {/* --- ACTIVE INTEGRATIONS WARNING --- */}
+          {deleteContextProfile?.terminals && deleteContextProfile.terminals.length > 0 && (
+            <div style={{ 
+              padding: '0.75rem', 
+              backgroundColor: darkMode ? '#450a0a' : '#fef2f2', 
+              borderRadius: '0.375rem', 
+              border: `1px solid ${darkMode ? '#7f1d1d' : '#f87171'}` 
+            }}>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#fca5a5' : '#991b1b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <i className="fa-solid fa-triangle-exclamation"></i>
+                Active Integrations Detected
+              </p>
+              <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: darkMode ? '#fecaca' : '#7f1d1d', lineHeight: 1.4 }}>
+                This profile is actively linked to <strong>{deleteContextProfile.terminals.length}</strong> Console Terminal session(s). Deleting it will permanently orphan those chat histories and break their context settings.
+              </p>
+            </div>
+          )}
+
           <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}> 
             Are you sure you want to proceed? 
           </p>

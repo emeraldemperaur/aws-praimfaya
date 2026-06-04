@@ -7,6 +7,24 @@
 RAG (Retrieval-Augmented Generation) chatbot interface web application leveraging AWS Amplify and Amazon Bedrock to connect foundation Large Language Models (LLMs) with private or external context and domain-specific data sources to render AI augmented subject matter expertise on any proffered contextual knowledge base.
 </p>
 
+### Synopsis Overview
+
+<p align="justify">
+Praimfaya is a full-stack cloud-native SaaS application built on AWS Amplify and Amazon Bedrock, designed to abstract the complexity of building secure, multi-tenant Retrieval-Augmented Generation (RAG) pipelines. 
+
+It provides users with a highly decoupled, modular architecture to instantly deploy customized AI chat environments tailored to specific domain or business use cases.
+
+By leveraging three core relational templates, the system empowers authenticated and subscribed users to dynamically orchestrate AI behaviors, grounding, and reasoning without touching the underlying codebase:
+
+* **Context Profiles (Behavioral Orchestration):** Acts as the configuration layer for distinct AI personas. Users can encapsulate strict system prompts, tune hyperparameters (e.g. temperature), and explicitly link vector collection data sources. This enables the rapid deployment of specialized agents; from precise analytical coders & solutions architects to creative copywriters.
+
+* **Vector Collections & Documents (Knowledge Base):** A streamlined interface for ingesting private documents, generating embeddings via Bedrock, and managing indexed storage. By selectively associating these Vector Collections with specific Context Profiles, users can establish isolated, domain-specific knowledge bases that ground LLM responses in factual data, effectively eliminating AI hallucinations.
+
+* **Foundation Models (Vendor Agnostic Interoperability):** Natively integrates with Amazon Bedrock’s diverse catalog of Embedding and Large Language Models (e.g., Anthropic Claude, Meta Llama, Amazon Titan). This agnostic approach prevents vendor lock-in, allowing system administrators to seamlessly toggle active models based on required modalities, context window limits, or token cost optimization.
+
+Ultimately, Praimfaya couples strict AWS Cognito IAM authentication with a highly modular RAG architecture to proffer a robust, scalable foundation for vanguard users looking to sculpt secure, context-aware AI workspaces on demand. 
+</p>
+
 ### Showcase URL
 <a href="https://prometheus.d3ewnfblgo4740.amplifyapp.com/" target="_blank">Praimfaya :: RAG (Retrieval Augmented Generation) Chatbot</a>
 
@@ -15,6 +33,34 @@ RAG (Retrieval-Augmented Generation) chatbot interface web application leveragin
 ![AuthenticationUILight](./screenshots/authentication-ui-light-theme.png)
 <br/>&nbsp;
 ![AuthenticationUIDark](./screenshots/authentication-ui-dark-theme.png)
+
+#### Context Profiles
+![Context Profile Create](./screenshots/contextprofile-create.png)
+<br/>&nbsp;
+![Context Profile View](./screenshots/contextprofile-view.png)
+<br/>&nbsp;
+![Context Profiles](./screenshots/contextprofiles.png)
+
+#### Vector Collections
+![Vector Collections](./screenshots/vectorcollection-create.png)
+<br/>&nbsp;
+![AuthenticationUIDark](./screenshots/vectorcollection-edit.png)
+<br/>&nbsp;
+![AuthenticationUIDark](./screenshots/vectorcollections.png)
+
+#### Foundation Models (Embedding & Large Language Models)
+![Foundation Models](./screenshots/foundationmodels.png)
+<br/>&nbsp;
+![Foundation Models2](./screenshots/foundationmodels-2.png)
+<br/>&nbsp;
+![Foundation Model](./screenshots/foundationmodel-view.png)
+
+#### RAG Console Terminals
+![Console Terminals](./screenshots/console-terminalcreate-demo1.png)
+<br/>&nbsp;
+![Console Terminals](./screenshots/console-terminalcreate-demo2.png)
+<br/>&nbsp;
+![Console Terminals](./screenshots/console-terminals.png)
 
 ### System Design & Architecture
 <ol>
@@ -54,11 +100,11 @@ AppSync Model schema, types & operations defined for <code>ContextProfile</code>
 <p align="justify">
 <strong>Vector Embeddings, Collections & Database: </strong>   
 
-<strong>Vector Embeddings: </strong> 
+<strong>Vector Embeddings: </strong> Utilizes designated embedding models (e.g., Amazon Titan, Cohere English, OpenAI Ada) to transform unstructured S3 document data into dense, high-dimensional numerical arrays. This process captures deep semantic relationships and contextual nuance, enabling the system to understand user intent far beyond traditional keyword matching.
 
-<strong>Vector Collections: </strong> 
+<strong>Vector Collections: </strong>Acts as the logical abstraction layer and domain-specific knowledge silo. Collections securely bind raw S3 documents to their associated DynamoDB metadata, vector indexing dimensions, and underlying embedding models. By linking these tailored datasets to specific Context Profiles, the system ensures that AI agents only retrieve and reason over highly relevant, isolated, and explicitly authorized or proprietary data.
 
-<strong>Vector Database: </strong> Amazon OpenSearch
+<strong>Vector Database (Amazon OpenSearch): </strong> The high-performance computational search engine underpinning the RAG architecture. It indexes the generated vector coordinates and executes rapid Approximate Nearest Neighbor (ANN) or K-Nearest Neighbor (k-NN) vector similarity searches. This ensures that the most semantically relevant document chunks are dynamically retrieved in milliseconds and seamlessly injected into the LLM's context window.
 </p>
 </li>
 <li>

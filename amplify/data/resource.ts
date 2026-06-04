@@ -6,7 +6,11 @@ const headerRBAC = (allow: any) => [
   allow.groups(['superadmin', 'root', 'admin', 'heda']),
 ];
 
-const ModelProviders = ['AMAZON', 'ANTHROPIC', 'META', 'GOOGLE', 'OPENAI', 'COHERE', 'MISTRAL'] as const;
+const ModelProviders = [
+  'AMAZON', 'ANTHROPIC', 'META', 'GOOGLE', 'OPENAI', 
+  'COHERE', 'MISTRAL', 'STABILITY', 'DEEPSEEK', 
+  'LUMA', 'TWELVELABS', 'NVIDIA'
+] as const;
 const ModelModality = ['TEXT', 'MULTIMODAL', 'EMBEDDING', 'IMAGE'] as const;
 
 const schema = a.schema({
@@ -22,7 +26,6 @@ const schema = a.schema({
     .handler(a.handler.function(chronos))
     .authorization((allow) => [allow.authenticated()]),
 
-
   ContextProfile: a
     .model({
       name: a.string().required(),
@@ -34,15 +37,14 @@ const schema = a.schema({
       foundationModel: a.belongsTo('FoundationModel', 'llmModelId'), 
       temperature: a.float(),
       createdBy: a.string(),
+      updatedBy: a.string(),
       isActive: a.boolean(),
       terminals: a.hasMany('ConsoleTerminal', 'contextProfileId'),
     })
     .authorization(headerRBAC),
 
-
   ConsoleTerminal: a
     .model({
-
       userId: a.string(),
       title: a.string(),
       totalTokensUsed: a.integer(),
@@ -52,7 +54,6 @@ const schema = a.schema({
       messages: a.hasMany('TerminalMessage', 'terminalId'),
     })
     .authorization(headerRBAC),
-
 
   TerminalMessage: a
     .model({
@@ -72,6 +73,8 @@ const schema = a.schema({
       vectorDimension: a.integer().required(), 
       profiles: a.hasMany('ContextProfile', 'vectorCollectionId'),
       documents: a.hasMany('VectorDocument', 'collectionId'),
+      createdBy: a.string(),
+      updatedBy: a.string(),
     })
     .authorization(headerRBAC),
 
@@ -80,32 +83,24 @@ const schema = a.schema({
       collectionId: a.id(),
       collection: a.belongsTo('VectorCollection', 'collectionId'),
       textContent: a.string().required(), 
-      // JSON metadata (e.g., {"source": "pdf", "page": 4, "url": "..."})
       sourceMetadata: a.json(), 
       externalVectorId: a.string(), 
     })
     .authorization(headerRBAC),
 
-    FoundationModel: a
+  FoundationModel: a
     .model({
       provider: a.enum(ModelProviders),
       name: a.string().required(),
-      
-      // Bedrock/API Identifier String (e.g., "meta.llama3-8b-instruct-v1:0")
       apiIdentifier: a.string().required(), 
-      
       modality: a.enum(ModelModality),
       contextWindowTokens: a.integer(),
       isActive: a.boolean(),
-
-      // Relationship back to ContextProfile
       profiles: a.hasMany('ContextProfile', 'llmModelId'),
+      updatedBy: a.string(),
     })
     .authorization(headerRBAC),
-
 });
-
-
 
 export type Schema = ClientSchema<typeof schema>;
 

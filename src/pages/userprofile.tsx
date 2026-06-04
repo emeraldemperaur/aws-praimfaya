@@ -1,18 +1,26 @@
 import { useEffect } from "react";
 import TitleRibbon from "../components/titleribbon";
 import { UserProfileCard, type SubscriptionDetails } from "../components/userprofilecard";
+import { usePraimfaya } from "../contexts";
+import { getPermissions } from "../utils/asimov";
 
 const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
+  const { logUser, logKey, userGroups } = usePraimfaya();
+  
+  const adminRoles = ['admin', 'superadmin', 'root', 'heda'];
+  const highestRole = userGroups.find(group => adminRoles.includes(group));
+  const isAdmin = !!highestRole;
+
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
   }, [darkMode]);
 
-  const mockUser = {
-    username: 'jane.smith',
-    email: 'jane.smith@example.com',
-    isVerified: true,
-    role: 'administrator',
-    permissions: ['read:data', 'write:data', 'delete:data'],
+  const initUser = {
+    username: logUser ? logUser.split('@')[0] : 'John Doe',
+    email: logUser || 'john.doe@example.com',
+    isVerified: logKey === 'verified',
+    role: isAdmin ? `Administrator::${highestRole}` : userGroups[0] || 'User',
+    permissions: getPermissions(userGroups),
   };
 
   const mockSubscription: SubscriptionDetails = {
@@ -25,7 +33,7 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
     console.log('Initiating checkout session...');
     // Example: const session = await api.createStripeCheckout();
     // window.location.href = session.url;
-    await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate network request
+    await new Promise((resolve) => setTimeout(resolve, 1500)); 
   };
 
   const handleStripeCancel = async () => {
@@ -42,33 +50,31 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
 
   return (
     <>
-    <div className="page-layout">
-      
-      {/* This sits at the top and takes up its natural height */}
-      <TitleRibbon 
-        title="User Profile" 
-        darkMode={darkMode} 
-        typewriterFX 
-        textAlignment="right"
-      /> 
-      
-      {/* This fills the remaining height and centers the card inside it */}
-      <div className="card-center-container">
-        <UserProfileCard 
-          username={mockUser.username}
-          email={mockUser.email}
-          isVerified={mockUser.isVerified}
-          role={mockUser.role}
-          permissions={mockUser.permissions}
-          subscription={mockSubscription}
-          onSubscribe={handleStripeSubscribe}
-          onCancelSubscription={handleStripeCancel}
-          onRenewSubscription={handleStripeRenew}
-          darkMode={darkMode}
-        />
-      </div> 
+      <div className="page-layout">
+        
+        <TitleRibbon 
+          title="User Profile" 
+          darkMode={darkMode} 
+          typewriterFX 
+          textAlignment="right"
+        /> 
+        
+        <div className="card-center-container">
+          <UserProfileCard 
+            username={initUser.username}
+            email={initUser.email}
+            isVerified={initUser.isVerified}
+            role={initUser.role}
+            permissions={initUser.permissions}
+            subscription={mockSubscription}
+            onSubscribe={handleStripeSubscribe}
+            onCancelSubscription={handleStripeCancel}
+            onRenewSubscription={handleStripeRenew}
+            darkMode={darkMode}
+          />
+        </div> 
 
-    </div>
+      </div>
     </>
   );
 };

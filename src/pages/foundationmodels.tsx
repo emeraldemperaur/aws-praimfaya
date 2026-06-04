@@ -1,27 +1,79 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import TitleRibbon from "../components/titleribbon";
 import type { ColumnDef } from "../components/datatable";
-import type { FoundationModel } from "../data/foundationmodel";
-import novaIcon from '../assets/nova-icon.png';
-import gptIcon from '../assets/gpt-oss-icon.png';
 import DataTable from "../components/datatable";
 import BottomRightModal from "../components/bottomrightmodal";
-import { seedDataFoundationModels } from "../data/seeddata";
 import FullScreenModal from "../components/fullscreenmodal";
 import ExtraLargeModal from "../components/extralargemodal";
+import { getModelIcon } from "../utils/voltaire";
+import { generateClient } from "aws-amplify/api";
+import type { UIFoundationModel } from "../data/foundationmodel";
+import { SEED_MODELS } from "../data/seeddata";
+import { fetchAuthSession } from 'aws-amplify/auth';
+import { getUserEmail } from "../utils/asimov";
 
 const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [viewFoundationModel, setViewFoundationModel] = useState<FoundationModel | null>(null);
-  const [editFoundationModel, setEditFoundationModel] = useState<FoundationModel | null>(null);
-  const [editFoundationModelData, setEditFoundationModelData] = useState<Partial<FoundationModel>>({});
-  const [disableFoundationModel, setDisableFoundationModel] = useState<FoundationModel | null>(null);
-  
+  const [viewFoundationModel, setViewFoundationModel] = useState<UIFoundationModel | null>(null);
+  const [editFoundationModel, setEditFoundationModel] = useState<UIFoundationModel | null>(null);
+  const [editFoundationModelData, setEditFoundationModelData] = useState<Partial<UIFoundationModel>>({});
+  const [disableFoundationModel, setDisableFoundationModel] = useState<UIFoundationModel | null>(null);
+  const foundationModelsClient = (generateClient() as any).models.FoundationModel;
+  const [foundationModels, setFoundationModels] = useState<UIFoundationModel[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const isBootstrapping = useRef(false);
+
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
-  }, [darkMode]);
+  }, [darkMode, foundationModels.length]);
+
+  useEffect(() => {
+    const checkPermissions = async () => {
+      try {
+        const session = await fetchAuthSession();
+        const groups = session.tokens?.accessToken?.payload['cognito:groups'] as string[] || [];
+        const isUserAdmin = groups.some(group => ['superadmin', 'root', 'admin', 'heda'].includes(group.toLowerCase()));
+        setIsAdmin(isUserAdmin);
+      } catch (err) {
+        console.error("Failed to fetch user session", err);
+      }
+    };
+    checkPermissions();
+  }, []);
+
+  useEffect(() => {
+    const sub = foundationModelsClient.observeQuery({
+      selectionSet: [
+        'id', 'name', 'provider', 'apiIdentifier', 'modality', 
+        'contextWindowTokens', 'isActive', 'createdAt', 'updatedAt', 'profiles.*'
+      ]
+    }).subscribe({
+      next: async (data: any) => {
+        const items = data.items as UIFoundationModel[];
+        setFoundationModels(items);
+        setIsLoading(false);
+        if (items.length === 0 && !isBootstrapping.current) {
+          isBootstrapping.current = true;
+          console.log("Database is empty. Initiating Foundation Models bootstrap...");
+          for (const model of SEED_MODELS) {
+            try {
+              await foundationModelsClient.create(model);
+            } catch (error) {
+              console.error(`Failed to bootstrap model: ${model.name}`, error);
+            }
+          }
+        }
+      },
+      error: (err: any) => {
+        console.error("Error fetching foundation models:", err);
+        setIsLoading(false);
+      }
+    });
+    return () => sub.unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (editFoundationModel) {
@@ -36,13 +88,14 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
     }
   }, [editFoundationModel]);
 
-  const columns: ColumnDef<FoundationModel>[] = [
+  const columns: ColumnDef<UIFoundationModel>[] = [
       {
         header: 'Model',
-        accessor: 'model',
+        accessor: 'name',
+        sortable: true,
         render: (row) => (
           <div className="tbl-cell-user">
-            <img src={row.provider?.toLocaleLowerCase().includes('amazon') ? novaIcon : gptIcon} alt={row.name} />
+            <img src={getModelIcon(row.apiIdentifier?.toLocaleLowerCase())} alt={row.name} />
             <div className="user-info">
               <span className="primary-text">{row.name}</span>
               <span className="secondary-text">{row.modality}</span>
@@ -52,17 +105,19 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
       },
       {
         header: 'Context Window',
-        accessor: 'contextWindow',
+        accessor: 'contextWindowTokens',
+        sortable: true,
         render: (row) => (
           <div className="tbl-cell-stacked">
             <span className="primary-text">{row.profiles?.length || 0} Profiles</span>
-            <span className="secondary-text">{row.contextWindowTokens || 0} Context Window Tokens</span>
+            <span className="secondary-text">{row.contextWindowTokens?.toLocaleString() || 0} Tokens</span>
           </div>
         )
       },
       {
         header: 'Modality',
         accessor: 'modality',
+        sortable: true,
         render: (row) => {
           let badgeClass = 'info';
           if (row.modality?.toLocaleLowerCase().includes('amazon')) badgeClass = 'info';
@@ -79,7 +134,6 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
             <button 
               className="tbl-action-btn view-btn" 
               onClick={() => {
-                console.log('View button clicked for foundation model:', row.id);
                 setViewFoundationModel(row);
                 setIsViewModalOpen(true);
               }}
@@ -89,7 +143,6 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
             <button 
               className="tbl-action-btn edit-btn" 
               onClick={() => {
-                console.log('Edit button clicked for foundation model:', row.id);
                 setEditFoundationModel(row);
                 setIsEditModalOpen(true);
               }}
@@ -99,7 +152,6 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
             <button 
               className="tbl-action-btn delete-btn" 
               onClick={() => {
-              console.log('Disable button clicked for foundation model:', row.id);
               setDisableFoundationModel(row);
               setIsDeleteModalOpen(true);
             }}
@@ -129,20 +181,44 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
   const isEditValid = editFoundationModelData.name?.trim() !== '' && editFoundationModelData.apiIdentifier?.trim() !== '';
 
   const handleEditSubmit = async () => {
-    console.log('Saving Foundation Model Updates:', editFoundationModel?.id, editFoundationModelData);
-    // TODO: Add Amplify Data update mutation here
-    setIsEditModalOpen(false);
+    if (!editFoundationModel?.id) return;
+    try {
+      const { data: updatedModel, errors } = await foundationModelsClient.update({
+        id: editFoundationModel.id,
+        name: editFoundationModelData.name!,
+        modality: editFoundationModelData.modality!,
+        contextWindowTokens: editFoundationModelData.contextWindowTokens || null,
+        isActive: editFoundationModelData.isActive ?? false,
+        updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User'
+      });
+      if (errors) throw new Error(errors[0].message);
+      setFoundationModels(prev => prev.map(item => 
+        item.id === updatedModel.id ? { ...item, ...updatedModel } : item
+      ));
+      setIsEditModalOpen(false);
+      setEditFoundationModel(null);
+    } catch (error) {
+      console.error("Failed to update Foundation Model:", error);
+    }
   };
 
-  const handleDisableFoundationModel = () => {
-    if (!disableFoundationModel) return;
-
-    console.log('Disabling foundation model:', disableFoundationModel.id);
-    // Add API call here
-    
-    // Clear and close after submitting
-    setDisableFoundationModel(null);
-    setIsDeleteModalOpen(false);
+  const handleDisableFoundationModel = async () => {
+    if (!disableFoundationModel?.id) return;
+    try {
+      const { data: updatedModel, errors } = await foundationModelsClient.update({
+        id: disableFoundationModel.id,
+        isActive: !disableFoundationModel.isActive,
+        updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User'
+      });
+      if (errors) throw new Error(errors[0].message);
+      setFoundationModels(prev => prev.map(item => 
+        item.id === updatedModel.id ? { ...item, ...updatedModel } : item
+      ));
+      setDisableFoundationModel(null);
+      setIsDeleteModalOpen(false);
+    } catch (error) {
+      console.error("Failed to toggle Foundation Model status:", error);
+    }
   };  
 
   const inputStyle = {
@@ -150,7 +226,8 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
     border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
     backgroundColor: darkMode ? '#1f2937' : '#ffffff',
     color: darkMode ? '#f9fafb' : '#111827',
-    fontFamily: 'inherit'
+    fontFamily: 'inherit',
+    boxSizing: 'border-box' as const 
   };
 
   const disabledInputStyle = {
@@ -171,16 +248,22 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
       <div style={{ padding: '2rem' }}>
             <DataTable 
                 columns={columns} 
-                data={seedDataFoundationModels} 
+                data={foundationModels} 
                 darkMode={darkMode} 
                 selectable={false}
+                isLoading={isLoading}
+                initialSort={{ key: 'name', direction: 'asc' }}
+                pagination={true}
+                defaultPageSize={6}
+                pageSizeOptions={[6, 10, 25]}
             />
       </div>
+      
       <ExtraLargeModal
         isOpen={isViewModalOpen}
         onClose={() => setIsViewModalOpen(false)}
         title={`Inspect Model: ${viewFoundationModel?.name}`}
-        icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: '1.5rem', height: '1.5rem', display: 'inline-block', verticalAlign: 'text-bottom' }}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75a2.25 2.25 0 0 0-2.25-2.25H6.75A2.25 2.25 0 0 0 4.5 6.75v10.5a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>} // AI Chip icon
+        icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: '1.5rem', height: '1.5rem', display: 'inline-block', verticalAlign: 'text-bottom' }}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75a2.25 2.25 0 0 0-2.25-2.25H6.75A2.25 2.25 0 0 0 4.5 6.75v10.5a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>}
         darkMode={darkMode}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -283,7 +366,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                     ? 'Generates mathematical vectors from input data.' 
                     : viewFoundationModel?.modality === 'MULTIMODAL' 
                     ? 'Processes both text and image/vision inputs.' 
-                    : 'Processes standard conversational text.'}
+                    : viewFoundationModel?.modality === 'IMAGE' ? 'Processes image data.' : 'Processes standard conversational text.' }
                 </p>
               </div>
 
@@ -312,7 +395,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
               
               {viewFoundationModel?.profiles && viewFoundationModel.profiles.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  {viewFoundationModel.profiles.map(profile => (
+                  {viewFoundationModel.profiles.map((profile: any) => (
                     <span key={profile.id} style={{ 
                       padding: '0.25rem 0.5rem', 
                       backgroundColor: darkMode ? '#374151' : '#e5e7eb', 
@@ -331,6 +414,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
 
         </div>
       </ExtraLargeModal>
+
       <FullScreenModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
@@ -347,12 +431,14 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
             </button>
             <button 
               onClick={handleEditSubmit}
-              disabled={!isEditValid}
+              disabled={!isEditValid || !isAdmin}
               className="input-typography"
               style={{ 
                 padding: '0.75rem 1.5rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px',
-                cursor: isEditValid ? 'pointer' : 'not-allowed', opacity: isEditValid ? 1 : 0.5
+                cursor: (!isEditValid || !isAdmin) ? 'not-allowed' : 'pointer', 
+                opacity: (!isEditValid || !isAdmin) ? 0.5 : 1
               }}
+              title={!isAdmin ? "Administrator privileges required to modify foundation models." : ""}
             >
               Save Configuration
             </button>
@@ -382,7 +468,6 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                 </div>
               </label>
             </div>
-
             <div>
               <label style={labelStyle}>Display Name <span style={{ color: '#ef4444' }}>*</span></label>
               <input 
@@ -392,13 +477,13 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                 onChange={handleEditChange}
                 className="input-typography"
                 placeholder="e.g., Claude 3 Sonnet"
-                style={inputStyle}
+                disabled={!isAdmin}
+                style={isAdmin ? inputStyle : disabledInputStyle}
               />
               <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
                 The human-readable name shown in UI dropdowns.
               </p>
             </div>
-
             <div>
               <label style={labelStyle}>API Identifier (Immutable) <span style={{ color: '#ef4444' }}>*</span></label>
               <input 
@@ -414,13 +499,13 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
             </div>
             
             <div>
-              <label style={labelStyle}>Provider</label>
+              <label style={labelStyle}>Provider (Immutable)</label>
               <select 
                 name="provider"
                 value={editFoundationModelData.provider || ''}
-                onChange={handleEditChange}
+                disabled
                 className="input-typography"
-                style={inputStyle}
+                style={disabledInputStyle}
               >
                 <option value="AMAZON">Amazon AWS</option>
                 <option value="ANTHROPIC">Anthropic</option>
@@ -429,6 +514,11 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                 <option value="OPENAI">OpenAI</option>
                 <option value="COHERE">Cohere</option>
                 <option value="MISTRAL">Mistral AI</option>
+                <option value="STABILITY">Stability AI</option>
+                <option value="DEEPSEEK">DeepSeek</option>
+                <option value="LUMA">Luma AI</option>
+                <option value="TWELVELABS">TwelveLabs</option>
+                <option value="NVIDIA">Nvidia</option>
               </select>
             </div>
 
@@ -442,7 +532,8 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
             value={editFoundationModelData.modality || ''}
             onChange={handleEditChange}
             className="input-typography"
-            style={inputStyle}
+            disabled={!isAdmin}
+            style={isAdmin ? inputStyle : disabledInputStyle}
           >
             <option value="TEXT">Text Only (Chat)</option>
             <option value="MULTIMODAL">Multimodal (Text + Vision)</option>
@@ -467,7 +558,8 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
             onChange={handleEditChange}
             className="input-typography"
             placeholder={editFoundationModelData.modality === 'EMBEDDING' ? 'e.g., 1536' : 'e.g., 200000'}
-            style={inputStyle}
+            disabled={!isAdmin}
+            style={isAdmin ? inputStyle : disabledInputStyle}
           />
           <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
             {editFoundationModelData.modality === 'EMBEDDING'
@@ -493,10 +585,11 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
 
         </div>
       </FullScreenModal>
+      
       <BottomRightModal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
-        icon={<i className="bx bx-trash" />}
+        icon={<i className="bx bx-power-off" />}
         title={`${disableFoundationModel?.isActive ? 'Disable' : 'Enable'} Foundation Model`}
         darkMode={darkMode}
         
@@ -511,7 +604,6 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
             <button 
               className="bottom-right-modal-button"
               onClick={handleDisableFoundationModel}
-              disabled={false}
               style={{ 
                 padding: '0.5rem 1rem', 
                 backgroundColor: '#2563eb', 
@@ -519,7 +611,6 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                 border: 'none', 
                 borderRadius: '4px',
                 cursor: 'pointer',
-                opacity: 1
               }}
             >
               Confirm

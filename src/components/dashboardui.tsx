@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { signOut } from 'aws-amplify/auth';
+import { useNavigate } from 'react-router-dom';
+import { usePraimfaya } from '../contexts';
 import '../styles/dashboard.scss'; 
 
 const menuItems = [
@@ -12,6 +15,19 @@ const menuItems = [
 const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
+
+    const navigator = useNavigate();
+  const { userLogout } = usePraimfaya(); 
+
+  const handleUserLogout = async () => {
+    try {
+      await signOut();
+      userLogout();
+      navigator('/'); 
+    } catch (error) {
+      console.error('Error signing out: ', error);
+    }
+  };
 
     const renderContent = () => {
         switch (activeTab) {
@@ -101,7 +117,9 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
                         </div>
                         <button className="icon-btn action-badge"><i className="bx bx-bell"></i></button>
                         <div className="ft-avatar">
-                            <img src="https://ui-avatars.com/api/?name=Admin+User&background=0D1B2A&color=fff" alt="User" />
+                            <button className="icon-btnx" onClick={handleUserLogout} title="Logout">
+                                <i className="fa-solid fa-power-off"></i>
+                            </button>
                         </div>
                     </div>
                 </header>

@@ -1,18 +1,44 @@
 import type { ConsoleTerminal } from "./consoleterminal";
 import type { VectorCollection } from "./vectorcollection";
 
+
 export interface ContextProfile {
   id?: string;
   name: string;
-  description?: string;
+  description?: string | null;            
   systemPrompt: string;
-  vectorCollectionId?: string;
-  vectorCollection?: VectorCollection; 
+  vectorCollectionId?: string | null;    
+  vectorCollection?: VectorCollection | null; 
   llmModelId: string;
-  temperature?: number;
-  createdBy?: string;
-  isActive?: boolean;
-  terminals?: ConsoleTerminal[]; 
+  foundationModel?: any | null;  
+  temperature?: number | null;           
+  createdBy?: string | null;              
+  isActive?: boolean | null;           
+  terminals?: ConsoleTerminal[] | null; 
   createdAt: string;
   updatedAt?: string;
+  updatedBy?: string | null;
+}
+
+export interface UIContextProfile {
+  id?: string;
+  name: string;
+  description?: string | null;
+  systemPrompt: string;
+  vectorCollectionId?: string | null;
+  llmModelId: string;
+  foundationModel?: any | null;  
+  temperature?: number | null;
+  createdBy?: string | null;
+  isActive?: boolean | null;
+  terminals?: ConsoleTerminal[] | null; 
+  createdAt?: string;
+  updatedAt?: string;
+  updatedBy?: string | null;
+  vectorCollection?: {
+    id?: string;
+    name: string;
+    embeddingModel: string;
+    vectorDimension: number;
+  } | null;
 }

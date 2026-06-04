@@ -1,7 +1,7 @@
 import { useContext, useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PraimfayaContext } from '../contexts';
-import { signIn, signUp, confirmSignUp, getCurrentUser, fetchUserAttributes, autoSignIn } from 'aws-amplify/auth';
+import { signIn, signUp, confirmSignUp, resendSignUpCode, getCurrentUser, fetchUserAttributes, autoSignIn, fetchAuthSession } from 'aws-amplify/auth';
 import devLogoDark from '../assets/me-devlogo-white.png';
 import devLogoLight from '../assets/me-devlogo-black.png';
 import '../styles/authenticator.scss';
@@ -12,7 +12,6 @@ import { EyeIcon, EyeSlashIcon } from '../utils/voltaire';
 const Authenticator = ({ darkMode }: { darkMode: boolean }) => {
     let navigator = useNavigate();
     const contextPraimfaya = useContext(PraimfayaContext);
-
     const loginUsername = useRef<HTMLInputElement>(null);
     const loginUserPassword = useRef<HTMLInputElement>(null);
     const signupUsername = useRef<HTMLInputElement>(null);
@@ -25,10 +24,9 @@ const Authenticator = ({ darkMode }: { darkMode: boolean }) => {
     const [usernameSignUpError, setUsernameSignUpError] = useState([false, '']);
     const [passwordSignUpError, setPasswordSignUpError] = useState([false, '']);
     const [passwordConfirmError, setPasswordConfirmError] = useState([false, '']);
-
     const [isConfirming, setIsConfirming] = useState(false);
     const [isSignUpView, setIsSignUpView] = useState(false);
-
+    const [unconfirmedEmail, setUnconfirmedEmail] = useState('');
     const [showLoginPassword, setShowLoginPassword] = useState(false);
     const [showSignUpPassword, setShowSignUpPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -39,9 +37,17 @@ const Authenticator = ({ darkMode }: { darkMode: boolean }) => {
 
     const checkAuthStatus = async () => {
         try {
-            const { username } = await getCurrentUser();
+            const { username, userId } = await getCurrentUser();
             const attributes = await fetchUserAttributes();
-            contextPraimfaya.userLog(attributes.email || 'aws-user', 'verified', username);
+            const session = await fetchAuthSession();
+            const tokenPayload = session.tokens?.accessToken?.payload;
+            const groups = (tokenPayload?.['cognito:groups'] as string[]) || [];
+            console.log("\nGroups from token payload:", groups);
+            const authTimeEpoch = tokenPayload?.auth_time as number;
+            const lastSignInTime = authTimeEpoch 
+            ? new Date(authTimeEpoch * 1000).toISOString() 
+            : new Date().toISOString();
+            contextPraimfaya.userLog(attributes.email || username || 'aws-user', 'verified', userId, lastSignInTime, groups);
             navigator('/dashboard');
         } catch (err) { /* Not logged in */ }
     };
@@ -82,12 +88,21 @@ const Authenticator = ({ darkMode }: { darkMode: boolean }) => {
             try {
                 const { isSignedIn, nextStep } = await signIn({ username: email, password });
                 if (isSignedIn) {
-                    const { userId } = await getCurrentUser();
+                    const { username, userId } = await getCurrentUser();
+                    const attributes = await fetchUserAttributes();
+                    const session = await fetchAuthSession();
+                    const tokenPayload = session.tokens?.accessToken?.payload;
+                    const groups = (tokenPayload?.['cognito:groups'] as string[]) || [];
+                    const authTimeEpoch = tokenPayload?.auth_time as number;
+                    const lastSignInTime = authTimeEpoch 
+                        ? new Date(authTimeEpoch * 1000).toISOString() 
+                        : new Date().toISOString();
                     showToast.success("Successfully logged in!");
-                    contextPraimfaya.userLog(email, 'verified', userId);
+                    contextPraimfaya.userLog(attributes.email || username || 'aws-user', 'verified', userId, lastSignInTime, groups);
                     navigator('/dashboard');
                 } else if (nextStep.signInStep === 'CONFIRM_SIGN_UP') {
                     showToast.info("Please verify your email address first.");
+                    setUnconfirmedEmail(email);
                     setIsSignUpView(true);
                     setIsConfirming(true);
                 }
@@ -110,34 +125,70 @@ const Authenticator = ({ darkMode }: { darkMode: boolean }) => {
                 });
                 if (nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
                     showToast.success("Verification code sent to your email!");
+                    setUnconfirmedEmail(email); 
                     setIsConfirming(true);
                 }
             } catch (error: any) {
-                showToast.error(error.message || "Failed to sign up.");
-                setUsernameSignUpError([true, "Sign up failed."]);
+                if (error.name === 'UsernameExistsException') {
+                    try {
+                        await resendSignUpCode({ username: email });
+                        showToast.info("Account exists but is unconfirmed. A new code was sent.");
+                        setUnconfirmedEmail(email);
+                        setIsConfirming(true);
+                    } catch (resendError: any) {
+                        showToast.error("Account already exists and is verified. Please log in.");
+                        setIsSignUpView(false);
+                    }
+                } else {
+                    showToast.error(error.message || "Failed to sign up.");
+                    setUsernameSignUpError([true, "Sign up failed."]);
+                }
             }
         }
     }
 
+    const handleResendCode = async () => {
+        if (!unconfirmedEmail) return;
+        try {
+            await resendSignUpCode({ username: unconfirmedEmail });
+            showToast.success("A new verification code has been sent!");
+        } catch (error: any) {
+            showToast.error(error.message || "Failed to resend code.");
+        }
+    };
+
     const onConfirmSignUpHandler = async () => {
-        const email = signupUsername.current?.value || '';
+        const email = unconfirmedEmail; 
         const code = verificationCode.current?.value || '';
+        
         if (!code) { showToast.error("Please enter the verification code."); return; }
+        if (!email) { showToast.error("Email session lost. Please refresh and try logging in to trigger a new code."); return; }
+        
         try {
             const { isSignUpComplete, nextStep } = await confirmSignUp({ username: email, confirmationCode: code });
             if (nextStep?.signUpStep === 'COMPLETE_AUTO_SIGN_IN') {
                 await autoSignIn();
+                const { username, userId } = await getCurrentUser();
+                const session = await fetchAuthSession();
+                const attributes = await fetchUserAttributes();
+                const tokenPayload = session.tokens?.accessToken?.payload;
+                const groups = (tokenPayload?.['cognito:groups'] as string[]) || [];
+                const authTimeEpoch = tokenPayload?.auth_time as number;
+                const lastSignInTime = authTimeEpoch 
+                    ? new Date(authTimeEpoch * 1000).toISOString() 
+                    : new Date().toISOString();
                 showToast.success("Email verified and logged in!");
-                const { userId } = await getCurrentUser();
                 setIsConfirming(false);
-                contextPraimfaya.userLog(email, 'verified', userId);
+                contextPraimfaya.userLog(attributes.email || username || 'aws-user', 'verified', userId, lastSignInTime, groups);
                 navigator('/dashboard');
             } else if (isSignUpComplete) {
                 showToast.success("Email verified! Please log in.");
                 setIsConfirming(false);
                 setIsSignUpView(false);
             }
-        } catch (error: any) { showToast.error(error.message || "Invalid verification code."); }
+        } catch (error: any) { 
+            showToast.error(error.message || "Invalid verification code."); 
+        }
     }
 
     return (
@@ -193,6 +244,8 @@ const Authenticator = ({ darkMode }: { darkMode: boolean }) => {
                                         <p style={{ color: '#fff', marginBottom: '15px' }}>Enter the 6-digit code sent to your email.</p>
                                         <input ref={verificationCode} className="ostiary-font" placeholder="Verification Code" type="text" maxLength={6} />
                                         <div className="ost-btn" onClick={onConfirmSignUpHandler}>Verify Code</div>
+                                        <p style={{ marginTop: '15px', color: darkMode ? '#9ca3af' : '#666', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }} 
+                                        onClick={handleResendCode}>Didn't receive a code? Resend</p>
                                     </>
                                 ) : (
                                     <>

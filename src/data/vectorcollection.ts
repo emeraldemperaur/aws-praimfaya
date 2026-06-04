@@ -8,6 +8,8 @@ export interface VectorCollection {
   vectorDimension: number;
   profiles?: ContextProfile[]; 
   documents?: VectorDocument[];
+  createdBy?: string | null;
+  updatedBy?: string | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -24,4 +26,17 @@ export interface VectorDocument {
   updatedAt?: string;
   size?: string;
   status?: string;
+}
+
+export interface UIVectorCollection {
+  id?: string;
+  name: string;
+  description?: string | null;
+  embeddingModel: string;
+  vectorDimension: number;
+  createdBy?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  profiles?: any[] | null; 
+  documents?: any[] | null;
 }

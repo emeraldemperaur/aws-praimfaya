@@ -101,7 +101,7 @@ export const seedDataContextProfiles: ContextProfile[] = [
               id: '1',
               name: 'John Doe',
               description: 'Software Engineer',
-              embeddingModel: 'Amazon Bedrock',
+              embeddingModel: 'Amazon Nova',
               vectorDimension: 128,
               createdAt: '2024-01-15T10:00:00Z',
               profiles: [
@@ -138,7 +138,7 @@ export const seedDataContextProfiles: ContextProfile[] = [
             id: '1',
               name: 'John Doe',
               description: 'Software Engineer',
-              embeddingModel: 'Amazon Bedrock',
+              embeddingModel: 'Voyage-4 Large',
               vectorDimension: 128,
               createdAt: '2024-01-15T10:00:00Z',
               profiles: [
@@ -369,4 +369,21 @@ export const availableProfiles: ContextProfile[] = [
       isActive: true,
       createdAt: '2024-01-20T14:30:00Z'
     }
+  ];
+
+
+  export const SEED_MODELS = [
+    { name: 'Amazon Nova Pro', apiIdentifier: 'amazon.nova-pro-v1:0', provider: 'AMAZON', modality: 'MULTIMODAL', contextWindowTokens: 300000, isActive: true },
+    { name: 'Amazon Titan Embeddings v2', apiIdentifier: 'amazon.titan-embed-text-v2:0', provider: 'AMAZON', modality: 'EMBEDDING', contextWindowTokens: 8192, isActive: true },
+    { name: 'Claude 3.5 Sonnet', apiIdentifier: 'anthropic.claude-3-5-sonnet-20240620-v1:0', provider: 'ANTHROPIC', modality: 'MULTIMODAL', contextWindowTokens: 200000, isActive: true },
+    { name: 'Meta Llama 3.1 70B', apiIdentifier: 'meta.llama3-1-70b-instruct-v1:0', provider: 'META', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'Mistral Large', apiIdentifier: 'mistral.mistral-large-2402-v1:0', provider: 'MISTRAL', modality: 'TEXT', contextWindowTokens: 32000, isActive: true },
+    { name: 'OpenAI GPT-4o', apiIdentifier: 'gpt-4o', provider: 'OPENAI', modality: 'MULTIMODAL', contextWindowTokens: 128000, isActive: true },
+    { name: 'Google Gemma 3', apiIdentifier: 'google.gemma-3-27b-it', provider: 'GOOGLE', modality: 'TEXT', contextWindowTokens: 8192, isActive: true },
+    { name: 'Cohere Command R+', apiIdentifier: 'cohere.command-r-plus-v1:0', provider: 'COHERE', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'Stability AI SDXL 1.0', apiIdentifier: 'stability.stable-diffusion-xl-v1', provider: 'STABILITY', modality: 'IMAGE', contextWindowTokens: 77, isActive: true },
+    { name: 'DeepSeek Coder V2', apiIdentifier: 'deepseek-coder-v2', provider: 'DEEPSEEK', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'Luma AI Dream Machine', apiIdentifier: 'luma-dream-machine', provider: 'LUMA', modality: 'IMAGE', contextWindowTokens: 0, isActive: true },
+    { name: 'TwelveLabs Marengo', apiIdentifier: 'twelvelabs-marengo-2.6', provider: 'TWELVELABS', modality: 'MULTIMODAL', contextWindowTokens: 0, isActive: true },
+    { name: 'Nvidia Nemotron Nano', apiIdentifier: 'nvidia.nemotron-nano', provider: 'NVIDIA', modality: 'TEXT', contextWindowTokens: 4096, isActive: true },
   ];

@@ -2,10 +2,12 @@ import React, { useState, createContext, useContext } from "react";
 
 export interface PraimfayaContextType {
   localeDate: string;
-  logUser: string;
-  logKey: string;
-  logUUID: string;
-  userLog: (loginUser: string, loginKey: string, loginUUID: string) => void;
+  logUser: string;          // Cognito Email
+  logKey: string;           // Cognito 'verified' status
+  logUUID: string;          // Cognito UUID
+  lastSignInTime: string;   // Last SignIn Timestamp
+  userGroups: string[];     // Cognito User Pool Groups (Roles)
+  userLog: (loginUser: string, loginKey: string, loginUUID: string, signInTime?: string, groups?: string[]) => void;
   userLogout: () => void;
   isAuthenticated: boolean;
 }
@@ -21,16 +23,29 @@ const PraimfayaProvider = ({ children }: PraimfayaProviderProps) => {
   const [logUser, setLogUser] = useState<string>(""); 
   const [logKey, setLogKey] = useState<string>("");
   const [logUUID, setLogUUID] = useState<string>("");
+  const [lastSignInTime, setLastSignInTime] = useState<string>("");
+  const [userGroups, setUserGroups] = useState<string[]>([]);
 
-  const logUserLogin = (loginUser: string, loginKey: string, loginUUID: string): void => {
+  const logUserLogin = (
+    loginUser: string, 
+    loginKey: string, 
+    loginUUID: string, 
+    signInTime?: string, 
+    groups?: string[]
+  ): void => {
     setLogUser(loginUser);
     setLogKey(loginKey);
     setLogUUID(loginUUID);
+    setLastSignInTime(signInTime || new Date().toISOString());
+    setUserGroups(groups || []);
   };
 
   const logUserLogout = (): void => {
     setLogUser("");
     setLogKey("");
+    setLogUUID("");
+    setLastSignInTime("");
+    setUserGroups([]);
   };
 
   const isAuthenticated = logUser !== "" && logKey !== "";
@@ -42,6 +57,8 @@ const PraimfayaProvider = ({ children }: PraimfayaProviderProps) => {
         logUser,
         logKey,
         logUUID,
+        lastSignInTime,
+        userGroups,
         userLog: logUserLogin,
         userLogout: logUserLogout,
         isAuthenticated,

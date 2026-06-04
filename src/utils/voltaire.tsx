@@ -1,4 +1,18 @@
 import { cssTransition } from 'react-toastify';
+import novaIcon from '../assets/nova-icon.png';
+import bedrockIcon from '../assets/bedrock-icon.png';
+import mistralAIIcon from '../assets/mistralai-icon.png';
+import cohereAIIcon from '../assets/cohereai-icon.png';
+import stabilityAIIcon from '../assets/stability-ai-icon.png';
+import deepseekIcon from '../assets/deepseek-icon.png';
+import lumalabsIcon from '../assets/lumalabs-icon.png';
+import twelvelabsIcon from '../assets/twelvelabs-icon.png';
+import nvidiaIcon from '../assets/nvidia-icon.png';
+import claudeIcon from '../assets/claude-icon.png';
+import llamaIcon from '../assets/llama-icon.png';
+import gemmaIcon from '../assets/google-icon.png';
+import gptIcon from '../assets/gpt-oss-icon.png';
+import cpuIcon from '../assets/cpu-icon.png';
 
 export const SuccessIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-regular fa-circle-check"></i></a>;
 export const ErrorIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-solid fa-radiation"></i>&nbsp;</a>;
@@ -84,7 +98,70 @@ export const inputStyle = (darkMode: boolean): React.CSSProperties => (  {
     boxSizing: 'border-box' 
   });
 
-  export const labelStyle = (darkMode: boolean): React.CSSProperties => ({
+export const labelStyle = (darkMode: boolean): React.CSSProperties => ({
     display: 'block', marginBottom: '0.5rem', fontWeight: 500,
     fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151'
   });
+
+export const getModelIcon = (modelName?: string | null): string => {
+  if (!modelName) return cpuIcon;
+
+  const normalizedName = modelName.toLowerCase();
+
+  // 1. Check for specific Amazon sub-brands FIRST
+  if (normalizedName.includes('titan') || normalizedName.includes('amazon.titan-embed-text-v2:0')) {
+    return bedrockIcon;
+  }
+
+  // 2. Now check for Nova or generic Amazon fallback
+  if (normalizedName.includes('nova') || normalizedName.includes('amazon')) {
+    return novaIcon;
+  }
+
+  // 3. Continue with the rest of the providers...
+  if (normalizedName.includes('mistral') || normalizedName.includes('mistral.large') || normalizedName.includes('mistralai')) {
+    return mistralAIIcon;
+  }
+
+  if (normalizedName.includes('cohere') || normalizedName.includes('cohere.ai')) {
+    return cohereAIIcon;
+  }
+
+  if (normalizedName.includes('stability') || normalizedName.includes('stability.ai')) {
+    return stabilityAIIcon;
+  }
+
+  if (normalizedName.includes('deepseek') || normalizedName.includes('deepseek.ai')) {
+    return deepseekIcon;
+  }
+
+  if (normalizedName.includes('lumalabs') || normalizedName.includes('luma labs') || normalizedName.includes('luma')) {
+    return lumalabsIcon;
+  }
+
+  if (normalizedName.includes('twelvelabs') || normalizedName.includes('12labs')) {
+    return twelvelabsIcon;
+  }
+
+  if (normalizedName.includes('nvidia') || normalizedName.includes('nemotron')) {
+    return nvidiaIcon;
+  }
+  
+  if (normalizedName.includes('claude') || normalizedName.includes('anthropic')) {
+    return claudeIcon;
+  }
+  
+  if (normalizedName.includes('llama') || normalizedName.includes('meta')) {
+    return llamaIcon;
+  }
+  
+  if (normalizedName.includes('gemma') || normalizedName.includes('google')) {
+    return gemmaIcon;
+  }
+  
+  if (normalizedName.includes('gpt') || normalizedName.includes('openai')) {
+    return gptIcon;
+  }
+
+  return cpuIcon;
+};

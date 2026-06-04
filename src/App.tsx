@@ -35,8 +35,7 @@ async function testAmplify() {
 }
 
 function App() {
-  const { logUser, userLog } = usePraimfaya();
-  const isAuthenticated = true;
+  const { logUser, userLog, isAuthenticated } = usePraimfaya();
   const systemPreferenceDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const [darkMode, setDarkMode] = useState<boolean>(systemPreferenceDark);
   console.log(`Context :: ${logUser} : ${userLog}`);
