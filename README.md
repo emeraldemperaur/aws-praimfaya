@@ -2,10 +2,6 @@
 ## AWS Amplify AI Kit Web Application
 ![Changesets](https://img.shields.io/badge/maintained%20with-changesets-176de3?style=flat-square&logo=changesets&logoColor=white) 
 
-### Synopsis Overview
-<p align="justify">
-RAG (Retrieval-Augmented Generation) chatbot interface web application leveraging AWS Amplify and Amazon Bedrock to connect foundation Large Language Models (LLMs) with private or external context and domain-specific data sources to render AI augmented subject matter expertise on any proffered contextual knowledge base.
-</p>
 
 ### Synopsis Overview
 
@@ -18,7 +14,7 @@ By leveraging three core relational templates, the system empowers authenticated
 
 * **Context Profiles (Behavioral Orchestration):** Acts as the configuration layer for distinct AI personas. Users can encapsulate strict system prompts, tune hyperparameters (e.g. temperature), and explicitly link vector collection data sources. This enables the rapid deployment of specialized agents; from precise analytical coders & solutions architects to creative copywriters.
 
-* **Vector Collections & Documents (Knowledge Base):** A streamlined interface for ingesting private documents, generating embeddings via Bedrock, and managing indexed storage. By selectively associating these Vector Collections with specific Context Profiles, users can establish isolated, domain-specific knowledge bases that ground LLM responses in factual data, effectively eliminating AI hallucinations.
+* **Vector Collections & Documents (Knowledge Base):** A streamlined interface for ingesting private documents, generating embeddings via Bedrock, and managing indexed storage. By selectively associating these Vector Collections with specific Context Profiles, users can establish isolated, domain-specific knowledge bases that ground LLM (Large Language Model) responses in factual data, effectively eliminating AI hallucinations.
 
 * **Foundation Models (Vendor Agnostic Interoperability):** Natively integrates with Amazon Bedrock’s diverse catalog of Embedding and Large Language Models (e.g., Anthropic Claude, Meta Llama, Amazon Titan). This agnostic approach prevents vendor lock-in, allowing system administrators to seamlessly toggle active models based on required modalities, context window limits, or token cost optimization.
 
