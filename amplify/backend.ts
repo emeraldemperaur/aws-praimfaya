@@ -29,10 +29,15 @@ const vectorBucket = new s3vectors.CfnVectorBucket(customStack, 'VectorBucket', 
 // 2. Create the explicit Vector Index inside that bucket
 const vectorIndex = new s3vectors.CfnIndex(customStack, 'VectorIndex', {
   vectorBucketArn: vectorBucket.attrVectorBucketArn,
-  // 1024 matches the output dimension of Nova 2 Multimodal
   dimension: 1024, 
-  distanceMetric: 'cosine',
-  dataType: 'FLOAT32'
+  distanceMetric: 'cosine', 
+  dataType: 'float32', 
+  metadataConfiguration: {
+    nonFilterableMetadataKeys: [
+      'AMAZON_BEDROCK_TEXT', 
+      'AMAZON_BEDROCK_METADATA'
+    ]
+  }
 });
 
 // 3. Define IAM Role for Bedrock
