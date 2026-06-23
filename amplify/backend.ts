@@ -8,8 +8,6 @@ import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
 import * as s3vectors from 'aws-cdk-lib/aws-s3vectors';
-import * as cr from 'aws-cdk-lib/custom-resources';
-import { RemovalPolicy } from 'aws-cdk-lib';
 
 const backend = defineBackend({
   auth,
@@ -24,13 +22,14 @@ const customStack = backend.createStack('BedrockAIStack');
 // 1. Create the S3 Vector Store Bucket
 const vectorBucket = new s3vectors.CfnVectorBucket(customStack, 'VectorBucket', {});
 
-// 2. Create the Vector Index (Nova outputs 1024 dimensions)
+// 2. Create the Vector Index (Titan Text V2 uses 1024 dimensions)
 const vectorIndex = new s3vectors.CfnIndex(customStack, 'VectorIndex', {
   vectorBucketArn: vectorBucket.attrVectorBucketArn,
   dimension: 1024, 
   distanceMetric: 'cosine', 
   dataType: 'float32',
   metadataConfiguration: {
+    // Crucial: Prevents Bedrock's massive internal chunks from crashing S3 Vectors
     nonFilterableMetadataKeys: [
       'AMAZON_BEDROCK_TEXT', 
       'AMAZON_BEDROCK_METADATA',
@@ -41,20 +40,12 @@ const vectorIndex = new s3vectors.CfnIndex(customStack, 'VectorIndex', {
   }
 });
 
-// 3. Create the Multimodal Storage Bucket
-const multimodalBucket = new s3.Bucket(customStack, 'MultimodalStorageBucket', {
-  encryption: s3.BucketEncryption.S3_MANAGED,
-  blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-  removalPolicy: RemovalPolicy.DESTROY, 
-  autoDeleteObjects: true,
-});
-
-// 4. Define IAM Role for Bedrock
+// 3. Define IAM Role for Bedrock
 const bedrockKbRole = new iam.Role(customStack, 'BedrockKBRole', {
   assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
 });
 
-// Grant read access to user uploads
+// Grant read access to the Amplify document uploads bucket
 backend.vectorCollectionsS3.resources.bucket.grantRead(bedrockKbRole);
 
 // Grant Bedrock full API access to the new S3 Vectors mathematical engine
@@ -69,78 +60,43 @@ bedrockKbRole.addToPolicy(new iam.PolicyStatement({
   ],
   resources: [
     vectorBucket.attrVectorBucketArn,
-    vectorIndex.attrIndexArn, // Explicitly grant access to the Index ARN
+    vectorIndex.attrIndexArn, // Explicitly grant access to the Index ARN to clear the 403
     `${vectorBucket.attrVectorBucketArn}/*`
   ]
 }));
 
-// Grant full access to Multimodal Bucket
-multimodalBucket.grantReadWrite(bedrockKbRole);
-
-// Grant permission to use Nova Multimodal
+// Grant permission to use Titan Embed Text v2
 bedrockKbRole.addToPolicy(new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel'],
-  resources: [`arn:aws:bedrock:${customStack.region}::foundation-model/amazon.nova-2-multimodal-embeddings-v1:0`],
+  resources: [`arn:aws:bedrock:${customStack.region}::foundation-model/amazon.titan-embed-text-v2:0`],
 }));
 
-// 5. Bypass CloudFormation and call the AWS SDK directly to create the Knowledge Base
-const createKbCr = new cr.AwsCustomResource(customStack, 'NovaKnowledgeBaseCR', {
-  onCreate: {
-    service: 'BedrockAgent',
-    action: 'CreateKnowledgeBaseCommand',
-    parameters: {
-      name: 'PraimfayaVectorPool',
-      roleArn: bedrockKbRole.roleArn,
-      knowledgeBaseConfiguration: {
-        type: 'VECTOR',
-        vectorKnowledgeBaseConfiguration: {
-          embeddingModelArn: `arn:aws:bedrock:${customStack.region}::foundation-model/amazon.nova-2-multimodal-embeddings-v1:0`,
-          supplementalDataStorageConfiguration: {
-            storageLocations: [{
-              type: 'S3', 
-              s3Location: { uri: `s3://${multimodalBucket.bucketName}/` }
-            }]
-          }
-        }
-      },
-      storageConfiguration: {
-        type: 'S3_VECTORS',
-        s3VectorsConfiguration: {
-          vectorBucketArn: vectorBucket.attrVectorBucketArn,
-          indexName: vectorIndex.indexName!,
-          indexArn: vectorIndex.attrIndexArn,
-        }
-      }
-    },
-    physicalResourceId: cr.PhysicalResourceId.fromResponse('knowledgeBase.knowledgeBaseId'),
-  },
-  onDelete: {
-    service: 'BedrockAgent',
-    action: 'DeleteKnowledgeBaseCommand',
-    parameters: {
-      knowledgeBaseId: new cr.PhysicalResourceIdReference() 
+// 4. Create the Bedrock Knowledge Base (Text-Only, Highly Stable)
+const knowledgeBase = new bedrock.CfnKnowledgeBase(customStack, 'MultiTenantKB', {
+  name: 'PraimfayaVectorPool',
+  roleArn: bedrockKbRole.roleArn,
+  knowledgeBaseConfiguration: {
+    type: 'VECTOR',
+    vectorKnowledgeBaseConfiguration: {
+      embeddingModelArn: `arn:aws:bedrock:${customStack.region}::foundation-model/amazon.titan-embed-text-v2:0`,
     }
   },
-  policy: cr.AwsCustomResourcePolicy.fromStatements([
-    new iam.PolicyStatement({
-      actions: ['bedrock:CreateKnowledgeBase', 'bedrock:DeleteKnowledgeBase'],
-      resources: ['*'],
-    }),
-    new iam.PolicyStatement({
-      actions: ['iam:PassRole'],
-      resources: [bedrockKbRole.roleArn], 
-    })
-  ]),
+  storageConfiguration: {
+    type: 'S3_VECTORS',
+    s3VectorsConfiguration: {
+      vectorBucketArn: vectorBucket.attrVectorBucketArn,
+      indexName: vectorIndex.indexName!, 
+      indexArn: vectorIndex.attrIndexArn,
+    }
+  }
 });
 
-// Force the custom resource to wait until the Index and Buckets are fully deployed
-createKbCr.node.addDependency(vectorIndex);
-createKbCr.node.addDependency(multimodalBucket);
+// Force the Knowledge Base to wait until the Vector Engine is fully provisioned
+knowledgeBase.node.addDependency(vectorIndex);
 
-// 6. Connect Amplify S3 Bucket as the Data Source
+// 5. Connect Amplify S3 Bucket as the Data Source
 const dataSource = new bedrock.CfnDataSource(customStack, 'AmplifyDocumentSource', {
-  // Pull the dynamically generated ID directly from the Custom Resource output
-  knowledgeBaseId: createKbCr.getResponseField('knowledgeBase.knowledgeBaseId'),
+  knowledgeBaseId: knowledgeBase.ref,
   name: 'AmplifyS3DataSource',
   dataSourceConfiguration: {
     type: 'S3',
@@ -156,7 +112,7 @@ const dataSource = new bedrock.CfnDataSource(customStack, 'AmplifyDocumentSource
   }
 });
 
-// 7. Wire up the Lambda Trigger
+// 6. Wire up the Lambda Trigger
 const processVectorLambda = backend.processVector.resources.lambda;
 
 processVectorLambda.addToRolePolicy(new iam.PolicyStatement({
