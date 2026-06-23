@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-agent": "^3.1075.0",
+    "@aws-sdk/client-s3": "^3.1075.0",
     "@fontsource-variable/bodoni-moda": "^5.2.7",
     "@fontsource/google-sans-code": "^5.2.3",
     "aws-amplify": "^6.16.3",
@@ -26,7 +28,7 @@
     "@aws-sdk/client-cognito-identity-provider": "^3.1058.0",
     "@eslint/js": "^9.39.4",
     "@types/aws-lambda": "^8.10.161",
-    "@types/node": "^24.12.2",
+    "@types/node": "^24.13.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",

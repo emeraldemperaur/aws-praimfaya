@@ -12,6 +12,7 @@ import FullScreenModal from "../components/fullscreenmodal";
 import { generateClient } from "aws-amplify/api";
 import type { UIVectorCollection } from "../data/vectorcollection";
 import { getUserEmail } from "../utils/asimov";
+import { fetchAuthSession } from 'aws-amplify/auth';
 
 const DEFAULT_COLLECTION_STATE = {
   name: '',
@@ -89,7 +90,6 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
         embeddingModel: editVectorCollection.embeddingModel,
         vectorDimension: editVectorCollection.vectorDimension,
       });
-        // Sync DB documents to local tracking array
       setVectorDocuments(editVectorCollection.documents || []);
     }
   }, [editVectorCollection]);
@@ -301,67 +301,46 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
     const file = e.target.files?.[0];
     if (!file || !editVectorCollection?.id) return;
 
-    console.log(`Initiating Amplify Storage upload for: ${file.name}`);
-    
-    // Create an S3 Path key 
-    // TODO: Add Cognito permanent userId prefix to avoid cross-user collisions in the bucket
-    const s3FilePath = `vector-collections/${editVectorCollection.id}/${file.name}`;
-    const friendlySize = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
-
     try {
+      // 1. Fetch Identity ID for pathing
+      const session = await fetchAuthSession();
+      const identityId = session.identityId;
+      if (!identityId) throw new Error("Authentication required.");
+
+      // 2. Build secure path
+      const s3FilePath = `vector-collections/${identityId}/${editVectorCollection.id}/${file.name}`;
+      const friendlySize = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+
+      // 3. Optimistic UI update
       setVectorDocuments(prev => [...prev, 
         { 
           id: 'temp-' + Date.now().toString(), 
           name: file.name, 
           size: friendlySize,
-          collectionId: editVectorCollection.id, 
-          textContent: file.name,
           status: 'Uploading...'
         }
       ]);
 
-      // Execute the S3 Storage Upload
+      // 4. Upload raw file directly to S3 (Triggers Backend Lambda)
       const uploadTask = uploadData({
         path: s3FilePath,
         data: file,
         options: {
           onProgress: ({ transferredBytes, totalBytes }) => {
-            if (totalBytes) console.log(`Upload progress: ${Math.round((transferredBytes / totalBytes) * 100)}%`);
+            if (totalBytes) console.log(`Progress: ${Math.round((transferredBytes / totalBytes) * 100)}%`);
           }
         }
       });
 
       await uploadTask.result;
-      console.log('Successfully uploaded to S3');
-      
-      setVectorDocuments(prev => prev.map(doc => doc.name === file.name ? { ...doc, status: 'Indexing in DB...' } : doc));
-      
-      const { data: newDbDoc, errors } = await client.models.VectorDocument.create({
-        collectionId: editVectorCollection.id,
-        textContent: file.name, // Required by schema. Overwritten later by a Lambda that parses the Document.
-        sourceMetadata: {
-          fileName: file.name,
-          fileSize: friendlySize,
-          s3Path: s3FilePath,
-          status: 'Indexed'
-        }
-      });
-
-      if (errors) throw new Error(errors[0].message);
-
-      console.log('Successfully created VectorDocument record:', newDbDoc);
-
       setVectorDocuments(prev => prev.map(doc => 
-        doc.name === file.name ? { 
-          ...doc, 
-          id: newDbDoc.id, 
-          status: 'Indexed' 
-        } : doc
+        doc.name === file.name ? { ...doc, status: 'Processing...' } : doc
       ));
-
     } catch (error) {
-      console.error('Error in upload/DB creation sequence:', error);
-      setVectorDocuments(prev => prev.map(doc => doc.name === file.name ? { ...doc, status: 'Failed' } : doc));
+      console.error('Upload Error:', error);
+      setVectorDocuments(prev => prev.map(doc => 
+        doc.name === file.name ? { ...doc, status: 'Failed' } : doc
+      ));
     } finally {
       if (hiddenDirectS3Input.current) hiddenDirectS3Input.current.value = ''; 
     }

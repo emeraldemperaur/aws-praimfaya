@@ -28,7 +28,7 @@ Ultimately, Praimfaya couples strict AWS Cognito IAM authentication with a highl
 #### Light & Dark Mode
 ![AuthenticationUILight](./screenshots/authentication-ui-light-theme.png)
 <br/>&nbsp;
-![AuthenticationUIDark](./screenshots/authentication-ui-dark-theme.png)
+![AuthenticationUIDark](./screenshots/authentication-ui-dark.png)
 
 #### Context Profiles
 ![Context Profile Create](./screenshots/contextprofile-create.png)
