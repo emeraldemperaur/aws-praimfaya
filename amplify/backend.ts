@@ -57,11 +57,19 @@ const bedrockKbRole = new iam.Role(customStack, 'BedrockKBRole', {
 // Grant read access to user uploads
 backend.vectorCollectionsS3.resources.bucket.grantRead(bedrockKbRole);
 
-// Grant full access to explicit Vector Bucket
+// Grant Bedrock full API access to the new S3 Vectors mathematical engine
 bedrockKbRole.addToPolicy(new iam.PolicyStatement({
-  actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
+  actions: [
+    's3vectors:QueryVectors',
+    's3vectors:PutVectors',
+    's3vectors:DeleteVectors',
+    's3vectors:GetVectors',
+    's3vectors:GetVectorBucket',
+    's3vectors:ListIndexes'
+  ],
   resources: [
     vectorBucket.attrVectorBucketArn,
+    vectorIndex.attrIndexArn, // Explicitly grant access to the Index ARN
     `${vectorBucket.attrVectorBucketArn}/*`
   ]
 }));
