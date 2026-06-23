@@ -31,11 +31,14 @@ const vectorIndex = new s3vectors.CfnIndex(customStack, 'VectorIndex', {
   vectorBucketArn: vectorBucket.attrVectorBucketArn,
   dimension: 1024, 
   distanceMetric: 'cosine', 
-  dataType: 'float32', 
+  dataType: 'float32',
   metadataConfiguration: {
     nonFilterableMetadataKeys: [
       'AMAZON_BEDROCK_TEXT', 
-      'AMAZON_BEDROCK_METADATA'
+      'AMAZON_BEDROCK_METADATA',
+      'x-amz-bedrock-kb-source-uri',
+      'x-amz-bedrock-kb-chunk-id',
+      'x-amz-bedrock-kb-data-source-id'
     ]
   }
 });
@@ -78,6 +81,7 @@ const knowledgeBase = new bedrock.CfnKnowledgeBase(customStack, 'MultiTenantKB',
     s3VectorsConfiguration: {
       vectorBucketArn: vectorBucket.attrVectorBucketArn,
       indexName: vectorIndex.indexName!, 
+      indexArn: vectorIndex.attrIndexArn,
     }
   }
 });
