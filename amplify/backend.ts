@@ -43,7 +43,15 @@ const vectorIndex = new s3vectors.CfnIndex(customStack, 'VectorIndex', {
   }
 });
 
-// 3. Define IAM Role for Bedrock
+// 3. Create the Multimodal Storage Bucket (REQUIRED BY NOVA)
+const multimodalBucket = new s3.Bucket(customStack, 'MultimodalStorageBucket', {
+  encryption: s3.BucketEncryption.S3_MANAGED,
+  blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+  removalPolicy: RemovalPolicy.DESTROY, 
+  autoDeleteObjects: true,
+});
+
+// 4. Define IAM Role for Bedrock
 const bedrockKbRole = new iam.Role(customStack, 'BedrockKBRole', {
   assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
 });
@@ -60,13 +68,16 @@ bedrockKbRole.addToPolicy(new iam.PolicyStatement({
   ]
 }));
 
+// Grant Bedrock full access to the Multimodal Storage Bucket
+multimodalBucket.grantReadWrite(bedrockKbRole);
+
 // Grant Bedrock permission to use the Nova Multimodal Embedding Model
 bedrockKbRole.addToPolicy(new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel'],
   resources: [`arn:aws:bedrock:${customStack.region}::foundation-model/amazon.nova-2-multimodal-embeddings-v1:0`],
 }));
 
-// 4. Create the Bedrock Knowledge Base (S3 Vectors + Nova)
+// 5. Create the Bedrock Knowledge Base (S3 Vectors + Nova)
 const knowledgeBase = new bedrock.CfnKnowledgeBase(customStack, 'MultiTenantKB', {
   name: 'PraimfayaVectorPool',
   roleArn: bedrockKbRole.roleArn,
@@ -83,10 +94,18 @@ const knowledgeBase = new bedrock.CfnKnowledgeBase(customStack, 'MultiTenantKB',
       indexName: vectorIndex.indexName!, 
       indexArn: vectorIndex.attrIndexArn,
     }
+  },
+  supplementalDataStorageConfiguration: {
+    supplementalDataStorageLocations: [{
+      supplementalDataStorageLocationType: 'S3',
+      s3Location: {
+        uri: `s3://${multimodalBucket.bucketName}/`
+      }
+    }]
   }
-});
+} as any); 
 
-// 5. Connect Amplify S3 Bucket as the Data Source
+// 6. Connect Amplify S3 Bucket as the Data Source
 const dataSource = new bedrock.CfnDataSource(customStack, 'AmplifyDocumentSource', {
   knowledgeBaseId: knowledgeBase.ref,
   name: 'AmplifyS3DataSource',
@@ -104,7 +123,7 @@ const dataSource = new bedrock.CfnDataSource(customStack, 'AmplifyDocumentSource
   }
 });
 
-// 6. Wire up the Lambda Trigger & Break Circular Dependencies
+// 7. Wire up the Lambda Trigger & Break Circular Dependencies
 const processVectorLambda = backend.processVector.resources.lambda;
 
 // Grant Lambda permissions to look up the KB and trigger the ingestion job
@@ -114,7 +133,7 @@ processVectorLambda.addToRolePolicy(new iam.PolicyStatement({
     'bedrock:ListDataSources',
     'bedrock:StartIngestionJob'
   ],
-  resources: ['*'] // Required for List APIs, StartIngestionJob will still only hit what it finds
+  resources: ['*'] 
 }));
 
 // Trigger Lambda on new file uploads
