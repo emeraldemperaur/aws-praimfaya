@@ -75,7 +75,6 @@ bedrockKbRole.addToPolicy(new iam.PolicyStatement({
   resources: [`arn:aws:bedrock:${customStack.region}::foundation-model/amazon.nova-2-multimodal-embeddings-v1:0`],
 }));
 
-// ---> THE HEAVY LIFTING: THE CUSTOM RESOURCE <---
 // 5. Bypass CloudFormation and call the AWS SDK directly to create the Knowledge Base
 const createKbCr = new cr.AwsCustomResource(customStack, 'NovaKnowledgeBaseCR', {
   onCreate: {
@@ -90,7 +89,7 @@ const createKbCr = new cr.AwsCustomResource(customStack, 'NovaKnowledgeBaseCR', 
           embeddingModelArn: `arn:aws:bedrock:${customStack.region}::foundation-model/amazon.nova-2-multimodal-embeddings-v1:0`,
           supplementalDataStorageConfiguration: {
             storageLocations: [{
-              storageLocationType: 'S3',
+              type: 'S3', 
               s3Location: { uri: `s3://${multimodalBucket.bucketName}/` }
             }]
           }
@@ -105,14 +104,12 @@ const createKbCr = new cr.AwsCustomResource(customStack, 'NovaKnowledgeBaseCR', 
         }
       }
     },
-    // Map the response ID so we can use it later
     physicalResourceId: cr.PhysicalResourceId.fromResponse('knowledgeBase.knowledgeBaseId'),
   },
   onDelete: {
     service: 'BedrockAgent',
     action: 'DeleteKnowledgeBaseCommand',
     parameters: {
-      // Deletes the KB if you ever destroy the Amplify environment
       knowledgeBaseId: new cr.PhysicalResourceIdReference() 
     }
   },
@@ -123,7 +120,7 @@ const createKbCr = new cr.AwsCustomResource(customStack, 'NovaKnowledgeBaseCR', 
     }),
     new iam.PolicyStatement({
       actions: ['iam:PassRole'],
-      resources: [bedrockKbRole.roleArn], // Allows the Lambda to assign the IAM role to Bedrock
+      resources: [bedrockKbRole.roleArn], 
     })
   ]),
 });
