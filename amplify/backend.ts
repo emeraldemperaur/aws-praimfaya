@@ -19,17 +19,17 @@ const backend = defineBackend({
 
 const customStack = backend.createStack('BedrockAIStack');
 
-// 1. Create the S3 Vector Store Bucket
+// 1. Create the S3 Vector Store Bucket explicitly
 const vectorBucket = new s3vectors.CfnVectorBucket(customStack, 'VectorBucket', {});
 
-// 2. Create the Vector Index (Titan Text V2 uses 1024 dimensions)
+// 2. Create the Vector Index (Titan Text V2 outputs 1024 dimensions)
 const vectorIndex = new s3vectors.CfnIndex(customStack, 'VectorIndex', {
   vectorBucketArn: vectorBucket.attrVectorBucketArn,
   dimension: 1024, 
   distanceMetric: 'cosine', 
   dataType: 'float32',
   metadataConfiguration: {
-    // Crucial: Prevents Bedrock's massive internal chunks from crashing S3 Vectors
+    // Prevents Bedrock's massive internal chunks from crashing S3 Vectors
     nonFilterableMetadataKeys: [
       'AMAZON_BEDROCK_TEXT', 
       'AMAZON_BEDROCK_METADATA',
@@ -45,31 +45,43 @@ const bedrockKbRole = new iam.Role(customStack, 'BedrockKBRole', {
   assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
 });
 
-// Grant read access to the Amplify document uploads bucket
-backend.vectorCollectionsS3.resources.bucket.grantRead(bedrockKbRole);
-
-// Grant Bedrock full API access to the new S3 Vectors mathematical engine
-bedrockKbRole.addToPolicy(new iam.PolicyStatement({
-  actions: [
-    's3vectors:QueryVectors',
-    's3vectors:PutVectors',
-    's3vectors:DeleteVectors',
-    's3vectors:GetVectors',
-    's3vectors:GetVectorBucket',
-    's3vectors:ListIndexes'
-  ],
-  resources: [
-    vectorBucket.attrVectorBucketArn,
-    vectorIndex.attrIndexArn, // Explicitly grant access to the Index ARN to clear the 403
-    `${vectorBucket.attrVectorBucketArn}/*`
+// Create an explicit IAM Policy to prevent CloudFormation race conditions
+const bedrockKbPolicy = new iam.Policy(customStack, 'BedrockKBPolicy', {
+  statements: [
+    // Grant Bedrock full API access to the new S3 Vectors mathematical engine
+    new iam.PolicyStatement({
+      actions: [
+        's3vectors:QueryVectors',
+        's3vectors:PutVectors',
+        's3vectors:DeleteVectors',
+        's3vectors:GetVectors',
+        's3vectors:GetVectorBucket',
+        's3vectors:ListIndexes'
+      ],
+      resources: [
+        vectorBucket.attrVectorBucketArn,
+        vectorIndex.attrIndexArn, 
+        `${vectorBucket.attrVectorBucketArn}/*`
+      ]
+    }),
+    // Grant permission to use Titan Embed Text v2
+    new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel'],
+      resources: [`arn:aws:bedrock:${customStack.region}::foundation-model/amazon.titan-embed-text-v2:0`],
+    }),
+    // Grant read access to the Amplify document uploads bucket
+    new iam.PolicyStatement({
+      actions: ['s3:GetObject', 's3:ListBucket'],
+      resources: [
+        backend.vectorCollectionsS3.resources.bucket.bucketArn,
+        `${backend.vectorCollectionsS3.resources.bucket.bucketArn}/*`
+      ]
+    })
   ]
-}));
+});
 
-// Grant permission to use Titan Embed Text v2
-bedrockKbRole.addToPolicy(new iam.PolicyStatement({
-  actions: ['bedrock:InvokeModel'],
-  resources: [`arn:aws:bedrock:${customStack.region}::foundation-model/amazon.titan-embed-text-v2:0`],
-}));
+// Attach the explicit policy to the role
+bedrockKbRole.attachInlinePolicy(bedrockKbPolicy);
 
 // 4. Create the Bedrock Knowledge Base (Text-Only, Highly Stable)
 const knowledgeBase = new bedrock.CfnKnowledgeBase(customStack, 'MultiTenantKB', {
@@ -91,8 +103,9 @@ const knowledgeBase = new bedrock.CfnKnowledgeBase(customStack, 'MultiTenantKB',
   }
 });
 
-// Force the Knowledge Base to wait until the Vector Engine is fully provisioned
+// FORCE CFN WAITS: Kill the race conditions so IAM and S3 Vectors exist first
 knowledgeBase.node.addDependency(vectorIndex);
+knowledgeBase.node.addDependency(bedrockKbPolicy);
 
 // 5. Connect Amplify S3 Bucket as the Data Source
 const dataSource = new bedrock.CfnDataSource(customStack, 'AmplifyDocumentSource', {
