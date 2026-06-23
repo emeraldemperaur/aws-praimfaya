@@ -1,23 +1,42 @@
 import { S3Event } from 'aws-lambda';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { BedrockAgentClient, StartIngestionJobCommand } from "@aws-sdk/client-bedrock-agent";
+import { 
+  BedrockAgentClient, 
+  StartIngestionJobCommand,
+  ListKnowledgeBasesCommand,
+  ListDataSourcesCommand
+} from "@aws-sdk/client-bedrock-agent";
 import { generateClient } from 'aws-amplify/data';
 import { type Schema } from '../../data/resource';
-
 
 const s3Client = new S3Client();
 const bedrockClient = new BedrockAgentClient();
 const dataClient = generateClient<Schema>();
+
+const getBedrockIds = async () => {
+  const kbResponse = await bedrockClient.send(new ListKnowledgeBasesCommand({ maxResults: 10 }));
+  const kb = kbResponse.knowledgeBaseSummaries?.find(k => k.name === 'PraimfayaVectorPool');
+  
+  if (!kb?.knowledgeBaseId) throw new Error("Knowledge Base not found!");
+
+  const dsResponse = await bedrockClient.send(new ListDataSourcesCommand({
+    knowledgeBaseId: kb.knowledgeBaseId,
+    maxResults: 10
+  }));
+  const ds = dsResponse.dataSourceSummaries?.find(d => d.name === 'AmplifyS3DataSource');
+
+  if (!ds?.dataSourceId) throw new Error("Data Source not found!");
+
+  return { kbId: kb.knowledgeBaseId, dsId: ds.dataSourceId };
+};
 
 export const handler = async (event: S3Event) => {
   for (const record of event.Records) {
     const bucketName = record.s3.bucket.name;
     const objectKey = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
 
-    // Prevent infinite loops from the trigger
     if (objectKey.endsWith('.metadata.json')) continue;
 
-    // Expected path: vector-collections/{identityId}/{collectionId}/{filename}
     const pathParts = objectKey.split('/');
     if (pathParts.length < 4) continue; 
     
@@ -25,7 +44,6 @@ export const handler = async (event: S3Event) => {
     const collectionId = pathParts[2];
     const fileName = pathParts[pathParts.length - 1];
 
-    // Write the RBAC Metadata to S3
     const metadataPayload = {
       metadataAttributes: {
         collectionId: collectionId,
@@ -41,8 +59,7 @@ export const handler = async (event: S3Event) => {
       ContentType: "application/json"
     }));
 
-    // Create the Database Record
-    const { data: newDoc, errors } = await dataClient.models.VectorDocument.create({
+    const { errors } = await dataClient.models.VectorDocument.create({
       collectionId: collectionId,
       textContent: fileName, 
       sourceMetadata: JSON.stringify({
@@ -53,11 +70,11 @@ export const handler = async (event: S3Event) => {
     });
     if (errors) console.error("Database Error:", errors);
 
-    // Trigger Bedrock Knowledge Base Ingestion
-    // Process.env handles dynamic injection from CDK backend.ts
+    const { kbId, dsId } = await getBedrockIds();
+
     await bedrockClient.send(new StartIngestionJobCommand({
-      knowledgeBaseId: process.env.BEDROCK_KB_ID as string,
-      dataSourceId: process.env.BEDROCK_DS_ID as string,
+      knowledgeBaseId: kbId,
+      dataSourceId: dsId,
       description: `Ingesting ${fileName}`
     }));
 

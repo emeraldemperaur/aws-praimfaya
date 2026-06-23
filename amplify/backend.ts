@@ -48,7 +48,7 @@ bedrockKbRole.addToPolicy(new iam.PolicyStatement({
 
 // 3. Create the Bedrock Knowledge Base (S3 Vectors + Nova)
 const knowledgeBase = new bedrock.CfnKnowledgeBase(customStack, 'MultiTenantKB', {
-  name: 'MultiTenantVectorPool',
+  name: 'PraimfayaVectorPool',
   roleArn: bedrockKbRole.roleArn,
   knowledgeBaseConfiguration: {
     type: 'VECTOR',
@@ -86,15 +86,15 @@ const dataSource = new bedrock.CfnDataSource(customStack, 'AmplifyDocumentSource
 // 5. Wire up the Lambda Trigger & Environment Variables
 const processVectorLambda = backend.processVector.resources.lambda;
 
-// Grant Lambda permissions to trigger Bedrock Ingestion
+// Grant Lambda permissions to look up the KB and trigger the ingestion job
 processVectorLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['bedrock:StartIngestionJob'],
-  resources: [`arn:aws:bedrock:${customStack.region}:${customStack.account}:knowledge-base/${knowledgeBase.ref}`]
+  actions: [
+    'bedrock:ListKnowledgeBases',
+    'bedrock:ListDataSources',
+    'bedrock:StartIngestionJob'
+  ],
+  resources: ['*'] // Required for List APIs, StartIngestionJob will still only hit what it finds
 }));
-
-// Inject the dynamic CDK IDs into the Lambda execution environment
-backend.processVector.addEnvironment('BEDROCK_KB_ID', knowledgeBase.ref);
-backend.processVector.addEnvironment('BEDROCK_DS_ID', dataSource.ref);
 
 // Trigger Lambda on new file uploads
 backend.vectorCollectionsS3.resources.bucket.addEventNotification(
