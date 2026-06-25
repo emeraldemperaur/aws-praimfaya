@@ -44,7 +44,7 @@ const titanIndex = new s3vectors.CfnIndex(customStack, 'TitanTextIndex', {
 // Database Index #2: Nova Multimodal (1024 Dimensions)
 const novaIndex = new s3vectors.CfnIndex(customStack, 'NovaMediaIndex', {
   vectorBucketArn: vectorBucket.attrVectorBucketArn,
-  dimension: 1024, 
+  dimension: 3072, 
   distanceMetric: 'cosine', 
   dataType: 'float32',
   metadataConfiguration: {
