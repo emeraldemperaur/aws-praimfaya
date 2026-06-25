@@ -302,16 +302,20 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
     if (!file || !editVectorCollection?.id) return;
 
     try {
-      // 1. Fetch Identity ID for pathing
       const session = await fetchAuthSession();
       const identityId = session.identityId;
       if (!identityId) throw new Error("Authentication required.");
 
-      // 2. Build secure path
-      const s3FilePath = `vector-collections/${identityId}/${editVectorCollection.id}/${file.name}`;
+      const isMedia = 
+        file.type.startsWith('image/') || 
+        file.type.startsWith('video/') || 
+        file.type.startsWith('audio/');
+      
+      const subFolder = isMedia ? 'media' : 'text';
+
+      const s3FilePath = `vector-collections/${subFolder}/${identityId}/${editVectorCollection.id}/${file.name}`;
       const friendlySize = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
 
-      // 3. Optimistic UI update
       setVectorDocuments(prev => [...prev, 
         { 
           id: 'temp-' + Date.now().toString(), 
@@ -321,11 +325,11 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
         }
       ]);
 
-      // 4. Upload raw file directly to S3 (Triggers Backend Lambda)
       const uploadTask = uploadData({
         path: s3FilePath,
         data: file,
         options: {
+          contentType: file.type, 
           onProgress: ({ transferredBytes, totalBytes }) => {
             if (totalBytes) console.log(`Progress: ${Math.round((transferredBytes / totalBytes) * 100)}%`);
           }
