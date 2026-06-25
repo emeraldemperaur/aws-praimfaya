@@ -184,7 +184,7 @@ novaKbCr.node.addDependency(novaIndex);
 novaKbCr.node.addDependency(multimodalBucket);
 novaKbCr.node.addDependency(bedrockKbPolicy);
 
-// Media Data Source pointing to the /media/ prefix with DEFAULT chunking
+// Media Data Source pointing to the /media/ prefix (Bedrock handles media defaults automatically)
 new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
   knowledgeBaseId: novaKbCr.getResponseField('knowledgeBase.knowledgeBaseId'),
   name: 'NovaMediaDataSource',
@@ -194,9 +194,6 @@ new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
       bucketArn: backend.vectorCollectionsS3.resources.bucket.bucketArn,
       inclusionPrefixes: ['vector-collections/media/'] 
     }
-  },
-  vectorIngestionConfiguration: {
-    chunkingConfiguration: { chunkingStrategy: 'DEFAULT' }
   }
 });
 
