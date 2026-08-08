@@ -9,7 +9,7 @@ const headerRBAC = (allow: any) => [
 const iamRBAC = (allow: any) => [
   allow.owner(),
   allow.groups(['superadmin', 'root', 'admin', 'heda']),
-  allow.authenticated('iam')
+  allow.authenticated('identityPool')
 ];
 
 const ModelProviders = [
