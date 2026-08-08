@@ -69,7 +69,7 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
     const subscription = contextWorkflowsClient.observeQuery({
       selectionSet: [
         'id', 'name', 'description', 'tool', 'triggerURL', 'callbackURL',
-        'inputParameters.*', 'outputVariables.*', 'pingRSuccess', 'archived', 
+        'inputParameters.*', 'outputVariables.*', 'pingSuccess', 'archived', 
         'vectorFactor', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt', 'profiles.*'
       ]
     }).subscribe({
