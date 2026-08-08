@@ -16,8 +16,8 @@ const LoaderGate = ({ children, darkMode = false }: { children: React.ReactNode,
         return (
             <div className={`cl-box ${darkMode ? 'dark-mode' : 'light-mode'}`}>
                 <div className="cl-container">
-                    <div className="upper">Praimfaya</div>
-                    <div className="lower">Praimfaya</div>
+                    <div className="upper">Pr<a style={{fontWeight: 200}}>ai</a>mfaya</div>
+                    <div className="lower">Pr<a style={{fontWeight: 200}}>ai</a>mfaya</div>
                     <div className="inside">Loading...</div>
                 </div>
             </div>

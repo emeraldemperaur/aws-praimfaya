@@ -8,7 +8,7 @@ import DataTable from "../components/datatable";
 import BottomRightModal from "../components/bottomrightmodal";
 import ExtraLargeModal from "../components/extralargemodal";
 import FullScreenModal from "../components/fullscreenmodal";
-import { getModelIcon } from "../utils/voltaire";
+import { getModelIcon, MODEL_FAMILY_DESCRIPTIONS } from "../utils/voltaire";
 import type { UIContextProfile } from "../data/contextprofile";
 import { getUserEmail } from "../utils/asimov";
 
@@ -341,6 +341,16 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     }
   };
 
+  const selectedCreateModel = foundationModels.find(m => m.id === newContextProfileData.llmModelId);
+  const selectedCreateModelDescription = selectedCreateModel?.provider 
+    ? MODEL_FAMILY_DESCRIPTIONS[selectedCreateModel.provider] 
+    : null;
+
+  const selectedEditModel = foundationModels.find(m => m.id === editContextProfileData.llmModelId);
+  const selectedEditModelDescription = selectedEditModel?.provider 
+  ? MODEL_FAMILY_DESCRIPTIONS[selectedEditModel.provider] 
+  : null;
+
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '0.75rem',
@@ -628,6 +638,19 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                   </option>
                 ))}
               </select>
+              {selectedCreateModelDescription && (
+                <div style={{ 
+                  marginTop: '0.75rem', 
+                  padding: '0.75rem', 
+                  backgroundColor: darkMode ? '#1f2937' : '#f3f4f6', 
+                  borderLeft: `3px solid ${darkMode ? '#60a5fa' : '#3b82f6'}`,
+                  borderRadius: '0 0.375rem 0.375rem 0'
+                }}>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#4b5563', lineHeight: 1.5 }}>
+                    {selectedCreateModelDescription}
+                  </p>
+                </div>
+                )}
             </div>
 
             <div>
@@ -664,7 +687,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                 <option value="">-- No Document Retrieval --</option>
                 {vectorCollections.map((collection) => (
                   <option key={collection.id} value={collection.id}>
-                    {collection.name} ({collection.vectorDimension}D)
+                    {collection.name} {collection.vectorDimension ? `(${collection.vectorDimension}D)` : '(Multimodal Pool)'}
                   </option>
                 ))}
               </select>
@@ -678,7 +701,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         </div>
       </ExtraLargeModal>
 
-      {/* --- EDIT MODAL --- */}
       <FullScreenModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
@@ -763,18 +785,35 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
             <div>
               <label style={labelStyle}>LLM Engine <span style={{ color: '#ef4444' }}>*</span></label>
               <select 
+                disabled={false}
                 name="llmModelId"
                 value={editContextProfileData.llmModelId || ''}
                 onChange={handleEditTextChange}
                 style={inputStyle}
               >
-                <option value="" disabled>Select a Foundation Model...</option>
+                <option value="">Select a Foundation Model...</option>
                 {foundationModels.map((model) => (
                   <option key={model.id} value={model.id}>
                     {model.name} 
                   </option>
                 ))}
               </select>
+
+              {selectedEditModelDescription && (
+                <div style={{ 
+                  marginTop: '0.75rem', 
+                  padding: '0.75rem', 
+                  backgroundColor: darkMode ? '#1f2937' : '#f3f4f6', 
+                  borderLeft: `3px solid ${darkMode ? '#60a5fa' : '#3b82f6'}`,
+                  borderRadius: '0 0.375rem 0.375rem 0'
+                }}>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#4b5563', lineHeight: 1.5 }}>
+                    {selectedEditModelDescription}
+                  </p>
+                </div>
+                )}
+
+              
             </div>
 
             <div>
@@ -811,7 +850,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                 <option value="">-- No Document Retrieval --</option>
                 {vectorCollections.map((collection) => (
                   <option key={collection.id} value={collection.id}>
-                    {collection.name} ({collection.vectorDimension}D)
+                    {collection.name} {collection.vectorDimension ? `(${collection.vectorDimension}D)` : '(Multimodal Pool)'}
                   </option>
                 ))}
               </select>

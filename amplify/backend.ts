@@ -25,9 +25,7 @@ const backend = defineBackend({
 
 const customStack = backend.createStack('BedrockAIStack');
 
-// =====================================================================
-// 1. CENTRAL VECTOR STORAGE
-// =====================================================================
+
 const vectorBucket = new s3vectors.CfnVectorBucket(customStack, 'CentralVectorBucket', {});
 
 // Database Index #1: Titan Text (1024 Dimensions)
@@ -52,7 +50,6 @@ const novaIndex = new s3vectors.CfnIndex(customStack, 'NovaMediaIndex', {
   }
 });
 
-// Supplemental S3 Bucket for Nova's Multimodal extraction operations
 const multimodalBucket = new s3.Bucket(customStack, 'MultimodalStorageBucket', {
   encryption: s3.BucketEncryption.S3_MANAGED,
   blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -60,21 +57,17 @@ const multimodalBucket = new s3.Bucket(customStack, 'MultimodalStorageBucket', {
   autoDeleteObjects: true,
 });
 
-// =====================================================================
-// 2. SHARED KNOWLEDGE BASE IAM PERMISSIONS
-// =====================================================================
+
 const bedrockKbRole = new iam.Role(customStack, 'BedrockKBRole', {
   assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
 });
 
 const bedrockKbPolicy = new iam.Policy(customStack, 'BedrockKBPolicy', {
   statements: [
-    // S3 Vectors API Access
     new iam.PolicyStatement({
       actions: ['s3vectors:QueryVectors', 's3vectors:PutVectors', 's3vectors:DeleteVectors', 's3vectors:GetVectors', 's3vectors:GetVectorBucket', 's3vectors:ListIndexes'],
       resources: [vectorBucket.attrVectorBucketArn, titanIndex.attrIndexArn, novaIndex.attrIndexArn, `${vectorBucket.attrVectorBucketArn}/*`]
     }),
-    // Invoke both embedding models
     new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel'],
       resources: [
@@ -82,7 +75,6 @@ const bedrockKbPolicy = new iam.Policy(customStack, 'BedrockKBPolicy', {
         `arn:aws:bedrock:${customStack.region}::foundation-model/amazon.nova-2-multimodal-embeddings-v1:0`
       ],
     }),
-    // Read access to Amplify upload bucket and write access to multimodal bucket
     new iam.PolicyStatement({
       actions: ['s3:GetObject', 's3:ListBucket', 's3:PutObject', 's3:DeleteObject'],
       resources: [
@@ -96,9 +88,6 @@ const bedrockKbPolicy = new iam.Policy(customStack, 'BedrockKBPolicy', {
 });
 bedrockKbRole.attachInlinePolicy(bedrockKbPolicy);
 
-// =====================================================================
-// 3. ARCHITECTURE A: TITAN TEXT KNOWLEDGE BASE
-// =====================================================================
 const titanKb = new bedrock.CfnKnowledgeBase(customStack, 'TitanTextKB', {
   name: 'TitanTextKB',
   roleArn: bedrockKbRole.roleArn,
@@ -118,7 +107,6 @@ const titanKb = new bedrock.CfnKnowledgeBase(customStack, 'TitanTextKB', {
 titanKb.node.addDependency(titanIndex);
 titanKb.node.addDependency(bedrockKbPolicy);
 
-// Text Data Source pointing to the /text/ prefix with HIERARCHICAL chunking
 new bedrock.CfnDataSource(customStack, 'TitanTextDataSource', {
   knowledgeBaseId: titanKb.ref,
   name: 'TitanTextDataSource',
@@ -140,9 +128,6 @@ new bedrock.CfnDataSource(customStack, 'TitanTextDataSource', {
   }
 });
 
-// =====================================================================
-// 4. ARCHITECTURE B: NOVA MULTIMODAL KNOWLEDGE BASE
-// =====================================================================
 const novaKbCr = new cr.AwsCustomResource(customStack, 'NovaMediaKBCR', {
   onCreate: {
     service: 'BedrockAgent',
@@ -184,7 +169,6 @@ novaKbCr.node.addDependency(novaIndex);
 novaKbCr.node.addDependency(multimodalBucket);
 novaKbCr.node.addDependency(bedrockKbPolicy);
 
-// Media Data Source pointing to the /media/ prefix (Bedrock handles media defaults automatically)
 new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
   knowledgeBaseId: novaKbCr.getResponseField('knowledgeBase.knowledgeBaseId'),
   name: 'NovaMediaDataSource',
@@ -197,15 +181,10 @@ new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
   }
 });
 
-// =====================================================================
-// 5. THE INGESTION TRIGGER (Wiring S3 to the processVector Lambda)
-// =====================================================================
 const processVectorLambda = backend.processVector.resources.lambda;
 
-// Allow the Lambda to read uploaded files and write metadata.json files
 backend.vectorCollectionsS3.resources.bucket.grantReadWrite(processVectorLambda);
 
-// Allow the Lambda to list the KBs and trigger the Bedrock Ingestion Jobs
 processVectorLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: [
     'bedrock:ListKnowledgeBases',
@@ -215,19 +194,14 @@ processVectorLambda.addToRolePolicy(new iam.PolicyStatement({
   resources: ['*'] 
 }));
 
-// Tell S3 to fire the Lambda every time a new file lands in the vector-collections folder
 backend.vectorCollectionsS3.resources.bucket.addEventNotification(
   s3.EventType.OBJECT_CREATED,
   new s3n.LambdaDestination(processVectorLambda),
   { prefix: 'vector-collections/' }
 );
 
-// =====================================================================
-// 6. EVENT-DRIVEN STATUS TRACKING (EventBridge -> DynamoDB)
-// =====================================================================
 const statusLambda = backend.updateVectorStatus.resources.lambda;
 
-// Listen for Amazon Bedrock Knowledge Base Ingestion state changes
 const bedrockEventRule = new events.Rule(customStack, 'BedrockIngestionStatusRule', {
   eventPattern: {
     source: ['aws.bedrock'],
@@ -235,5 +209,4 @@ const bedrockEventRule = new events.Rule(customStack, 'BedrockIngestionStatusRul
   },
 });
 
-// Route the event payload to your new webhook Lambda
 bedrockEventRule.addTarget(new targets.LambdaFunction(statusLambda));

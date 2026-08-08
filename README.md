@@ -12,11 +12,11 @@ It provides users with a highly decoupled, modular architecture to instantly dep
 
 By leveraging three core relational templates, the system empowers authenticated and subscribed users to dynamically orchestrate AI behaviors, grounding, and reasoning without touching the underlying codebase:
 
-* **Context Profiles (Behavioral Orchestration):** Acts as the configuration layer for distinct AI personas. Users can encapsulate strict system prompts, tune hyperparameters (e.g. temperature), and explicitly link vector collection data sources. This enables the rapid deployment of specialized agents; from precise analytical coders & solutions architects to creative copywriters.
+* **Context Profiles (Behavioral Orchestration):** Acts as the configuration layer for distinct AI personas. Users can encapsulate strict system prompts, tune hyperparameters (e.g. temperature), and explicitly link vector collection data sources. This enables the rapid deployment of specialized agents; from precise analytical subject matter experts & solutions architects to creative copywriters.
 
 * **Vector Collections & Documents (Knowledge Base):** A streamlined interface for ingesting private documents, generating embeddings via Bedrock, and managing indexed storage. By selectively associating these Vector Collections with specific Context Profiles, users can establish isolated, domain-specific knowledge bases that ground LLM (Large Language Model) responses in factual data, effectively eliminating AI hallucinations.
 
-* **Foundation Models (Vendor Agnostic Interoperability):** Natively integrates with Amazon Bedrock’s diverse catalog of Embedding and Large Language Models (e.g., Anthropic Claude, Meta Llama, Amazon Titan). This agnostic approach prevents vendor lock-in, allowing system administrators to seamlessly toggle active models based on required modalities, context window limits, or token cost optimization.
+* **Foundation Models (Vendor Agnostic Interoperability):** Natively integrates with Amazon Bedrock’s diverse catalog of Embedding and Large Language Models (e.g., Amazon Nova, Anthropic Claude, OpenAI GPT, DeepSeek, Google Gemma, Meta Llama, Cohere, Mistral AI, Stability AI, Twelvelabs, Luma AI). This agnostic approach prevents vendor lock-in, allowing system administrators to seamlessly toggle active models based on required modalities, context window limits, or token cost optimization.
 
 Ultimately, Praimfaya couples strict AWS Cognito IAM authentication with a highly modular RAG architecture to proffer a robust, scalable foundation for vanguard users looking to sculpt secure, context-aware AI workspaces on demand. 
 </p>
@@ -62,7 +62,13 @@ Ultimately, Praimfaya couples strict AWS Cognito IAM authentication with a highl
 <ol>
 <li>
 <p align="justify">
-<strong>TypeScript React Frontend:</strong> Component-driven Single Page Application (SPA) engineered with React and strict TypeScript. Dynamic state management via Redux & React Context and an intuitive chat interface to handle real-time user inputs and render streaming AI responses.
+<strong>TypeScript React Frontend:</strong> Component-driven Single Page Application (SPA) engineered with React 18+ and strict type-safety. Leverages native React Hooks and Context API for decoupled global state management, operating in tandem with AppSync subscriptions for real-time data synchronization. The conversational viewport features an advanced <strong>Terminal UI Engine</strong> designed specifically for RAG operations:
+<ul>
+  <li><strong>Deterministic Viewport Mechanics:</strong> Employs explicit responsive container layout math using dynamic <code>calc()</code> rules paired with media queries. This guarantees zero-latency scaling and completely eliminates overflow trap across varying viewports while keeping the interface locked cleanly to the screen.</li>
+  <li><strong>Progressive Lazy-Loading & DOM Optimization:</strong> Implements slicing mechanics for array chunking to handle massive chat histories efficiently. History hydration utilizes memory-efficient reverse-pagination (loading older messages on demand) to prevent React virtual DOM layout degradation during high-turn interactions.</li>
+  <li><strong>Asynchronous Streaming & Multi-Modal Artifacts:</strong> Parses complex, heavily formatted Markdown (GFM) and tabular data natively. Coordinates retrieved RAG asset arrays (text vs. visual chips) into vivid CSS micro-animation sequences for fluid UI entry.</li>
+  <li><strong>Pipeline Error Boundary Failovers:</strong> Intercepts network routing drops, socket disconnects and Amazon Bedrock cold-start timeouts using local UI boundary state catchers. This fallback renders contextual infrastructure remediation steps (e.g., AWS cross-region console checks) directly within the chat stream to avoid ungracefully crashing the parent component tree.</li>
+</ul>
 </p>
 </li>
 <li>
@@ -79,10 +85,13 @@ aws cognito-idp admin-add-user-to-group \
 ```
 
 </p>
+<p align="justify">
+<strong>Knowledge Base Compartmentalization:</strong> RBAC metadata is deeply integrated into the GraphQL schema to enforce strict multi-tenant data boundaries. User identity attributes and active group tokens act as partition keys, guaranteeing that proprietary Context Profiles, Chat Transcripts, and Vector Documents are completely compartmentalized and isolated from unauthorized cross-tenant access.
+</p>
 </li>
 <li>
 <p align="justify">
-<strong>User Subscriptions:</strong> User subscriptions facilitated by Stripe API in tandem with Stripe Webhooks.
+<strong>User Subscriptions & Entitlements:</strong> Automated SaaS billing and tier enforcement driven by the Stripe API. Stripe Checkout sessions are securely mapped to AWS Cognito user identities. An isolated AWS Lambda webhook receiver verifies Stripe cryptographic signatures before processing async lifecycle events (e.g., <code>invoice.paid</code>, <code>customer.subscription.deleted</code>). These events trigger immediate updates to user entitlement flags within Amazon DynamoDB, seamlessly locking or unlocking premium foundation models and RAG compute limits in real-time on the client layer.
 </p>
 </li>
 <li>
@@ -98,9 +107,26 @@ AppSync Model schema, types & operations defined for <code>ContextProfile</code>
 
 <strong>Vector Embeddings: </strong> Utilizes designated embedding models (e.g., Amazon Titan, Cohere English, OpenAI Ada) to transform unstructured S3 document data into dense, high-dimensional numerical arrays. This process captures deep semantic relationships and contextual nuance, enabling the system to understand user intent far beyond traditional keyword matching.
 
-<strong>Vector Collections: </strong>Acts as the logical abstraction layer and domain-specific knowledge silo. Collections securely bind raw S3 documents to their associated DynamoDB metadata, vector indexing dimensions, and underlying embedding models. By linking these tailored datasets to specific Context Profiles, the system ensures that AI agents only retrieve and reason over highly relevant, isolated, and explicitly authorized or proprietary data.
+<strong>Vector Collections: </strong>Acts as the logical abstraction layer, securely binding raw S3 assets to their embedded vectors and DynamoDB metadata. By linking these tailored datasets to specific Context Profiles, the system queries text and media databases in parallel, returning fused intelligence directly to the foundational model prompt.
 
-<strong>Vector Database (Amazon OpenSearch): </strong> The high-performance computational search engine underpinning the RAG architecture. It indexes the generated vector coordinates and executes rapid Approximate Nearest Neighbor (ANN) or K-Nearest Neighbor (k-NN) vector similarity searches. This ensures that the most semantically relevant document chunks are dynamically retrieved in milliseconds and seamlessly injected into the LLM's context window.
+<strong>Vector Database (S3 Vector): </strong> 
+Engineered to utilize a scalable Amazon S3 Vector Database. This natively optimizes storage economics while retaining rapid Approximate Nearest Neighbor (ANN) spatial search capabilities.
+
+The high-performance computational search engine underpinning the RAG architecture. It indexes the generated vector coordinates and executes rapid Approximate Nearest Neighbor (ANN) or K-Nearest Neighbor (k-NN) vector similarity searches; ensuring that the most semantically relevant document chunks are dynamically retrieved in milliseconds and seamlessly injected into the LLM's context window.
+</p>
+</li>
+<li>
+<p align="justify">
+<strong>Federated Multimodal Ingestion Pipeline:</strong> A fully serverless, event-driven architecture triggered by S3 <code>ObjectCreated</code> notifications. A custom AWS Lambda acts as an intelligent inference router, inspecting MIME types to determine the optimal Bedrock embedding strategy on the fly:
+<ul>
+<li><strong>Text Routing (Amazon Titan):</strong> Standard documents (<code>.pdf</code>, <code>.csv</code>) are routed to Titan Text V2, applying hierarchical chunking to preserve deep structural context and semantic relationships.</li>
+
+<li><strong>Media Routing (Amazon Nova):</strong> Visual and temporal assets (<code>.png</code>, <code>.mp4</code>) are routed to Nova Multimodal, bypassing traditional OCR to extract semantic meaning directly from pixels into dense 3072-dimensional vector arrays.</li>
+
+<li><strong>Dynamic RBAC Metadata:</strong> Prior to Bedrock knowledge base invocation, the Lambda generates <code>.metadata.json</code> for each asset, injecting Cognito identity claims to enforce strict multi-tenant data isolation at the database level.</li>
+
+<li><strong>Async Event Tracking:</strong> Amazon EventBridge monitors Bedrock embedding job states asynchronously, updating DynamoDB and pushing real-time status changes to the frontend via AppSync GraphQL subscriptions.</li>
+</ul>
 </p>
 </li>
 <li>

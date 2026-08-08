@@ -13,6 +13,10 @@ import llamaIcon from '../assets/llama-icon.png';
 import gemmaIcon from '../assets/google-icon.png';
 import gptIcon from '../assets/gpt-oss-icon.png';
 import cpuIcon from '../assets/cpu-icon.png';
+import n8nIcon from '../assets/n8n-icon-logo.png';
+import zapierIcon from '../assets/zapier-icon-logo.png';
+import makeIcon from '../assets/make-icon-logo.png';
+import pipedreamIcon from '../assets/pipedream-icon.png';
 
 export const SuccessIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-regular fa-circle-check"></i></a>;
 export const ErrorIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-solid fa-radiation"></i>&nbsp;</a>;
@@ -35,6 +39,28 @@ export const contextCSSClass = {
     warning: "toast-default",
     default: "toast-default",
   };
+
+export const AddAutomationWorkflowSVG = <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            viewBox="0 0 512 512" 
+            width="1em" 
+            height="1em" 
+            fill="none" 
+            stroke="currentColor" 
+            stroke-width="32" 
+            stroke-linecap="round" 
+            stroke-linejoin="round" 
+            aria-hidden="true"
+            role="img"
+          >
+            <path d="M160 256 h96 V112 h96 M256 256 v144 h96" />
+            
+            <rect x="32" y="192" width="128" height="128" rx="16" />
+            
+            <rect x="352" y="48" width="128" height="128" rx="16" />
+            
+            <rect x="352" y="336" width="128" height="128" rx="16" />
+          </svg>
 
 export const AddVectorCollectionSVG = <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -103,22 +129,33 @@ export const labelStyle = (darkMode: boolean): React.CSSProperties => ({
     fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151'
   });
 
-export const getModelIcon = (modelName?: string | null): string => {
-  if (!modelName) return cpuIcon;
+export const getModelIcon = (identifier?: string | null): string => {
+  if (!identifier) return cpuIcon;
 
-  const normalizedName = modelName.toLowerCase();
+  const normalizedName = identifier.toLowerCase();
 
-  // 1. Check for specific Amazon sub-brands FIRST
+  if (normalizedName.includes('n8n')) {
+    return n8nIcon;
+  }
+  if (normalizedName.includes('zapier')) {
+    return zapierIcon;
+  }
+  if (normalizedName === 'make' || normalizedName.includes('make.com')) {
+   
+    return makeIcon;
+  }
+  if (normalizedName.includes('pipedream')) {
+    return pipedreamIcon;
+  }
+
   if (normalizedName.includes('titan') || normalizedName.includes('amazon.titan-embed-text-v2:0')) {
     return bedrockIcon;
   }
 
-  // 2. Now check for Nova or generic Amazon fallback
   if (normalizedName.includes('nova') || normalizedName.includes('amazon')) {
     return novaIcon;
   }
 
-  // 3. Continue with the rest of the providers...
   if (normalizedName.includes('mistral') || normalizedName.includes('mistral.large') || normalizedName.includes('mistralai')) {
     return mistralAIIcon;
   }
@@ -127,7 +164,7 @@ export const getModelIcon = (modelName?: string | null): string => {
     return cohereAIIcon;
   }
 
-  if (normalizedName.includes('stability') || normalizedName.includes('stability.ai')) {
+  if (normalizedName.includes('stability') || normalizedName.includes('stability.ai') || normalizedName.includes('stability_ai')) {
     return stabilityAIIcon;
   }
 
@@ -164,4 +201,41 @@ export const getModelIcon = (modelName?: string | null): string => {
   }
 
   return cpuIcon;
+};
+
+/**
+ * Converts specific video modality strings into simplified UI categories.
+ * @param {string} modality - The backend modality string (e.g., 'TEXT_TO_VIDEO')
+ * @returns {string} 'TEXT', 'IMAGE', or the original string fallback.
+ */
+export const getUiModality = (modality: string): string => {
+  const map: Record<string, string> = {
+    'TEXT_TO_VIDEO': 'TEXT TO VIDEO',
+    'IMAGE_TO_VIDEO': 'IMAGE TO VIDEO',
+  };
+
+  return map[modality] || modality;
+};
+
+export const MODEL_FAMILY_DESCRIPTIONS: Record<string, string> = {
+  'AMAZON': 'Exceptional speed-to-token ratios, massive context windows, and deeply integrated multimodal capabilities.',
+  'ANTHROPIC': 'The gold standard for complex workflows, tool utilization, and extended reasoning.',
+  'OPENAI': 'Enterprise grade GPT architecture with strict AWS procurement, regional data residency, and IAM boundaries.',
+  'DEEPSEEK': 'Elite, cost-efficient open-source mixture-of-experts (MoE) reasoning directly within AWS secure perimeter. Fully supports rendering reasoning tokens alongside output tokens.',
+  'META': 'Open-weight enterprise scaling. Incredibly resilient structural processing, highly optimized for Cross-Region Inference to bypass local data center capacity bottlenecks.',
+  'GOOGLE': 'Brings Google’s premier open-weight family into the AWS cloud, giving developers the benefit of massive architectural optionality without vendor lock-in.',
+  'MISTRAL': 'Strong mathematical, structural coding, and multilingual capabilities.',
+  'COHERE': 'Built purposely for enterprise-grade Retrieval-Augmented Generation (RAG) and agentic multi-step tool deployment.',
+  'NVIDIA': 'Hyper-focused on ultra-low latency execution and deep domain customization alignment.',
+  'STABILITY_AI': 'Supports complex text-to-image, outpainting, search-and-replace, and structural editing.',
+  'TWELVELABS': 'Processes visual, auditory, and textual information to generate contextually relevant text directly from video content.',
+  'LUMA': 'Primarily harnessed for high-fidelity physical world modeling and advanced continuous generation.'
+};
+
+export const getInitials = (name: string) => {
+  const parts = name.split(/[\s._-]+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
 };

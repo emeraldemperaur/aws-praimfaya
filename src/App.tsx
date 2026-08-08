@@ -23,6 +23,7 @@ import FoundationModelsUI from './pages/foundationmodels';
 import UserProfile from './pages/userprofile';
 import TerminalSessionUI from './pages/terminalsession';
 import SystemBootstrap from './components/systembootstrap';
+import AutomationWorkflowsUI from './pages/automationworkflows';
 
 const apiClient = generateClient<Schema>();
 
@@ -96,6 +97,9 @@ function App() {
             }/>
             <Route path='context-profiles' element={
               isAuthenticated ? <ContextProfilesUI darkMode={darkMode}/> : <Navigate to="/" replace />
+            }/>
+            <Route path='automation-workflows' element={
+              isAuthenticated ? <AutomationWorkflowsUI darkMode={darkMode}/> : <Navigate to="/" replace />
             }/>
             <Route path='vector-collections' element={
               isAuthenticated ? <VectorCollectionsUI darkMode={darkMode}/> : <Navigate to="/" replace />

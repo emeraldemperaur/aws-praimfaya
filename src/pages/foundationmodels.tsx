@@ -5,7 +5,7 @@ import DataTable from "../components/datatable";
 import BottomRightModal from "../components/bottomrightmodal";
 import FullScreenModal from "../components/fullscreenmodal";
 import ExtraLargeModal from "../components/extralargemodal";
-import { getModelIcon } from "../utils/voltaire";
+import { getModelIcon, getUiModality } from "../utils/voltaire";
 import { generateClient } from "aws-amplify/api";
 import type { UIFoundationModel } from "../data/foundationmodel";
 import { SEED_MODELS } from "../data/seeddata";
@@ -98,7 +98,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
             <img src={getModelIcon(row.apiIdentifier?.toLocaleLowerCase())} alt={row.name} />
             <div className="user-info">
               <span className="primary-text">{row.name}</span>
-              <span className="secondary-text">{row.modality}</span>
+              <span className="secondary-text">{getUiModality(row.modality)}</span>
             </div>
           </div>
         )

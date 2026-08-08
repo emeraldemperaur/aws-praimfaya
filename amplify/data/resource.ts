@@ -6,12 +6,20 @@ const headerRBAC = (allow: any) => [
   allow.groups(['superadmin', 'root', 'admin', 'heda']),
 ];
 
+const iamRBAC = (allow: any) => [
+  allow.owner(),
+  allow.groups(['superadmin', 'root', 'admin', 'heda']),
+  allow.authenticated('iam')
+];
+
 const ModelProviders = [
   'AMAZON', 'ANTHROPIC', 'META', 'GOOGLE', 'OPENAI', 
   'COHERE', 'MISTRAL', 'STABILITY', 'DEEPSEEK', 
   'LUMA', 'TWELVELABS', 'NVIDIA'
 ] as const;
+
 const ModelModality = ['TEXT', 'MULTIMODAL', 'EMBEDDING', 'IMAGE'] as const;
+const AutomationTools = ['N8N', 'ZAPIER', 'MAKE', 'PIPEDREAM'] as const;
 
 const schema = a.schema({
   Todo: a
@@ -40,6 +48,43 @@ const schema = a.schema({
       updatedBy: a.string(),
       isActive: a.boolean(),
       terminals: a.hasMany('ConsoleTerminal', 'contextProfileId'),
+      workflows: a.hasMany('ContextProfileWorkflow', 'contextProfileId'),
+    })
+    .authorization(headerRBAC),
+
+  WorkflowParameter: a
+    .customType({
+      variable: a.string().required(),
+      isRequired: a.boolean().required(),
+    }),
+
+  AutomationTool: a.enum(AutomationTools),
+
+  ContextWorkflow: a
+    .model({
+      name: a.string().required(), 
+      description: a.string(),
+      tool: a.ref('AutomationTool').required(),
+      triggerURL: a.string().required(),
+      callbackURL: a.string(),
+      inputParameters: a.ref('WorkflowParameter').array(),
+      outputVariables: a.ref('WorkflowParameter').array(),
+      pingSuccess: a.boolean(),
+      archived: a.boolean().default(false),
+      createdBy: a.string(),
+      updatedBy: a.string(),
+      vectorFactor: a.integer(),
+      profiles: a.hasMany('ContextProfileWorkflow', 'contextWorkflowId'),
+    })
+    .authorization(headerRBAC),
+
+  ContextProfileWorkflow: a
+    .model({
+      contextProfileId: a.id(),
+      contextProfile: a.belongsTo('ContextProfile', 'contextProfileId'),
+      
+      contextWorkflowId: a.id(),
+      contextWorkflow: a.belongsTo('ContextWorkflow', 'contextWorkflowId'),
     })
     .authorization(headerRBAC),
 
@@ -69,8 +114,8 @@ const schema = a.schema({
     .model({
       name: a.string().required(),
       description: a.string(),
-      embeddingModel: a.string().required(), 
-      vectorDimension: a.integer().required(), 
+      embeddingModel: a.string(), 
+      vectorDimension: a.integer(), 
       profiles: a.hasMany('ContextProfile', 'vectorCollectionId'),
       documents: a.hasMany('VectorDocument', 'collectionId'),
       createdBy: a.string(),
@@ -100,6 +145,20 @@ const schema = a.schema({
       updatedBy: a.string(),
     })
     .authorization(headerRBAC),
+  
+  UserProfile: a
+    .model({
+      cognitoUserId: a.string().required(),
+      stripeCustomerId: a.string(),
+      subscriptionStatus: a.enum(['ACTIVE', 'CANCELED', 'PAST_DUE', 'NONE']),
+      planName: a.string(),
+      currentPeriodEnd: a.datetime(),
+      computeCredits: a.integer().default(0), 
+    })
+    .authorization(iamRBAC),
+
+  
+
 });
 
 export type Schema = ClientSchema<typeof schema>;

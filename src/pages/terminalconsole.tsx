@@ -8,11 +8,12 @@ import BottomRightModal from "../components/bottomrightmodal";
 import ExtraLargeModal from "../components/extralargemodal";
 import FullScreenModal from "../components/fullscreenmodal";
 import { useNavigate } from "react-router-dom";
-import { getModelIcon, inputStyle, labelStyle } from "../utils/voltaire";
+import { getInitials, getModelIcon, inputStyle, labelStyle } from "../utils/voltaire";
 import { generateClient } from "aws-amplify/api";
 import type { UIConsoleTerminal } from "../data/consoleterminal";
 import { fetchUserAttributes, getCurrentUser } from 'aws-amplify/auth';
 import { getUserEmail } from "../utils/asimov";
+
 
 const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,6 +26,9 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   const [viewConsoleTerminal, setViewConsoleTerminal] = useState<UIConsoleTerminal | null>(null);
   const [deleteConsoleTerminal, setDeleteConsoleTerminal] = useState<UIConsoleTerminal | null>(null);
   const [editConsoleTerminal, setEditConsoleTerminal] = useState<UIConsoleTerminal | null>(null);
+  
+  const [visibleTranscriptCount, setVisibleTranscriptCount] = useState(20);
+
   const [newConsoleTerminalData, setNewConsoleTerminalData] = useState<Partial<UIConsoleTerminal>>({
     title: '',
     contextProfileId: '',
@@ -37,11 +41,11 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   });
 
   const navigator = useNavigate();
-
   const client = generateClient() as any;
+  
   const [consoleTerminals, setConsoleTerminals] = useState<UIConsoleTerminal[]>([]);
   const [contextProfiles, setContextProfiles] = useState<any[]>([]); 
-  const [foundationModels, setFoundationModels] = useState<any[]>([]); // Added for local lookups
+  const [foundationModels, setFoundationModels] = useState<any[]>([]);
 
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
@@ -105,21 +109,15 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
 
     return consoleTerminals.filter(terminal => {
       switch (searchBy) {
-        case 'title':
-          return terminal.title?.toLowerCase().includes(lowerTerm);
-        case 'id':
-          return terminal.id?.toLowerCase().includes(lowerTerm);
-        case 'contextProfile':
-          return terminal.contextProfile?.name?.toLowerCase().includes(lowerTerm);
-        case 'messages':
-          return terminal.messages?.some(msg => msg.content?.toLowerCase().includes(lowerTerm)) || false;
-        case 'status':
-          return terminal.status?.toLowerCase().includes(lowerTerm);
+        case 'title': return terminal.title?.toLowerCase().includes(lowerTerm);
+        case 'id': return terminal.id?.toLowerCase().includes(lowerTerm);
+        case 'contextProfile': return terminal.contextProfile?.name?.toLowerCase().includes(lowerTerm);
+        case 'messages': return terminal.messages?.some(msg => msg.content?.toLowerCase().includes(lowerTerm)) || false;
+        case 'status': return terminal.status?.toLowerCase().includes(lowerTerm);
         case 'createdAt':
           const dateString = terminal.createdAt ? new Date(terminal.createdAt).toLocaleDateString() : '';
           return terminal.createdAt?.toLowerCase().includes(lowerTerm) || dateString.includes(lowerTerm);
-        default:
-          return true;
+        default: return true;
       }
     });
   }, [consoleTerminals, searchTerm, searchBy]);
@@ -132,11 +130,9 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
       render: (row) => {
         const linkedProfile = contextProfiles.find(p => p.id === row.contextProfileId) || row.contextProfile;
         const linkedModel = foundationModels.find(m => m.id === linkedProfile?.llmModelId) || linkedProfile?.foundationModel;
-        const apiIdentifier = linkedModel?.apiIdentifier;
-
         return (
           <div className="tbl-cell-user">
-            <img src={getModelIcon(apiIdentifier)} alt={linkedModel?.name || 'AI Model'} />
+            <img src={getModelIcon(linkedModel?.apiIdentifier)} alt={linkedModel?.name || 'AI Model'} />
             <div className="user-info">
               <span className="primary-text">{row.title}</span>
               <span className="secondary-text">{row.id}</span>
@@ -154,7 +150,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
         <div className="tbl-cell-stacked">
           <span className="primary-text">{row.contextProfile?.name || 'Unlinked Profile'}</span>
           <span className="secondary-text">{row.messages?.length || 0} Messages</span>
-          <span className="secondary-text">{row.totalTokensUsed || 0} Tokens Used</span>
+          <span className="secondary-text">{row.totalTokensUsed?.toLocaleString() || 0} Tokens Used</span>
         </div>
       )
     },
@@ -163,10 +159,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
       accessor: 'status',
       sortable: true,
       render: (row) => {
-        let badgeClass = 'info';
-        if (row.status === 'ACTIVE') badgeClass = 'success';
-        if (row.status === 'ARCHIVED') badgeClass = 'warning';
-
+        const badgeClass = row.status === 'ACTIVE' ? 'success' : 'warning';
         return <span className={`tbl-badge ${badgeClass}`}>{row.status}</span>;
       }
     },
@@ -179,38 +172,23 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
             className="tbl-action-btn view-btn" 
             onClick={() => {
               if (row.status === 'ACTIVE') {
-                console.log('Navigating to live chat interface for session:', row.id);
                 navigator(`/console-terminal/session/${row.id}`);
               } else {
+                setVisibleTranscriptCount(20); // Reset count on open
                 setViewConsoleTerminal(row);
                 setIsViewModalOpen(true);
               }
             }}
-            style={{ 
-              color: row.status === 'ACTIVE' ? '#10b981' : undefined, 
-              fontWeight: row.status === 'ACTIVE' ? 600 : 400
-            }}
+            style={{ color: row.status === 'ACTIVE' ? '#10b981' : undefined, fontWeight: row.status === 'ACTIVE' ? 600 : 400 }}
           >
             {row.status === 'ACTIVE' ? 'Resume' : 'Review'}
           </button>
-          <button 
-            className="tbl-action-btn edit-btn" 
-            onClick={() => {
-              setEditConsoleTerminal(row);
-              setIsEditModalOpen(true);
-            }}
-          >
-            Emend
-          </button>
-          <button 
-            className="tbl-action-btn delete-btn" 
-            onClick={() => {
-              setDeleteConsoleTerminal(row);
-              setIsDeleteModalOpen(true);
-            }}
-          >
-            Delete
-          </button>
+          <button className="tbl-action-btn edit-btn" onClick={() => { 
+            setVisibleTranscriptCount(20); // Reset count on open
+            setEditConsoleTerminal(row); 
+            setIsEditModalOpen(true); 
+          }}>Emend</button>
+          <button className="tbl-action-btn delete-btn" onClick={() => { setDeleteConsoleTerminal(row); setIsDeleteModalOpen(true); }}>Delete</button>
         </div>
       )
     }
@@ -226,20 +204,13 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   };
 
   const normalizedNewTitle = newConsoleTerminalData.title?.trim().toLowerCase() || '';
-  const isTitleDuplicate = normalizedNewTitle !== '' && consoleTerminals.some(
-    terminal => terminal.title.toLowerCase() === normalizedNewTitle
-  );
-
-  const isNewConsoleTerminalValid = newConsoleTerminalData.title?.trim() !== '' && 
-                                    newConsoleTerminalData.contextProfileId !== '' &&
-                                    !isTitleDuplicate;
+  const isTitleDuplicate = normalizedNewTitle !== '' && consoleTerminals.some(terminal => terminal.title.toLowerCase() === normalizedNewTitle);
+  const isNewConsoleTerminalValid = newConsoleTerminalData.title?.trim() !== '' && newConsoleTerminalData.contextProfileId !== '' && !isTitleDuplicate;
 
   const handleStartSession = async () => {
     if (!selectedProfile) return;
-    if (isTitleDuplicate) {
-      alert("A Terminal Session with this title already exists. Please choose a unique title.");
-      return;
-    }
+    if (isTitleDuplicate) { alert("A Terminal Session with this title already exists."); return; }
+    
     try {
       const { username, userId } = await getCurrentUser();
       const attributes = await fetchUserAttributes();
@@ -253,13 +224,6 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
 
       if (errors) throw new Error(errors[0].message);
       
-      setConsoleTerminals(prev => {
-        const alreadyExists = prev.some(terminal => terminal.id === newTerminal.id);
-        if (alreadyExists) return prev;
-        return [newTerminal, ...prev];
-      });
-      
-      console.log('Successfully created Terminal Session:', newTerminal);
       setNewConsoleTerminalData({ title: '', contextProfileId: '', status: 'ACTIVE' });
       setIsCreateModalOpen(false);
       navigator(`/console-terminal/session/${newTerminal.id}`);
@@ -278,18 +242,13 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   const handleEditSubmit = async () => {
     if (!editConsoleTerminal?.id) return;
     try {
-      const { data: updatedTerminal, errors } = await client.models.ConsoleTerminal.update({
+      const { errors } = await client.models.ConsoleTerminal.update({
         id: editConsoleTerminal.id,
         title: editTerminalConsoleData.title,
         status: editTerminalConsoleData.status,
         updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User'
       });
       if (errors) throw new Error(errors[0].message);
-      setConsoleTerminals(prev => prev.map(item => 
-        item.id === updatedTerminal.id 
-          ? { ...item, ...updatedTerminal } 
-          : item
-      ));
       setIsEditModalOpen(false);
       setEditConsoleTerminal(null);
     } catch (error) {
@@ -300,54 +259,173 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   const handleDeleteConsoleTerminal = async () => {
     if (!deleteConsoleTerminal?.id) return;
     try {
-      const { errors } = await client.models.ConsoleTerminal.delete({
-        id: deleteConsoleTerminal.id
-      });
+      const { errors } = await client.models.ConsoleTerminal.delete({ id: deleteConsoleTerminal.id });
       if (errors) throw new Error(errors[0].message);
-      setConsoleTerminals(prev => prev.filter(item => item.id !== deleteConsoleTerminal.id));
-      setDeleteConsoleTerminal(null);
       setIsDeleteModalOpen(false);
+      setDeleteConsoleTerminal(null);
     } catch (error) {
       console.error("Failed to delete console terminal:", error);
     }
   };
 
+  const renderTranscript = (terminal: UIConsoleTerminal | null) => {
+    if (!terminal?.messages || terminal.messages.length === 0) {
+      return (
+        <div style={{ margin: 'auto', textAlign: 'center', color: darkMode ? '#6b7280' : '#9ca3af' }}>
+          <p>No messages were recorded for this session.</p>
+        </div>
+      );
+    }
+
+    const sortedMessages = [...terminal.messages].sort((a, b) => 
+      new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+    );
+
+    const visibleMessages = sortedMessages.slice(-visibleTranscriptCount);
+    const hasMore = sortedMessages.length > visibleTranscriptCount;
+
+    return (
+      <>
+        {hasMore && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+            <button
+              onClick={() => setVisibleTranscriptCount(prev => prev + 20)}
+              style={{
+                background: 'none', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+                borderRadius: '999px', padding: '0.4rem 1rem', fontSize: '0.75rem', 
+                color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = darkMode ? '#374151' : '#f3f4f6'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <i className="fa-solid fa-arrow-up"></i> Load Previous Messages
+            </button>
+          </div>
+        )}
+
+        {visibleMessages.map((msg, index) => {
+          const isUser = msg.role === 'USER';
+          const avatarName = isUser ? (terminal.userId?.split('@')[0] || 'Anonymous') : (terminal.contextProfile?.name || 'Vanguard AI');
+          const initials = getInitials(avatarName);
+
+          return (
+            <div 
+              key={msg.id} 
+              style={{ 
+                display: 'flex', 
+                gap: '1rem', 
+                alignItems: 'flex-end',
+                alignSelf: isUser ? 'flex-end' : 'flex-start', 
+                maxWidth: '85%',
+                opacity: 0, 
+                animation: 'bubbleFadeIn 0.4s ease-out forwards',
+                animationDelay: `${index * 0.05}s`
+              }}
+            >
+              {!isUser && (
+                <div style={{
+                  width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
+                  backgroundColor: darkMode ? '#374151' : '#e5e7eb',
+                  color: darkMode ? '#f9fafb' : '#111827',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.75rem', fontWeight: 'bold', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`
+                }}>
+                  {initials}
+                </div>
+              )}
+
+              <div style={{
+                backgroundColor: isUser ? '#2563eb' : (darkMode ? '#1f2937' : '#ffffff'),
+                color: isUser ? '#ffffff' : (darkMode ? '#f9fafb' : '#111827'),
+                border: isUser ? 'none' : `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                padding: '1rem 1.25rem', 
+                borderRadius: '1rem',
+                borderBottomRightRadius: isUser ? '0.25rem' : '1rem',
+                borderBottomLeftRadius: !isUser ? '0.25rem' : '1rem',
+                boxShadow: isUser ? '0 4px 6px -1px rgba(37, 99, 235, 0.2)' : '0 1px 3px 0 rgba(0, 0, 0, 0.05)'
+              }}>
+                <div style={{ fontSize: '0.7rem', opacity: isUser ? 0.8 : 0.5, marginBottom: '0.4rem', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>
+                  {avatarName} • {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </div>
+                
+                <div style={{ fontSize: '0.925rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  {msg.content}
+                </div>
+
+                {msg.contextSources && msg.contextSources.length > 0 && (
+                  <div style={{ 
+                    marginTop: '1rem', paddingTop: '0.75rem', 
+                    borderTop: `1px solid ${isUser ? 'rgba(255,255,255,0.2)' : (darkMode ? '#374151' : '#e5e7eb')}`, 
+                    fontSize: '0.75rem', 
+                    color: isUser ? '#bfdbfe' : (darkMode ? '#9ca3af' : '#6b7280') 
+                  }}>
+                    <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Retrieved Artifacts:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {msg.contextSources.map((source: string, idx: number) => {
+                        const isMedia = source.toLowerCase().includes('media') || source.toLowerCase().includes('asset');
+                        return (
+                          <span key={idx} style={{ 
+                            padding: '0.25rem 0.5rem', 
+                            backgroundColor: isUser ? 'rgba(0,0,0,0.2)' : (darkMode ? '#111827' : '#f3f4f6'), 
+                            borderRadius: '0.25rem', 
+                            display: 'flex', alignItems: 'center', gap: '0.35rem',
+                            border: isUser ? 'none' : `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`
+                          }}>
+                            {isMedia ? '📸' : '📄'} {source}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {isUser && (
+                <div style={{
+                  width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
+                  backgroundColor: '#1d4ed8', color: '#ffffff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.75rem', fontWeight: 'bold', border: '1px solid #1e40af'
+                }}>
+                  {initials}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </>
+    );
+  };
+
   return(
     <>
+      <style>
+        {`
+          @keyframes bubbleFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}
+      </style>
+
      <TitleRibbon title="Console Terminals" darkMode={darkMode} typewriterFX textAlignment="right"/>
      <SearchRibbon 
-        darkMode={darkMode}
-        recordCount={filteredTerminals.length}
-        recordLabel="Console Terminals"
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        selectedFilter={searchBy}
-        onFilterChange={setSearchBy}
-        filterOptions={filterOptions}
+        darkMode={darkMode} recordCount={filteredTerminals.length} recordLabel="Console Terminals"
+        searchTerm={searchTerm} onSearchChange={setSearchTerm} selectedFilter={searchBy}
+        onFilterChange={setSearchBy} filterOptions={filterOptions}
       />
       <div style={{ padding: '2rem' }}>
         <DataTable 
-          columns={columns} 
-          data={filteredTerminals} 
-          darkMode={darkMode} 
-          selectable={true}
-          isLoading={isLoading}
-          initialSort={{ key: 'createdAt', direction: 'desc' }}
-          pagination={true}
-          defaultPageSize={10}
-          pageSizeOptions={[10, 25, 50, 100]}
+          columns={columns} data={filteredTerminals} darkMode={darkMode} selectable={true}
+          isLoading={isLoading} initialSort={{ key: 'createdAt', direction: 'desc' }}
+          pagination={true} defaultPageSize={10} pageSizeOptions={[10, 25, 50, 100]}
         />
       </div>
       <FAButton darkMode={darkMode} onClick={() => setIsCreateModalOpen(true)} 
-      icon={
-      <svg  xmlns="http://www.w3.org/2000/svg" width={24} height={24} fill={"currentColor"} viewBox={"0 0 24 24"}>
-        <path d="M4.5 11h5c.83 0 1.5-.67 1.5-1.5v-5c0-.83-.67-1.5-1.5-1.5h-5C3.67 3 3 3.67 3 4.5v5c0 
-        .83.67 1.5 1.5 1.5M5 5h4v4H5zm14.5-2h-5c-.83 0-1.5.67-1.5 1.5v5c0 
-        .83.67 1.5 1.5 1.5h5c.83 0 1.5-.67 1.5-1.5v-5c0-.83-.67-1.5-1.5-1.5M19 
-        9h-4V5h4zM4.5 21h5c.83 0 1.5-.67 1.5-1.5v-5c0-.83-.67-1.5-1.5-1.5h-5c-.83 0-1.5.67-1.5 1.5v5c0 
-        .83.67 1.5 1.5 1.5m.5-6h4v4H5zm13-2h-2v3h-3v2h3v3h2v-3h3v-2h-3z"></path>
-      </svg>} />
-      
+        icon={<svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} fill={"currentColor"} viewBox={"0 0 24 24"}><path d="M4.5 11h5c.83 0 1.5-.67 1.5-1.5v-5c0-.83-.67-1.5-1.5-1.5h-5C3.67 3 3 3.67 3 4.5v5c0 .83.67 1.5 1.5 1.5M5 5h4v4H5zm14.5-2h-5c-.83 0-1.5.67-1.5 1.5v5c0 .83.67 1.5 1.5 1.5h5c.83 0 1.5-.67 1.5-1.5v-5c0-.83-.67-1.5-1.5-1.5M19 9h-4V5h4zM4.5 21h5c.83 0 1.5-.67 1.5-1.5v-5c0-.83-.67-1.5-1.5-1.5h-5c-.83 0-1.5.67-1.5 1.5v5c0 .83.67 1.5 1.5 1.5m.5-6h4v4H5zm13-2h-2v3h-3v2h3v3h2v-3h3v-2h-3z"></path></svg>} 
+      />
+
       <ExtraLargeModal
         isOpen={isViewModalOpen}
         onClose={() => setIsViewModalOpen(false)}
@@ -363,13 +441,8 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
             <button 
               onClick={() => setIsViewModalOpen(false)}
               style={{ 
-                padding: '0.75rem 1.5rem', 
-                cursor: 'pointer', 
-                backgroundColor: darkMode ? '#374151' : '#e5e7eb', 
-                fontFamily: 'Bodoni Moda Variable, serif',
-                border: 'none', 
-                color: darkMode ? '#f9fafb' : '#111827', 
-                borderRadius: '4px' 
+                padding: '0.75rem 1.5rem', cursor: 'pointer', backgroundColor: darkMode ? '#374151' : '#e5e7eb', 
+                fontFamily: 'Bodoni Moda Variable, serif', border: 'none', color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px' 
               }}
             >
               Close Log
@@ -378,18 +451,11 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
         }
       >
         <div style={{ display: 'flex', gap: '2rem', height: '65vh', minHeight: '450px' }}>
-          
           <div style={{ 
-            flex: '0 0 350px', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: '1.5rem', 
-            borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
-            paddingRight: '1.5rem', 
-            overflowY: 'auto',
-            overflowX: 'hidden' 
+            flex: '0 0 350px', display: 'flex', flexDirection: 'column', gap: '1.5rem', 
+            borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingRight: '1.5rem', 
+            overflowY: 'auto', overflowX: 'hidden' 
           }}>
-            
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
                 <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem', wordBreak: 'break-word' }}>
@@ -402,36 +468,30 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
             </div>
 
             <div style={{ 
-              backgroundColor: darkMode ? '#1f2937' : '#f9fafb', 
-              border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
-              borderRadius: '0.5rem', 
-              padding: '1.25rem'
+              backgroundColor: darkMode ? '#1f2937' : '#f9fafb', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
+              borderRadius: '0.5rem', padding: '1.25rem'
             }}>
               <h4 style={{ margin: '0 0 1rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Session Metadata
               </h4>
-              
               <div style={{ marginBottom: '1rem' }}>
                 <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Session ID</span>
                 <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#4b5563', fontFamily: 'monospace', wordBreak: 'break-all' }}>
                   {viewConsoleTerminal?.id}
                 </span>
               </div>
-
               <div style={{ marginBottom: '1rem' }}>
                 <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>User ID</span>
                 <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#4b5563', fontFamily: 'monospace', wordBreak: 'break-all' }}>
                   {viewConsoleTerminal?.userId || 'Anonymous'}
                 </span>
               </div>
-
               <div style={{ marginBottom: '1rem' }}>
                 <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Context Profile</span>
                 <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827', fontWeight: 500 }}>
                   {viewConsoleTerminal?.contextProfile?.name || 'Unlinked Profile'}
                 </span>
               </div>
-
               <div>
                 <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Total Tokens Consumed</span>
                 <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827', fontWeight: 500 }}>
@@ -444,483 +504,144 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
               <div>Created: {viewConsoleTerminal?.createdAt ? new Date(viewConsoleTerminal.createdAt).toLocaleString() : ''}</div>
               {viewConsoleTerminal?.updatedAt && <div>Last Updated: {new Date(viewConsoleTerminal.updatedAt).toLocaleString()}</div>}
             </div>
-
           </div>
 
-          <div style={{ 
-            flex: 1, 
-            display: 'flex', 
-            flexDirection: 'column', 
-            minWidth: 0, 
-            minHeight: 0 
-          }}>
-            
-            <div style={{ 
-              flex: 1, 
-              backgroundColor: darkMode ? '#111827' : '#f9fafb', 
-              border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
-              borderRadius: '0.5rem',
-              padding: '1.5rem',
-              overflowY: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1rem'
-            }}>
-              {!viewConsoleTerminal?.messages || viewConsoleTerminal.messages.length === 0 ? (
-                <div style={{ margin: 'auto', textAlign: 'center', color: darkMode ? '#6b7280' : '#9ca3af' }}>
-                  <p>No messages were recorded for this session.</p>
-                </div>
-              ) : (
-                viewConsoleTerminal.messages.map((msg) => (
-                  <div key={msg.id} style={{
-                    alignSelf: msg.role === 'USER' ? 'flex-end' : 'flex-start',
-                    maxWidth: '80%',
-                    backgroundColor: msg.role === 'USER' ? '#2563eb' : (darkMode ? '#374151' : '#ffffff'),
-                    color: msg.role === 'USER' ? '#ffffff' : (darkMode ? '#f9fafb' : '#111827'),
-                    border: msg.role === 'USER' ? 'none' : `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
-                    padding: '1rem',
-                    borderRadius: '0.5rem',
-                    borderBottomRightRadius: msg.role === 'USER' ? '0' : '0.5rem',
-                    borderBottomLeftRadius: msg.role === 'ASSISTANT' || msg.role === 'SYSTEM' ? '0' : '0.5rem',
-                  }}>
-                    <div style={{ fontSize: '0.75rem', marginBottom: '0.5rem', opacity: 0.7, textTransform: 'uppercase' }}>
-                      {msg.role} • {new Date(msg.createdAt || Date.now()).toLocaleTimeString()}
-                    </div>
-                    <div style={{ fontSize: '0.875rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                      {msg.content}
-                    </div>
-                    {msg.contextSources && msg.contextSources.length > 0 && (
-                      <div style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: `1px solid ${msg.role === 'USER' ? '#3b82f6' : (darkMode ? '#4b5563' : '#e5e7eb')}`, fontSize: '0.7rem', opacity: 0.8 }}>
-                        Sources: {msg.contextSources.join(', ')}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+            <div style={{ flex: 1, backgroundColor: darkMode ? '#111827' : '#f9fafb', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {renderTranscript(viewConsoleTerminal)}
             </div>
-
           </div>
-
         </div>
       </ExtraLargeModal>
 
       <ExtraLargeModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        title="Start New RAG Session"
-        icon={<i className="fa-regular fa-message"></i>}
-        darkMode={darkMode}
+        isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)}
+        title="Start New RAG Session" icon={<i className="fa-regular fa-message"></i>} darkMode={darkMode}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-            <button 
-              onClick={() => setIsCreateModalOpen(false)}
-              style={{ 
-                padding: '0.75rem 1.5rem', 
-                cursor: 'pointer', 
-                backgroundColor: 'transparent', 
-                fontFamily: 'Bodoni Moda Variable, serif',
-                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, color: darkMode ? '#f9fafb' : '#111827', 
-                borderRadius: '4px' }}
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={handleStartSession}
-              disabled={!isNewConsoleTerminalValid}
-              style={{ 
-                padding: '0.75rem 1.5rem', 
-                backgroundColor: '#0B0B45', 
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '4px',
-                cursor: isNewConsoleTerminalValid ? 'pointer' : 'not-allowed',
-                opacity: isNewConsoleTerminalValid ? 1 : 0.5,
-                fontFamily: 'Bodoni Moda Variable, serif'
-              }}
-            >
-              Launch Terminal
-            </button>
+            <button onClick={() => setIsCreateModalOpen(false)} style={{ padding: '0.75rem 1.5rem', cursor: 'pointer', backgroundColor: 'transparent', fontFamily: 'Bodoni Moda Variable, serif', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px' }}>Cancel</button>
+            <button onClick={handleStartSession} disabled={!isNewConsoleTerminalValid} style={{ padding: '0.75rem 1.5rem', backgroundColor: '#0B0B45', color: 'white', border: 'none', borderRadius: '4px', cursor: isNewConsoleTerminalValid ? 'pointer' : 'not-allowed', opacity: isNewConsoleTerminalValid ? 1 : 0.5, fontFamily: 'Bodoni Moda Variable, serif' }}>Launch Terminal</button>
           </div>
         }
       >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', minHeight: '300px' }}>
-          
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: darkMode ? '#d1d5db' : '#374151' }}>
-                Session Title <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <input 
-                type="text" 
-                name="title"
-                value={newConsoleTerminalData.title || ''}
-                onChange={handleInputChange}
-                placeholder="e.g., Debugging DynamoDB Schema"
-                style={{
-                  ...inputStyle(darkMode),
-                  borderColor: isTitleDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
-                }}
-              />
-              {isTitleDuplicate ? (
-                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>
-                  A session with this title already exists.
-                </p>
-              ) : (
-                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
-                  A descriptive title to help you find this chat in your history.
-                </p>
-              )}
+              <label style={labelStyle(darkMode)}>Session Title <span style={{ color: '#ef4444' }}>*</span></label>
+              <input type="text" name="title" value={newConsoleTerminalData.title || ''} onChange={handleInputChange} placeholder="e.g., Debugging DynamoDB Schema" style={{ ...inputStyle(darkMode), borderColor: isTitleDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db') }} />
+              {isTitleDuplicate ? <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>A session with this title already exists.</p> : <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>A descriptive title to help you find this chat in your history.</p>}
             </div>
-
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: darkMode ? '#d1d5db' : '#374151' }}>
-                Select Context Profile <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <select 
-                name="contextProfileId"
-                value={newConsoleTerminalData.contextProfileId || ''}
-                onChange={handleInputChange}
-                style={inputStyle(darkMode)}
-              >
+              <label style={labelStyle(darkMode)}>Select Context Profile <span style={{ color: '#ef4444' }}>*</span></label>
+              <select name="contextProfileId" value={newConsoleTerminalData.contextProfileId || ''} onChange={handleInputChange} style={inputStyle(darkMode)}>
                 <option value="">-- Choose AI Personality --</option>
-                {contextProfiles.map(profile => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
+                {contextProfiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
               </select>
             </div>
-
           </div>
 
-          <div style={{ 
-            backgroundColor: darkMode ? '#1f2937' : '#f9fafb', 
-            border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
-            borderRadius: '0.5rem', 
-            padding: '1.5rem',
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
-            
+          <div style={{ backgroundColor: darkMode ? '#1f2937' : '#f9fafb', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
             {!selectedProfile ? (
               <div style={{ margin: 'auto', textAlign: 'center', color: darkMode ? '#6b7280' : '#9ca3af' }}>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: '48px', height: '48px', margin: '0 auto 1rem' }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                </svg>
-                <p>Select a Context Profile to view its configuration.</p>
+                <p>Select a Context Profile to view its Engine configuration.</p>
               </div>
             ) : (
               <div style={{ animation: 'overlayFadeIn 0.3s ease-out' }}>
-                <h3 style={{ margin: '0 0 0.5rem', color: darkMode ? '#f9fafb' : '#111827' }}>
-                  {selectedProfile.name}
-                </h3>
-                <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
-                  {selectedProfile.description}
-                </p>
-
+                <h3 style={{ margin: '0 0 0.5rem', color: darkMode ? '#f9fafb' : '#111827' }}>{selectedProfile.name}</h3>
+                <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>{selectedProfile.description}</p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
                   <div>
-                    <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Model</span>
-                    <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '0.25rem 0.5rem', backgroundColor: darkMode ? '#374151' : '#e5e7eb', borderRadius: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151' }}>
-                      {/* Local lookup ensures the modal maps the correct Model Name instead of UUID */}
-                      {foundationModels.find(fm => fm.id === selectedProfile.llmModelId)?.name || selectedProfile.foundationModel?.name || selectedProfile.llmModelId}
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Provider • Model</span>
+                    <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '0.25rem 0.5rem', backgroundColor: darkMode ? '#374151' : '#e5e7eb', borderRadius: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 600 }}>
+                      {foundationModels.find(fm => fm.id === selectedProfile.llmModelId)?.provider} • {foundationModels.find(fm => fm.id === selectedProfile.llmModelId)?.name || selectedProfile.llmModelId}
                     </span>
                   </div>
                   <div>
-                    <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Temperature</span>
-                    <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151' }}>
-                      {selectedProfile.temperature?.toFixed(2)}
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Modality</span>
+                    <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: '#2563eb', fontWeight: 600 }}>
+                      {foundationModels.find(fm => fm.id === selectedProfile.llmModelId)?.modality || 'UNKNOWN'}
                     </span>
                   </div>
-                  {selectedProfile.vectorCollectionId && (
-                    <div style={{ gridColumn: 'span 2' }}>
-                      <span style={{ display: 'block', fontSize: '0.75rem', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>RAG Enabled</span>
-                      <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151' }}>
-                        Linked to: {selectedProfile.vectorCollection?.name || 'Database Collection'}
-                      </span>
-                    </div>
-                  )}
                 </div>
-
                 <div>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-                    System Prompt Target
-                  </span>
-                  <div style={{ 
-                    backgroundColor: darkMode ? '#111827' : '#ffffff', 
-                    padding: '1rem', 
-                    borderRadius: '0.375rem',
-                    border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-                    fontSize: '0.875rem',
-                    color: darkMode ? '#d1d5db' : '#4b5563',
-                    lineHeight: '1.5',
-                    maxHeight: '150px',
-                    overflowY: 'auto'
-                  }}>
+                  <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>System Prompt Target</span>
+                  <div style={{ backgroundColor: darkMode ? '#111827' : '#ffffff', padding: '1rem', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.375rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#4b5563', lineHeight: '1.5', maxHeight: '150px', overflowY: 'auto', fontFamily: 'monospace' }}>
                     {selectedProfile.systemPrompt}
                   </div>
                 </div>
-
               </div>
             )}
           </div>
-
         </div>
       </ExtraLargeModal>
 
       <FullScreenModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        title={`Emend Terminal Session: ${editConsoleTerminal?.id || ''}`}
-        darkMode={darkMode}
+        isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)}
+        title={`Emend Terminal Session: ${editConsoleTerminal?.id || ''}`} darkMode={darkMode}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', width: '100%' }}>
-            <button 
-              onClick={() => setIsEditModalOpen(false)}
-              style={{ 
-                padding: '0.75rem 1.5rem', 
-                cursor: 'pointer', backgroundColor: 'transparent', 
-                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
-                fontFamily: 'Bodoni Moda Variable, serif',
-                color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px' }}
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={handleEditSubmit}
-              disabled={!isEditValid}
-              style={{ 
-                padding: '0.75rem 1.5rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px',
-                fontFamily: 'Bodoni Moda Variable, serif',
-                cursor: isEditValid ? 'pointer' : 'not-allowed', opacity: isEditValid ? 1 : 0.5
-              }}
-            >
-              Update Console Meta
-            </button>
+            <button onClick={() => setIsEditModalOpen(false)} style={{ padding: '0.75rem 1.5rem', cursor: 'pointer', backgroundColor: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, fontFamily: 'Bodoni Moda Variable, serif', color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px' }}>Cancel</button>
+            <button onClick={handleEditSubmit} disabled={!isEditValid} style={{ padding: '0.75rem 1.5rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', fontFamily: 'Bodoni Moda Variable, serif', cursor: isEditValid ? 'pointer' : 'not-allowed', opacity: isEditValid ? 1 : 0.5 }}>Update Console Meta</button>
           </div>
         }
       >
         <div style={{ display: 'flex', gap: '2rem', height: '100%', minHeight: '450px' }}>
-          
-          <div style={{ 
-            flex: '0 0 350px', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: '1.5rem', 
-            paddingRight: '1.5rem', 
-            borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-            overflowY: 'auto',
-            overflowX: 'hidden'
-          }}>
-            
+          <div style={{ flex: '0 0 350px', display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingRight: '1.5rem', borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, overflowY: 'auto', overflowX: 'hidden' }}>
             <div>
               <label style={labelStyle(darkMode)}>Session Title <span style={{ color: '#ef4444' }}>*</span></label>
-              <input 
-                type="text" 
-                name="title"
-                value={editTerminalConsoleData.title}
-                onChange={handleEditChange}
-                style={inputStyle(darkMode)}
-              />
+              <input type="text" name="title" value={editTerminalConsoleData.title} onChange={handleEditChange} style={inputStyle(darkMode)} />
             </div>
-
             <div>
               <label style={labelStyle(darkMode)}>Session Status</label>
-              <select 
-                name="status"
-                value={editTerminalConsoleData.status}
-                onChange={handleEditChange}
-                style={inputStyle(darkMode)}
-              >
+              <select name="status" value={editTerminalConsoleData.status} onChange={handleEditChange} style={inputStyle(darkMode)}>
                 <option value="ACTIVE">Active: Open Interaction</option>
                 <option value="ARCHIVED">Archived: Read Only</option>
               </select>
             </div>
-
             {editConsoleTerminal && (
               <div style={{ backgroundColor: darkMode ? '#374151' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, marginTop: '1rem' }}>
                 <h4 style={{ margin: '0 0 1rem', fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Session Metadata</h4>
-                
-                <div style={{ marginBottom: '0.75rem' }}>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>User ID</span>
-                  <span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontFamily: 'monospace' }}>{editConsoleTerminal.userId || 'Anonymous'}</span>
-                </div>
-
-                <div style={{ marginBottom: '0.75rem' }}>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Context Profile</span>
-                  <span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 500 }}>{editConsoleTerminal.contextProfile?.name || 'Unlinked Profile'}</span>
-                </div>
-
-                <div>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Total Tokens Used</span>
-                  <span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 500 }}>{editConsoleTerminal.totalTokensUsed?.toLocaleString()}</span>
-                </div>
+                <div style={{ marginBottom: '0.75rem' }}><span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>User ID</span><span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontFamily: 'monospace' }}>{editConsoleTerminal.userId || 'Anonymous'}</span></div>
+                <div style={{ marginBottom: '0.75rem' }}><span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Context Profile</span><span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 500 }}>{editConsoleTerminal.contextProfile?.name || 'Unlinked Profile'}</span></div>
+                <div><span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Total Tokens Used</span><span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 500 }}>{editConsoleTerminal.totalTokensUsed?.toLocaleString()}</span></div>
               </div>
             )}
-
             <div style={{ marginTop: 'auto', paddingTop: '1rem', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', paddingBottom: '1rem' }}>
               <div>Created: {editConsoleTerminal?.createdAt ? new Date(editConsoleTerminal.createdAt).toLocaleString() : ''}</div>
               {editConsoleTerminal?.updatedAt && <div>Last Updated: {new Date(editConsoleTerminal.updatedAt).toLocaleString()}</div>}
             </div>
           </div>
 
-          <div style={{ 
-            flex: 1, 
-            display: 'flex', 
-            flexDirection: 'column', 
-            minWidth: 0, 
-            minHeight: 0 
-          }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
             <div style={{ marginBottom: '1rem' }}>
               <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>Session Transcript</h3>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
-                Review the conversation history for this terminal. Chat logs cannot be edited directly to preserve audit integrity.
-              </p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Review the conversation history for this terminal. Chat logs cannot be edited directly.</p>
             </div>
-
-            <div style={{ 
-              flex: 1, 
-              backgroundColor: darkMode ? '#111827' : '#f9fafb', 
-              border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
-              borderRadius: '0.5rem',
-              padding: '1.5rem',
-              overflowY: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1rem',
-              marginBottom: '1rem'
-            }}>
+            <div style={{ flex: 1, backgroundColor: darkMode ? '#111827' : '#f9fafb', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '1rem' }}>
               
-              {!editConsoleTerminal?.messages || editConsoleTerminal.messages.length === 0 ? (
-                <div style={{ margin: 'auto', textAlign: 'center', color: darkMode ? '#6b7280' : '#9ca3af' }}>
-                  <p>No messages have been sent in this session yet.</p>
-                </div>
-              ) : (
-                editConsoleTerminal.messages.map((msg) => (
-                  <div key={msg.id} style={{
-                    alignSelf: msg.role === 'USER' ? 'flex-end' : 'flex-start',
-                    maxWidth: '80%',
-                    backgroundColor: msg.role === 'USER' ? '#2563eb' : (darkMode ? '#374151' : '#ffffff'),
-                    color: msg.role === 'USER' ? '#ffffff' : (darkMode ? '#f9fafb' : '#111827'),
-                    border: msg.role === 'USER' ? 'none' : `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
-                    padding: '1rem',
-                    borderRadius: '0.5rem',
-                    borderBottomRightRadius: msg.role === 'USER' ? '0' : '0.5rem',
-                    borderBottomLeftRadius: msg.role === 'ASSISTANT' || msg.role === 'SYSTEM' ? '0' : '0.5rem',
-                  }}>
-                    <div style={{ fontSize: '0.75rem', marginBottom: '0.5rem', opacity: 0.7, textTransform: 'uppercase' }}>
-                      {msg.role} • {new Date(msg.createdAt || Date.now()).toLocaleTimeString()}
-                    </div>
-                    <div style={{ fontSize: '0.875rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                      {msg.content}
-                    </div>
-                    {msg.contextSources && msg.contextSources.length > 0 && (
-                      <div style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: `1px solid ${msg.role === 'USER' ? '#3b82f6' : (darkMode ? '#4b5563' : '#e5e7eb')}`, fontSize: '0.7rem', opacity: 0.8 }}>
-                        Sources: {msg.contextSources.join(', ')}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+              {renderTranscript(editConsoleTerminal)}
 
               {editTerminalConsoleData.status === 'ACTIVE' && (
                 <div style={{ marginTop: 'auto', paddingTop: '2rem' }}>
-                  <button 
-                    onClick={() => {
-                      navigator(`/console-terminal/session/${editConsoleTerminal?.id}`);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '1rem',
-                      backgroundColor: darkMode ? '#374151' : '#ffffff',
-                      border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`,
-                      borderRadius: '0.5rem',
-                      color: darkMode ? '#d1d5db' : '#4b5563',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.5rem',
-                      fontFamily: 'Bodoni Moda Variable, serif',
-                      fontWeight: 800,
-                      letterSpacing: '0.13em',
-                      fontSize: '0.875rem',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.backgroundColor = darkMode ? '#4b5563' : '#f3f4f6';
-                      e.currentTarget.style.color = darkMode ? '#ffffff' : '#111827';
-                      e.currentTarget.style.borderColor = '#2563eb';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.backgroundColor = darkMode ? '#374151' : '#ffffff';
-                      e.currentTarget.style.color = darkMode ? '#d1d5db' : '#4b5563';
-                      e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#d1d5db';
-                    }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: '1.25rem', height: '1.25rem' }}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                    </svg>
+                  <button onClick={() => { navigator(`/console-terminal/session/${editConsoleTerminal?.id}`); }} style={{ width: '100%', padding: '1rem', backgroundColor: darkMode ? '#374151' : '#ffffff', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '0.5rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontFamily: 'Bodoni Moda Variable, serif', fontWeight: 800, letterSpacing: '0.13em', fontSize: '0.875rem', transition: 'all 0.2s ease' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: '1.25rem', height: '1.25rem' }}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
                     Resume Conversation
                   </button>
                 </div>
               )}
-
             </div>
           </div>
-
         </div>
       </FullScreenModal>
 
-      <BottomRightModal
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        icon={<i className="bx bx-trash" />}
-        title="Delete Console Terminal"
-        darkMode={darkMode}
-        
-        footer={
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-            <button className="bottom-right-modal-button" 
-              onClick={() => setIsDeleteModalOpen(false)}
-              style={{ padding: '0.5rem 1rem', cursor: 'pointer' }}
-            >
-              Cancel
-            </button>
-            <button 
-              className="bottom-right-modal-button"
-              onClick={handleDeleteConsoleTerminal}
-              disabled={false}
-              style={{ 
-                padding: '0.5rem 1rem', 
-                backgroundColor: '#2563eb', 
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '4px',
-                cursor: 'pointer',
-                opacity: 1
-              }}
-            >
-              Confirm
-            </button>
-          </div>
-        }
-      >
+      <BottomRightModal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} icon={<i className="bx bx-trash" />} title="Delete Console Terminal" darkMode={darkMode} footer={<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}><button className="bottom-right-modal-button" onClick={() => setIsDeleteModalOpen(false)} style={{ padding: '0.5rem 1rem', cursor: 'pointer' }}>Cancel</button><button className="bottom-right-modal-button" onClick={handleDeleteConsoleTerminal} disabled={false} style={{ padding: '0.5rem 1rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: 1 }}>Confirm</button></div>}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}>
-            Deleting RAG Session: <strong><em>{deleteConsoleTerminal?.title}</em></strong> <em>{deleteConsoleTerminal?.id}</em> from database records. 
-          </p>
-          <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}> 
-            Are you sure you want to proceed? 
-          </p>
-          <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}> 
-            This action cannot be undone.
-          </p>
+          <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}>Deleting RAG Session: <strong><em>{deleteConsoleTerminal?.title}</em></strong> <em>{deleteConsoleTerminal?.id}</em> from database records.</p>
+          <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}>Are you sure you want to proceed? This action cannot be undone.</p>
         </div>
       </BottomRightModal>
     </>
-    )
+  );
 }
 
 export default TerminalConsoleUI;
