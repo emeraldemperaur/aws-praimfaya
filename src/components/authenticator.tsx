@@ -244,7 +244,7 @@ const Authenticator = ({ darkMode }: { darkMode: boolean }) => {
                                         <p style={{ color: '#fff', marginBottom: '15px' }}>Enter the 6-digit code sent to your email.</p>
                                         <input ref={verificationCode} className="ostiary-font" placeholder="Verification Code" type="text" maxLength={6} />
                                         <div className="ost-btn" onClick={onConfirmSignUpHandler}>Verify Code</div>
-                                        <p style={{ marginTop: '15px', color: darkMode ? '#9ca3af' : '#666', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }} 
+                                        <p style={{ marginTop: '15px', color: darkMode ? '#9ca3af' : '#666', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline', textAlign: 'center' }} 
                                         onClick={handleResendCode}>Didn't receive a code? Resend</p>
                                     </>
                                 ) : (

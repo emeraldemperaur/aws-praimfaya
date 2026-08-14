@@ -6,6 +6,7 @@ export interface ColumnDef<T> {
   accessor: keyof T | string; 
   render?: (row: T) => React.ReactNode; 
   sortable?: boolean; 
+  width?: string;
 }
 
 type SortDirection = 'asc' | 'desc';
@@ -44,7 +45,6 @@ function DataTable<T>({
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [sortConfig, setSortConfig] = useState<SortConfig<T> | null>(initialSort);
   
-  // --- PAGINATION STATE ---
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
 
@@ -69,11 +69,9 @@ function DataTable<T>({
     return sortableItems;
   }, [data, sortConfig]);
 
-  // --- PAGINATION LOGIC ---
   const totalRecords = sortedData.length;
   const totalPages = Math.ceil(totalRecords / pageSize);
   
-  // Reset to page 1 if data shrinks significantly (prevents viewing empty out-of-bounds pages)
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(1);
@@ -83,7 +81,6 @@ function DataTable<T>({
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = Math.min(startIndex + pageSize, totalRecords);
   
-  // Only slice the data if pagination is enabled
   const displayData = pagination ? sortedData.slice(startIndex, endIndex) : sortedData;
 
   const requestSort = (key: keyof T | string) => {
@@ -101,7 +98,6 @@ function DataTable<T>({
     }
   }, [selectedIndices, sortedData, onSelectionChange]);
 
-  // --- UPDATED SELECTION LOGIC (Scoping selection to currently visible page) ---
   const visibleIndices = displayData.map((_, i) => pagination ? startIndex + i : i);
   const isAllVisibleSelected = visibleIndices.length > 0 && visibleIndices.every(i => selectedIndices.has(i));
   const isSomeVisibleSelected = visibleIndices.some(i => selectedIndices.has(i)) && !isAllVisibleSelected;
@@ -130,12 +126,12 @@ function DataTable<T>({
 
   return (
     <div className={`table-responsive-wrapper ${darkMode ? 'dark-mode' : ''}`}>
-      <table className="custom-data-table">
+      <table className="custom-data-table" style={{ width: '100%', tableLayout: 'fixed' }}>
         
         <thead className="table-header">
           <tr>
             {selectable && (
-              <th scope="col" className="checkbox-cell">
+              <th scope="col" className="checkbox-cell" style={{ width: '48px' }}>
                 <input 
                   type="checkbox" 
                   className="tbl-checkbox"
@@ -155,7 +151,7 @@ function DataTable<T>({
                 key={index} 
                 scope="col"
                 onClick={() => col.sortable ? requestSort(col.accessor) : null}
-                style={{ cursor: col.sortable ? 'pointer' : 'default', userSelect: 'none' }}
+                style={{ cursor: col.sortable ? 'pointer' : 'default', userSelect: 'none', width: col.width }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   {col.header}
@@ -189,7 +185,6 @@ function DataTable<T>({
             </tr>
           ) : (
             displayData.map((row, index) => {
-              // Calculate the actual index in the master array to keep selections accurate
               const actualIndex = pagination ? startIndex + index : index;
               const isSelected = selectedIndices.has(actualIndex);
               
@@ -223,7 +218,6 @@ function DataTable<T>({
 
       </table>
 
-      {/* --- MATERIAL DESIGN PAGINATION FOOTER --- */}
       {pagination && !isLoading && totalRecords > 0 && (
         <div style={{
           display: 'flex',
@@ -231,7 +225,7 @@ function DataTable<T>({
           alignItems: 'center',
           padding: '0.75rem 1rem',
           borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-          backgroundColor: darkMode ? '#1f2937' : '#ffffff', // Match your table base
+          backgroundColor: darkMode ? '#1f2937' : '#ffffff', 
           color: darkMode ? '#9ca3af' : '#6b7280',
           fontSize: '0.875rem',
           gap: '2rem'
@@ -243,7 +237,7 @@ function DataTable<T>({
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
-                setCurrentPage(1); // Reset to page 1 on resize
+                setCurrentPage(1); 
               }}
               style={{
                 backgroundColor: 'transparent',

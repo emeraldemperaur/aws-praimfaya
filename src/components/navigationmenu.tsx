@@ -154,7 +154,7 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
             <div className="ux-container">
                 <div className="nav-start">
                 <NavLink className="logo" to="/" onClick={closeDropDowns}>
-                    <div style={{textDecoration: 'none', color: darkMode ? '#ffffff' : '#0B0B45'}} className="menu-logo">Pr<a style={{fontWeight: 200}}>ai</a>mfaya</div> 
+                    <div style={{textDecoration: 'none', color: darkMode ? '#ffffff' : '#0B0B45'}} className="menu-logo">Pr<span style={{fontWeight: 200}}>ai</span>mfaya</div> 
                 </NavLink>
                 <nav className={`ux-menu ${isMobileMenuOpen ? 'show' : ''}`} style={{background: darkMode ? '#1b1c1d' : '#ffffff'}}>
                     <ul className={darkMode ? 'ux-menu-bar ux-menu-bar-dark' : 'ux-menu-bar'}>

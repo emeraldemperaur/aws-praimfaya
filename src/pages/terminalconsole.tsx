@@ -69,9 +69,9 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
     });
 
     const profilesSub = client.models.ContextProfile.observeQuery({
-      selectionSet: ['id', 'name', 'description', 'llmModelId', 'temperature', 'systemPrompt', 'vectorCollection.*', 'foundationModel.*']
+      selectionSet: ['id', 'name', 'description', 'llmModelId', 'temperature', 'systemPrompt', 'role', 'vectorCollection.*', 'foundationModel.*']
     }).subscribe({
-      next: (data: any) => setContextProfiles(data.items.filter((p: any) => p.isActive !== false))
+      next: (data: any) => setContextProfiles(data.items.filter((p: any) => p.isActive !== false && p.role !== 'COLLABORATOR'))
     });
 
     const fmSub = client.models.FoundationModel.observeQuery().subscribe({

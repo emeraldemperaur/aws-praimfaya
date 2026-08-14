@@ -1,7 +1,6 @@
 import type { ConsoleTerminal } from "./consoleterminal";
 import type { VectorCollection } from "./vectorcollection";
 
-
 export interface ContextProfile {
   id?: string;
   name: string;
@@ -15,6 +14,16 @@ export interface ContextProfile {
   createdBy?: string | null;              
   isActive?: boolean | null;           
   terminals?: ConsoleTerminal[] | null; 
+  role?: 'STANDARD' | 'SUPERVISOR' | 'COLLABORATOR' | string | null;
+  supervisorId?: string | null;
+  enableCodeInterpreter?: boolean | null;
+  enableWebSearch?: boolean | null;
+  enableMitoMcp?: boolean | null;
+  enableApotheosisMcp?: boolean | null;
+  customMcpUrl?: string | null;
+  workflows?: any[] | null; 
+  collaborators?: any[] | null; 
+
   createdAt: string;
   updatedAt?: string;
   updatedBy?: string | null;
@@ -32,6 +41,16 @@ export interface UIContextProfile {
   createdBy?: string | null;
   isActive?: boolean | null;
   terminals?: ConsoleTerminal[] | null; 
+  role?: 'STANDARD' | 'SUPERVISOR' | 'COLLABORATOR' | string | null;
+  supervisorId?: string | null;
+  enableCodeInterpreter?: boolean | null;
+  enableWebSearch?: boolean | null;
+  enableMitoMcp?: boolean | null;
+  enableApotheosisMcp?: boolean | null;
+  customMcpUrl?: string | null;
+  workflows?: any[] | null; 
+  collaborators?: any[] | null; 
+
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string | null;

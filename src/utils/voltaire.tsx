@@ -47,9 +47,9 @@ export const AddAutomationWorkflowSVG = <svg
             height="1em" 
             fill="none" 
             stroke="currentColor" 
-            stroke-width="32" 
-            stroke-linecap="round" 
-            stroke-linejoin="round" 
+            strokeWidth="32" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
             aria-hidden="true"
             role="img"
           >
@@ -238,4 +238,14 @@ export const getInitials = (name: string) => {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
   return name.slice(0, 2).toUpperCase();
+};
+
+export const isValidURL = (urlString?: string | null): boolean => {
+  if (!urlString) return false;
+  try {
+    const parsed = new URL(urlString);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch (e) {
+    return false;
+  }
 };

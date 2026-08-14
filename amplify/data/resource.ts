@@ -20,6 +20,7 @@ const ModelProviders = [
 
 const ModelModality = ['TEXT', 'MULTIMODAL', 'EMBEDDING', 'IMAGE'] as const;
 const AutomationTools = ['N8N', 'ZAPIER', 'MAKE', 'PIPEDREAM'] as const;
+const AgentRoles = ['SUPERVISOR', 'COLLABORATOR', 'STANDARD'] as const;
 
 const schema = a.schema({
   Todo: a
@@ -39,16 +40,25 @@ const schema = a.schema({
       name: a.string().required(),
       description: a.string(),
       systemPrompt: a.string().required(),
-      vectorCollectionId: a.id(),
-      vectorCollection: a.belongsTo('VectorCollection', 'vectorCollectionId'),
-      llmModelId: a.id().required(), 
-      foundationModel: a.belongsTo('FoundationModel', 'llmModelId'), 
       temperature: a.float(),
+      isActive: a.boolean(),
       createdBy: a.string(),
       updatedBy: a.string(),
-      isActive: a.boolean(),
+      llmModelId: a.id().required(), 
+      foundationModel: a.belongsTo('FoundationModel', 'llmModelId'), 
+      vectorCollectionId: a.id(),
+      vectorCollection: a.belongsTo('VectorCollection', 'vectorCollectionId'),
+      enableCodeInterpreter: a.boolean().default(false),
+      enableWebSearch: a.boolean().default(false),
+      role: a.enum(AgentRoles),
+      supervisorId: a.id(),
+      supervisor: a.belongsTo('ContextProfile', 'supervisorId'),
+      collaborators: a.hasMany('ContextProfile', 'supervisorId'),
       terminals: a.hasMany('ConsoleTerminal', 'contextProfileId'),
       workflows: a.hasMany('ContextProfileWorkflow', 'contextProfileId'),
+      enableMitoMcp: a.boolean().default(false),
+      enableApotheosisMcp: a.boolean().default(false),
+      customMcpUrl: a.string(),
     })
     .authorization(headerRBAC),
 
