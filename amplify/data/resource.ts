@@ -21,6 +21,7 @@ const ModelProviders = [
 const ModelModality = ['TEXT', 'MULTIMODAL', 'EMBEDDING', 'IMAGE'] as const;
 const AutomationTools = ['N8N', 'ZAPIER', 'MAKE', 'PIPEDREAM'] as const;
 const AgentRoles = ['SUPERVISOR', 'COLLABORATOR', 'STANDARD'] as const;
+const ProvisioningStatus = ['READY', 'PROVISIONING', 'UNPROVISIONED', 'FAILED'] as const;
 
 const schema = a.schema({
   Todo: a
@@ -59,6 +60,10 @@ const schema = a.schema({
       enableMitoMcp: a.boolean().default(false),
       enableApotheosisMcp: a.boolean().default(false),
       customMcpUrl: a.string(),
+      awsAgentId: a.string(),
+      awsAliasId: a.string(),
+      lastUsedAt: a.datetime(),
+      provisioningStatus: a.enum(ProvisioningStatus),
     })
     .authorization(headerRBAC),
 

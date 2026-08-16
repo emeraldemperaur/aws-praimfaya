@@ -23,7 +23,7 @@ export interface ContextProfile {
   customMcpUrl?: string | null;
   workflows?: any[] | null; 
   collaborators?: any[] | null; 
-
+  provisioningStatus?: 'READY' | 'PROVISIONING' | 'UNPROVISIONED' | 'FAILED' | null;
   createdAt: string;
   updatedAt?: string;
   updatedBy?: string | null;
@@ -50,7 +50,7 @@ export interface UIContextProfile {
   customMcpUrl?: string | null;
   workflows?: any[] | null; 
   collaborators?: any[] | null; 
-
+  provisioningStatus?: 'READY' | 'PROVISIONING' | 'UNPROVISIONED' | 'FAILED' | null;
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string | null;

@@ -39,13 +39,11 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   const [editContextProfile, setEditContextProfile] = useState<UIContextProfile | null>(null);
   const [deleteContextProfile, setDeleteContextProfile] = useState<UIContextProfile | null>(null);
   
-  // Data States
   const [newContextProfileData, setNewContextProfileData] = useState<Partial<UIContextProfile>>(DEFAULT_PROFILE_STATE);
   const [editContextProfileData, setEditContextProfileData] = useState<Partial<UIContextProfile>>({});
   const [selectedWorkflowIds, setSelectedWorkflowIds] = useState<string[]>([]);
   const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<string[]>([]);
   
-  // Search States for Multiselects
   const [createWorkflowSearch, setCreateWorkflowSearch] = useState('');
   const [editWorkflowSearch, setEditWorkflowSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -92,6 +90,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         'isActive', 'createdAt', 'updatedAt', 
         'role', 'enableCodeInterpreter', 'enableWebSearch', 'supervisorId',
         'enableMitoMcp', 'enableApotheosisMcp', 'customMcpUrl', 
+        'provisioningStatus', 'awsAgentId', 'awsAliasId',
         'vectorCollection.*',
         'foundationModel.*',
         'terminals.*',
@@ -129,8 +128,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         enableApotheosisMcp: editContextProfile.enableApotheosisMcp ?? false,
         customMcpUrl: editContextProfile.customMcpUrl || '',
       });
-      setSelectedWorkflowIds(editContextProfile.workflows?.map((w: any) => w.contextWorkflowId) || []);
-      setSelectedCollaboratorIds(editContextProfile.collaborators?.map((c: any) => c.id) || []);
+      setSelectedWorkflowIds(Array.isArray(editContextProfile.workflows) ? editContextProfile.workflows.map((w: any) => w.contextWorkflowId) : []);
+      setSelectedCollaboratorIds(Array.isArray(editContextProfile.collaborators) ? editContextProfile.collaborators.map((c: any) => c.id) : []);
     }
   }, [editContextProfile]);
 
@@ -174,6 +173,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         header: 'Name',
         accessor: 'name',
         sortable: true,
+        width: '45%', 
         render: (row) => {
           const linkedModel = foundationModels.find(fm => fm.id === row.llmModelId);
           const apiIdentifier = linkedModel?.apiIdentifier || row.foundationModel?.apiIdentifier;
@@ -190,11 +190,20 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                   }}>
                     {row.role || 'STANDARD'}
                   </span>
+                  {row.role !== 'STANDARD' && (
+                    <span style={{ 
+                      fontSize: '0.65rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.2rem',
+                      color: row.provisioningStatus === 'READY' ? '#10b981' : (row.provisioningStatus === 'PROVISIONING' ? '#3b82f6' : '#9ca3af')
+                    }}>
+                      {row.provisioningStatus === 'PROVISIONING' && <i className="fa-solid fa-circle-notch fa-spin"></i>}
+                      {row.provisioningStatus === 'READY' ? 'AWS Synced' : (row.provisioningStatus === 'PROVISIONING' ? 'Syncing...' : 'Out of Sync')}
+                    </span>
+                  )}
                   {!row.isActive && (
                     <span style={{ fontSize: '0.65rem', color: '#ef4444', fontWeight: 600 }}>INACTIVE</span>
                   )}
                 </div>
-                <span className="secondary-text">{row.description}</span>
+                <span className="secondary-text" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>{row.description}</span>
               </div>
             </div>
           );
@@ -204,8 +213,9 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         header: 'Context Boundary',
         accessor: 'temperature',
         sortable: true,
+        width: '20%', 
         render: (row) => (
-          <div className="tbl-cell-stacked">
+          <div className="tbl-cell-stacked" style={{ whiteSpace: 'nowrap' }}>
             <span className="primary-text">{row.temperature || 0}° <a className="secondary-text">ᵀᵉᵐᵖᵉʳᵃᵗᵘʳᵉ</a></span>
             <span className="secondary-text">{row.systemPrompt.replace(/\s/g, "").length > 0 ? `${row.systemPrompt.replace(/\s/g, "").length} ˡᵉᵗᵗᵉʳ RAG prompt` : 'No system prompt'}</span>
           </div>
@@ -215,6 +225,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         header: 'Vector Embeddings',
         accessor: 'vectorCollectionId',
         sortable: false,
+        width: '20%', 
         render: (row) => {
           let collectionBadgeClass = 'info';
           if (row.isActive === true) collectionBadgeClass = 'success';
@@ -224,17 +235,20 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
           const collectionName = linkedCollection?.name || row.vectorCollection?.name || 'No Vector Collection';
   
           return (
-            <span className={`tbl-badge ${collectionBadgeClass}`}>
-              {collectionName}
-            </span>
+            <div style={{ whiteSpace: 'nowrap' }}>
+              <span className={`tbl-badge ${collectionBadgeClass}`}>
+                {collectionName}
+              </span>
+            </div>
           );
         }
       },
       {
         header: 'Actions',
         accessor: 'actions',
+        width: '15%', 
         render: (row) => (
-          <div className="tbl-action-group">
+          <div className="tbl-action-group" style={{ whiteSpace: 'nowrap' }}>
             <button 
               className="tbl-action-btn view-btn" 
               onClick={() => {
@@ -313,6 +327,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         enableMitoMcp: newContextProfileData.enableMitoMcp,
         enableApotheosisMcp: newContextProfileData.enableApotheosisMcp,
         customMcpUrl: newContextProfileData.role !== 'SUPERVISOR' ? (newContextProfileData.customMcpUrl?.trim() || null) : null,
+        provisioningStatus: 'UNPROVISIONED', 
         createdBy: getUserEmail ? await getUserEmail() : 'Unknown User',
       });
       
@@ -333,7 +348,14 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       setContextProfiles(prev => {
         const alreadyExists = prev.some(profile => profile.id === newProfile.id);
         if (alreadyExists) return prev;
-        return [newProfile, ...prev];
+        
+        const formattedNewProfile = {
+          ...newProfile,
+          workflows: selectedWorkflowIds.map(id => ({ contextWorkflowId: id })),
+          collaborators: selectedCollaboratorIds.map(id => ({ id }))
+        };
+
+        return [formattedNewProfile, ...prev];
       });
       setIsCreateModalOpen(false);
       setNewContextProfileData(DEFAULT_PROFILE_STATE);
@@ -379,6 +401,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         enableMitoMcp: editContextProfileData.enableMitoMcp,
         enableApotheosisMcp: editContextProfileData.enableApotheosisMcp,
         customMcpUrl: editContextProfileData.role !== 'SUPERVISOR' ? (editContextProfileData.customMcpUrl?.trim() || null) : null,
+        provisioningStatus: editContextProfileData.role !== 'STANDARD' ? 'UNPROVISIONED' : null,
         updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User',
       });
       if (errors) throw new Error(errors[0].message);
@@ -651,7 +674,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               </div>
               <div style={{ flex: 1 }}>
                 <h4 style={{ margin: '0 0 0.5rem', color: darkMode ? '#f9fafb' : '#111827', fontSize: '0.9rem' }}>Assigned Workflows</h4>
-                {viewContextProfile?.workflows && viewContextProfile.workflows.length > 0 ? (
+                {Array.isArray(viewContextProfile?.workflows) && viewContextProfile.workflows.length > 0 ? (
                   <ul style={{ margin: 0, paddingLeft: '1.25rem', color: darkMode ? '#d1d5db' : '#4b5563', fontSize: '0.875rem' }}>
                     {viewContextProfile.workflows.map((w: any, i: number) => {
                        const wf = workflows.find(wf => wf.id === w.contextWorkflowId);
