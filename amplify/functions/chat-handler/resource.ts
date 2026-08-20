@@ -1,8 +1,9 @@
 import { defineFunction } from '@aws-amplify/backend';
 
-export const agentProvisioner = defineFunction({
-  name: 'agent-provisioner',
+export const chatHandler = defineFunction({
+  name: 'chat-handler',
   entry: './handler.ts',
-  timeoutSeconds: 300,
+  timeoutSeconds: 60, 
+  memoryMB: 512,
   resourceGroupName: 'data',
 });

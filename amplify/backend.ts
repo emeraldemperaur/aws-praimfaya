@@ -18,6 +18,7 @@ import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as lambda from 'aws-cdk-lib/aws-lambda'; 
 import { RemovalPolicy } from 'aws-cdk-lib';
 import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import { chatHandler } from './functions/chat-handler/resource';
 
 const backend = defineBackend({
   auth,
@@ -28,18 +29,18 @@ const backend = defineBackend({
   updateVectorStatus,
   agentProvisioner,
   webhookRouter,
-  agentReaper
+  agentReaper,
+  chatHandler
 });
 
 const customStack = backend.createStack('BedrockAIStack');
 
 // =================================================================================
-// PART 1: KNOWLEDGE BASE & VECTOR DB INFRASTRUCTURE (EXISTING)
+// KNOWLEDGE BASE & VECTOR DB INFRASTRUCTURE
 // =================================================================================
 
 const vectorBucket = new s3vectors.CfnVectorBucket(customStack, 'CentralVectorBucket', {});
 
-// Database Index #1: Titan Text (1024 Dimensions)
 const titanIndex = new s3vectors.CfnIndex(customStack, 'TitanTextIndex', {
   vectorBucketArn: vectorBucket.attrVectorBucketArn,
   dimension: 1024, 
@@ -50,7 +51,6 @@ const titanIndex = new s3vectors.CfnIndex(customStack, 'TitanTextIndex', {
   }
 });
 
-// Database Index #2: Nova Multimodal (1024 Dimensions)
 const novaIndex = new s3vectors.CfnIndex(customStack, 'NovaMediaIndex', {
   vectorBucketArn: vectorBucket.attrVectorBucketArn,
   dimension: 3072, 
@@ -223,28 +223,24 @@ bedrockEventRule.addTarget(new targets.LambdaFunction(statusLambda));
 
 
 // =================================================================================
-// PART 2: MULTI-AGENT PROVISIONING & WEBHOOK ROUTING INFRASTRUCTURE (NEW)
+// MULTI-AGENT PROVISIONING & WEBHOOK ROUTING
 // =================================================================================
 
-// 1. EXTRACT CDK RESOURCES AS CONCRETE LAMBDA FUNCTIONS
 // Casting to lambda.Function exposes the .addEnvironment() method required below
 const provisionerLambda = backend.agentProvisioner.resources.lambda as lambda.Function;
 const routerLambda = backend.webhookRouter.resources.lambda as lambda.Function;
 const reaperLambda = backend.agentReaper.resources.lambda as lambda.Function;
 
-// 2. EXTRACT DYNAMODB TABLES
 const profilesTable = backend.data.resources.tables["ContextProfile"];
 const workflowsTable = backend.data.resources.tables["ContextWorkflow"];
 const profileWorkflowsTable = backend.data.resources.tables["ContextProfileWorkflow"];
 
-// 3. ATTACH DYNAMODB STREAM TO PROVISIONER
 provisionerLambda.addEventSource(new DynamoEventSource(profilesTable, {
   startingPosition: lambda.StartingPosition.LATEST,
   batchSize: 1, 
   retryAttempts: 3
 }));
 
-// 4. PASS ENVIRONMENT VARIABLES TO LAMBDAS
 provisionerLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 provisionerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 provisionerLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
@@ -254,14 +250,12 @@ provisionerLambda.addEnvironment('ACCOUNT_ID', customStack.account);
 routerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 reaperLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 
-// 5. GRANT DYNAMODB PERMISSIONS
 profilesTable.grantReadWriteData(provisionerLambda);
 profilesTable.grantReadWriteData(reaperLambda);
 workflowsTable.grantReadData(provisionerLambda);
 profileWorkflowsTable.grantReadData(provisionerLambda);
 workflowsTable.grantReadData(routerLambda);
 
-// 6. CREATE BEDROCK IAM EXECUTION ROLE
 const bedrockAgentRole = new iam.Role(customStack, 'BedrockAgentExecutionRole', {
   assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
   managedPolicies: [
@@ -270,7 +264,6 @@ const bedrockAgentRole = new iam.Role(customStack, 'BedrockAgentExecutionRole', 
 });
 provisionerLambda.addEnvironment('BEDROCK_AGENT_ROLE_ARN', bedrockAgentRole.roleArn);
 
-// 7. GRANT BEDROCK ADMIN PERMISSIONS TO PROVISIONER AND REAPER
 const bedrockAdminPolicy = new iam.PolicyStatement({
   actions: [
     "bedrock:CreateAgent",
@@ -289,8 +282,29 @@ const bedrockAdminPolicy = new iam.PolicyStatement({
 provisionerLambda.addToRolePolicy(bedrockAdminPolicy);
 reaperLambda.addToRolePolicy(bedrockAdminPolicy);
 
-// 8. GRANT BEDROCK PERMISSION TO INVOKE THE WEBHOOK ROUTER
 routerLambda.addPermission('AllowBedrockInvoke', {
   principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
   action: 'lambda:InvokeFunction',
 });
+
+const chatLambda = backend.chatHandler.resources.lambda as lambda.Function;
+
+chatLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
+chatLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
+chatLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
+chatLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn);
+
+profilesTable.grantReadData(chatLambda);
+workflowsTable.grantReadData(chatLambda);
+profileWorkflowsTable.grantReadData(chatLambda);
+
+routerLambda.grantInvoke(chatLambda);
+
+chatLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: [
+    'bedrock:InvokeModel',
+    'bedrock:InvokeModelWithResponseStream',
+    'bedrock:Retrieve'
+  ],
+  resources: ['*']
+}));

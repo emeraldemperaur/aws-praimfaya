@@ -4,4 +4,5 @@ export const webhookRouter = defineFunction({
   name: 'webhook-router',
   entry: './handler.ts',
   timeoutSeconds: 30, 
+  resourceGroupName: 'data',
 });
