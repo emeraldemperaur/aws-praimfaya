@@ -21,6 +21,8 @@ export interface ContextProfile {
   enableMitoMcp?: boolean | null;
   enableApotheosisMcp?: boolean | null;
   customMcpUrl?: string | null;
+  mcpRequiresAuth?: boolean | null;
+  mcpAuthToken?: string | null;
   workflows?: any[] | null; 
   collaborators?: any[] | null; 
   provisioningStatus?: 'READY' | 'PROVISIONING' | 'UNPROVISIONED' | 'FAILED' | null;
@@ -48,6 +50,8 @@ export interface UIContextProfile {
   enableMitoMcp?: boolean | null;
   enableApotheosisMcp?: boolean | null;
   customMcpUrl?: string | null;
+  mcpRequiresAuth?: boolean | null;
+  mcpAuthToken?: string | null;
   workflows?: any[] | null; 
   collaborators?: any[] | null; 
   provisioningStatus?: 'READY' | 'PROVISIONING' | 'UNPROVISIONED' | 'FAILED' | null;

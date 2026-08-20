@@ -28,7 +28,9 @@ const DEFAULT_PROFILE_STATE = {
   enableWebSearch: false,
   enableMitoMcp: false,
   enableApotheosisMcp: false,
-  customMcpUrl: ''
+  customMcpUrl: '',
+  mcpRequiresAuth: false,
+  mcpAuthToken: ''
 };
 
 const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
@@ -41,6 +43,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   const [viewContextProfile, setViewContextProfile] = useState<UIContextProfile | null>(null);
   const [editContextProfile, setEditContextProfile] = useState<UIContextProfile | null>(null);
   const [deleteContextProfile, setDeleteContextProfile] = useState<UIContextProfile | null>(null);
+  const [showCreateToken, setShowCreateToken] = useState(false);
+  const [showEditToken, setShowEditToken] = useState(false);
   
   const [newContextProfileData, setNewContextProfileData] = useState<Partial<UIContextProfile>>(DEFAULT_PROFILE_STATE);
   const [editContextProfileData, setEditContextProfileData] = useState<Partial<UIContextProfile>>({});
@@ -128,6 +132,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         enableMitoMcp: editContextProfile.enableMitoMcp ?? false,
         enableApotheosisMcp: editContextProfile.enableApotheosisMcp ?? false,
         customMcpUrl: editContextProfile.customMcpUrl || '',
+        mcpRequiresAuth: editContextProfile.mcpRequiresAuth ?? false,
+        mcpAuthToken: editContextProfile.mcpAuthToken || ''
       });
       setSelectedWorkflowIds(Array.isArray(editContextProfile.workflows) ? editContextProfile.workflows.map((w: any) => w.contextWorkflowId) : []);
       setSelectedCollaboratorIds(Array.isArray(editContextProfile.collaborators) ? editContextProfile.collaborators.map((c: any) => c.id) : []);
@@ -355,6 +361,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         enableMitoMcp: newContextProfileData.enableMitoMcp,
         enableApotheosisMcp: newContextProfileData.enableApotheosisMcp,
         customMcpUrl: newContextProfileData.role !== 'SUPERVISOR' ? (newContextProfileData.customMcpUrl?.trim() || null) : null,
+        mcpRequiresAuth: newContextProfileData.role !== 'SUPERVISOR' ? (newContextProfileData.mcpRequiresAuth || false) : false,
+        mcpAuthToken: (newContextProfileData.role !== 'SUPERVISOR' && newContextProfileData.mcpRequiresAuth) ? (newContextProfileData.mcpAuthToken?.trim() || null) : null,
         provisioningStatus: 'UNPROVISIONED', 
         createdBy: getUserEmail ? await getUserEmail() : 'Unknown User',
       });
@@ -429,6 +437,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         enableMitoMcp: editContextProfileData.enableMitoMcp,
         enableApotheosisMcp: editContextProfileData.enableApotheosisMcp,
         customMcpUrl: editContextProfileData.role !== 'SUPERVISOR' ? (editContextProfileData.customMcpUrl?.trim() || null) : null,
+        mcpRequiresAuth: editContextProfileData.role !== 'SUPERVISOR' ? (editContextProfileData.mcpRequiresAuth || false) : false,
+        mcpAuthToken: (editContextProfileData.role !== 'SUPERVISOR' && editContextProfileData.mcpRequiresAuth) ? (editContextProfileData.mcpAuthToken?.trim() || null) : null,
         provisioningStatus: editContextProfileData.role !== 'STANDARD' ? 'UNPROVISIONED' : null,
         updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User',
       });
@@ -893,11 +903,41 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                     <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Enable Apotheosis MCP</span>
                   </div>
                   {newContextProfileData.role !== 'SUPERVISOR' && (
-                    <div>
-                      <label style={labelStyle}>Custom MCP Server URL (Optional)</label>
-                      <input type="url" name="customMcpUrl" value={newContextProfileData.customMcpUrl || ''} onChange={handleNewTextChange} placeholder="https://..." style={inputStyle} />
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label style={labelStyle}>Custom MCP Server URL (Optional)</label>
+                    <input type="url" name="customMcpUrl" value={newContextProfileData.customMcpUrl || ''} onChange={handleNewTextChange} placeholder="https://..." style={inputStyle} />
+                    
+                    <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <input type="checkbox" name="mcpRequiresAuth" checked={newContextProfileData.mcpRequiresAuth || false} onChange={handleNewToggleChange} style={{ cursor: 'pointer' }} />
+                      <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Authentication Required</span>
                     </div>
-                  )}
+
+                    <div style={{
+                      maxHeight: newContextProfileData.mcpRequiresAuth ? '100px' : '0',
+                      opacity: newContextProfileData.mcpRequiresAuth ? 1 : 0,
+                      overflow: 'hidden',
+                      transition: 'all 0.3s ease-in-out',
+                      marginTop: newContextProfileData.mcpRequiresAuth ? '0.75rem' : '0'
+                    }}>
+                      <label style={labelStyle}>Authentication Token</label>
+                      <div style={{ position: 'relative' }}>
+                        <input 
+                          type={showCreateToken ? "text" : "password"} 
+                          name="mcpAuthToken" 
+                          value={newContextProfileData.mcpAuthToken || ''} 
+                          onChange={handleNewTextChange} 
+                          placeholder="Bearer token or API key..." 
+                          style={{ ...inputStyle, paddingRight: '2.5rem' }} 
+                        />
+                        <i 
+                          className={`bx ${showCreateToken ? 'bx-hide' : 'bx-show'}`} 
+                          onClick={() => setShowCreateToken(!showCreateToken)} 
+                          style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '1.1rem' }}
+                        ></i>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 </div>
 
               </div>
@@ -956,7 +996,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         </div>
       </FullScreenModal>
 
-      {/* EDIT MODAL */}
       <FullScreenModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
@@ -1125,7 +1164,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                   </div>
                 </div>
 
-                {/* NEW MCP BLOCK - EDIT */}
                 <div style={{ backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
                   <h4 style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: darkMode ? '#d1d5db' : '#4b5563', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Model Context Protocol (MCP)</h4>
                   <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -1137,11 +1175,41 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                     <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Enable Apotheosis MCP</span>
                   </div>
                   {editContextProfileData.role !== 'SUPERVISOR' && (
-                    <div>
-                      <label style={labelStyle}>Custom MCP Server URL (Optional)</label>
-                      <input type="url" name="customMcpUrl" value={editContextProfileData.customMcpUrl || ''} onChange={handleEditTextChange} placeholder="https://..." style={inputStyle} />
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label style={labelStyle}>Custom MCP Server URL (Optional)</label>
+                    <input type="url" name="customMcpUrl" value={editContextProfileData.customMcpUrl || ''} onChange={handleEditTextChange} placeholder="https://..." style={inputStyle} />
+                    
+                    <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <input type="checkbox" name="mcpRequiresAuth" checked={editContextProfileData.mcpRequiresAuth || false} onChange={handleEditToggleChange} style={{ cursor: 'pointer' }} />
+                      <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Authentication Required</span>
                     </div>
-                  )}
+
+                    <div style={{
+                      maxHeight: editContextProfileData.mcpRequiresAuth ? '100px' : '0',
+                      opacity: editContextProfileData.mcpRequiresAuth ? 1 : 0,
+                      overflow: 'hidden',
+                      transition: 'all 0.3s ease-in-out',
+                      marginTop: editContextProfileData.mcpRequiresAuth ? '0.75rem' : '0'
+                    }}>
+                      <label style={labelStyle}>Authentication Token</label>
+                      <div style={{ position: 'relative' }}>
+                        <input 
+                          type={showEditToken ? "text" : "password"} 
+                          name="mcpAuthToken" 
+                          value={editContextProfileData.mcpAuthToken || ''} 
+                          onChange={handleEditTextChange} 
+                          placeholder="Bearer token or API key..." 
+                          style={{ ...inputStyle, paddingRight: '2.5rem' }} 
+                        />
+                        <i 
+                          className={`bx ${showEditToken ? 'bx-hide' : 'bx-show'}`} 
+                          onClick={() => setShowEditToken(!showEditToken)} 
+                          style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '1.1rem' }}
+                        ></i>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 </div>
 
               </div>

@@ -22,6 +22,8 @@ export interface AutomationWorkflow {
   createdAt?: string;
   updatedAt?: string;
   profiles?: any[] | null;
+  requiresAuth?: boolean | null;
+  authHeader?: string | null;
 }
 
 export interface UIAutomationWorkflow {
@@ -43,4 +45,6 @@ export interface UIAutomationWorkflow {
   isPinging?: boolean;
   isSaving?: boolean;
   profiles?: any[];
+  requiresAuth?: boolean;
+  authHeader?: string;
 }

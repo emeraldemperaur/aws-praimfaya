@@ -27,6 +27,8 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchBy, setSearchBy] = useState('name');
   const [isLoading, setIsLoading] = useState(true);
+  const [showCreateToken, setShowCreateToken] = useState(false);
+  const [showEditToken, setShowEditToken] = useState(false);
   const [automationWorkflows, setAutomationWorkflows] = useState<UIAutomationWorkflow[]>([]);
 
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -47,7 +49,9 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
     vectorFactor: 0,
     archived: false,
     inputParameters: [],
-    outputVariables: []
+    outputVariables: [],
+    requiresAuth: false,
+    authHeader: ''
   };
   
   const [newWorkflowData, setNewWorkflowData] = useState<Partial<UIAutomationWorkflow>>(initialWorkflowState);
@@ -81,7 +85,8 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
       selectionSet: [
         'id', 'name', 'description', 'tool', 'triggerURL', 'callbackURL',
         'inputParameters.*', 'outputVariables.*', 'pingSuccess', 'archived', 
-        'vectorFactor', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt', 'profiles.*'
+        'vectorFactor', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt', 'profiles.*',
+        'requiresAuth', 'authHeader'
       ]
     }).subscribe({
       next: (data: any) => {
@@ -176,7 +181,9 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
         vectorFactor: newWorkflowData.vectorFactor,
         archived: newWorkflowData.archived,
         inputParameters: cleanInputs,
-        outputVariables: cleanOutputs
+        outputVariables: cleanOutputs,
+        requiresAuth: newWorkflowData.requiresAuth || false,
+        authHeader: newWorkflowData.requiresAuth ? (newWorkflowData.authHeader?.trim() || null) : null
       });
       setIsCreateModalOpen(false);
       setNewWorkflowData(initialWorkflowState);
@@ -245,7 +252,9 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
         vectorFactor: editWorkflowData.vectorFactor,
         archived: editWorkflowData.archived,
         inputParameters: cleanInputs,
-        outputVariables: cleanOutputs
+        outputVariables: cleanOutputs,
+        requiresAuth: editWorkflowData.requiresAuth || false,
+        authHeader: editWorkflowData.requiresAuth ? (editWorkflowData.authHeader?.trim() || null) : null
       });
       setIsEditModalOpen(false);
     } catch (err) {
@@ -660,6 +669,35 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
                   <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>Please enter a valid HTTP/HTTPS URL.</p>
                 )}
               </div>
+              <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <input type="checkbox" name="requiresAuth" checked={newWorkflowData.requiresAuth || false} onChange={handleCreateToggleChange} style={{ cursor: 'pointer' }} />
+                <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Authentication Required</span>
+              </div>
+
+              <div style={{
+                maxHeight: newWorkflowData.requiresAuth ? '100px' : '0',
+                opacity: newWorkflowData.requiresAuth ? 1 : 0,
+                overflow: 'hidden',
+                transition: 'all 0.3s ease-in-out',
+                marginTop: newWorkflowData.requiresAuth ? '0.75rem' : '0'
+              }}>
+                <label style={labelStyle}>Authentication Token</label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type={showCreateToken ? "text" : "password"} 
+                    name="authHeader" 
+                    value={newWorkflowData.authHeader || ''} 
+                    onChange={handleCreateTextChange} 
+                    placeholder="Bearer token or API key..." 
+                    style={{ ...inputStyle, paddingRight: '2.5rem' }} 
+                  />
+                  <i 
+                    className={`bx ${showCreateToken ? 'bx-hide' : 'bx-show'}`} 
+                    onClick={() => setShowCreateToken(!showCreateToken)} 
+                    style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '1.1rem' }}
+                  ></i>
+                </div>
+              </div>
               <hr style={{ borderColor: darkMode ? '#374151' : '#e5e7eb', margin: '0.5rem 0' }} />
               
               <div style={{ display: 'flex', gap: '1rem', flexGrow: 1 }}>
@@ -809,6 +847,35 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
                 {editWorkflowData.callbackURL && !isEditValidCallback && (
                   <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>Please enter a valid HTTP/HTTPS URL.</p>
                 )}
+              </div>
+              <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <input type="checkbox" name="requiresAuth" checked={editWorkflowData.requiresAuth || false} onChange={handleEditToggleChange} style={{ cursor: 'pointer' }} />
+                <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Authentication Required</span>
+              </div>
+
+              <div style={{
+                maxHeight: editWorkflowData.requiresAuth ? '100px' : '0',
+                opacity: editWorkflowData.requiresAuth ? 1 : 0,
+                overflow: 'hidden',
+                transition: 'all 0.3s ease-in-out',
+                marginTop: editWorkflowData.requiresAuth ? '0.75rem' : '0'
+              }}>
+                <label style={labelStyle}>Authentication Token</label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type={showEditToken ? "text" : "password"} 
+                    name="authHeader" 
+                    value={editWorkflowData.authHeader || ''} 
+                    onChange={handleEditTextChange} 
+                    placeholder="Bearer token or API key..." 
+                    style={{ ...inputStyle, paddingRight: '2.5rem' }} 
+                  />
+                  <i 
+                    className={`bx ${showEditToken ? 'bx-hide' : 'bx-show'}`} 
+                    onClick={() => setShowEditToken(!showEditToken)} 
+                    style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '1.1rem' }}
+                  ></i>
+                </div>
               </div>
             </div>
             <hr style={{ borderColor: darkMode ? '#374151' : '#e5e7eb', margin: '0.5rem 0' }} />
