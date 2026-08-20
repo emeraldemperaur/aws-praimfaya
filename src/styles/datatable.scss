@@ -1,6 +1,7 @@
 .table-responsive-wrapper {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch; 
   border-radius: 0.5rem;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 
@@ -27,15 +28,17 @@
 
 .custom-data-table {
   width: 100%;
+  min-width: 850px; 
   table-layout: fixed;
   border-collapse: collapse;
   text-align: left;
   font-family: inherit;
 
   th, td {
-    padding: 1rem 1.5rem;
+    padding: 1rem 1.25rem;
     border-bottom: 1px solid var(--tbl-border);
     white-space: nowrap; 
+    vertical-align: middle;
   }
 
   .table-header th {
@@ -73,19 +76,28 @@
   gap: 1rem;
 
   img {
-    width: 45px;
-    height: 45px;
+    width: 42px;
+    height: 42px;
     border-radius: 50%;
     object-fit: cover;
+    flex-shrink: 0;
   }
 
   .user-info {
     display: flex;
     flex-direction: column;
     font-family: "Bodoni Moda Variable", sans-serif;
+    min-width: 0;
+    flex-grow: 1;
 
-    .primary-text { font-weight: 600; color: var(--tbl-text); }
-    .secondary-text { font-size: 0.875rem; color: var(--tbl-secondary-text); }
+    .primary-text { 
+      font-weight: 600; 
+      color: var(--tbl-text); 
+    }
+    .secondary-text { 
+      font-size: 0.85rem; 
+      color: var(--tbl-secondary-text); 
+    }
   }
 }
 
@@ -93,8 +105,8 @@
   display: flex;
   flex-direction: column;
   font-family: "Bodoni Moda Variable", sans-serif;
-  .primary-text { color: var(--tbl-text); }
-  .secondary-text { font-size: 0.875rem; color: var(--tbl-secondary-text); }
+  .primary-text { color: var(--tbl-text); font-weight: 600; }
+  .secondary-text { font-size: 0.85rem; color: var(--tbl-secondary-text); }
 }
 
 .tbl-badge {
@@ -110,33 +122,12 @@
   &.warning { background-color: rgba(245, 158, 11, 0.15); color: #f59e0b; }
   &.danger  { background-color: rgba(239, 68, 68, 0.15); color: #ef4444; }
   &.info    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-  &.amazon    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-  &.meta    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-  &.gemini    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-  &.gpt    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-  &.anthropic    { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-}
-
-.tbl-action-btn {
-  background: transparent;
-  border: none;
-  color: #3b82f6; 
-  cursor: pointer;
-  font-weight: 700 !important;
-  font-size: 0.875rem;
-  padding: 0;
-  text-transform: uppercase;
-  font-family: "Bodoni Moda Variable", sans-serif;
-
-  &:hover { 
-    text-decoration: none !important; 
-  }
 }
 
 .checkbox-cell {
-  width: 40px; 
+  width: 48px !important; 
   text-align: center;
-  padding-right: 0 !important; 
+  padding: 1rem 0.5rem !important;
 }
 
 .tbl-checkbox {
@@ -157,7 +148,8 @@
 .tbl-action-group {
   display: flex;
   align-items: center;
-  gap: 1rem; 
+  gap: 0.75rem; 
+  flex-wrap: nowrap;
 }
 
 .tbl-action-btn {
@@ -165,10 +157,11 @@
   border: none;
   cursor: pointer;
   font-weight: 700 !important;
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   padding: 0;
   text-transform: uppercase;
   transition: opacity 0.2s ease;
+  font-family: "Bodoni Moda Variable", sans-serif;
 
   &:hover { 
     text-decoration: underline;

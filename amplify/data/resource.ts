@@ -81,6 +81,7 @@ const schema = a.schema({
       description: a.string(),
       tool: a.ref('AutomationTool').required(),
       triggerURL: a.string().required(),
+      authHeader: a.string(),
       callbackURL: a.string(),
       inputParameters: a.ref('WorkflowParameter').array(),
       outputVariables: a.ref('WorkflowParameter').array(),

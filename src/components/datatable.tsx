@@ -23,7 +23,6 @@ interface DataTableProps<T> {
   isLoading?: boolean;
   onSelectionChange?: (selectedRows: T[]) => void;
   initialSort?: SortConfig<T> | null;
-  // --- NEW PAGINATION PROPS ---
   pagination?: boolean;
   defaultPageSize?: number;
   pageSizeOptions?: number[];
@@ -126,7 +125,7 @@ function DataTable<T>({
 
   return (
     <div className={`table-responsive-wrapper ${darkMode ? 'dark-mode' : ''}`}>
-      <table className="custom-data-table" style={{ width: '100%', tableLayout: 'fixed' }}>
+      <table className="custom-data-table">
         
         <thead className="table-header">
           <tr>

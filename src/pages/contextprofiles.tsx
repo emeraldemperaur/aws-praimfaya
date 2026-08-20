@@ -12,6 +12,9 @@ import { getModelIcon, MODEL_FAMILY_DESCRIPTIONS } from "../utils/voltaire";
 import type { UIContextProfile } from "../data/contextprofile";
 import { getUserEmail } from "../utils/asimov";
 
+const client = generateClient() as any;
+const contextProfilesClient = client.models.ContextProfile;
+
 const DEFAULT_PROFILE_STATE = {
   name: '',
   description: '',
@@ -48,8 +51,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   const [editWorkflowSearch, setEditWorkflowSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   
-  const client = generateClient() as any;
-  const contextProfilesClient = client.models.ContextProfile;
   const [contextProfiles, setContextProfiles] = useState<UIContextProfile[]>([]);
   const [foundationModels, setFoundationModels] = useState<any[]>([]);
   const [vectorCollections, setVectorCollections] = useState<any[]>([]);
@@ -80,7 +81,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       vcSub.unsubscribe();
       wfSub.unsubscribe();
     };
-  }, [client]);
+  }, []);
 
   useEffect(() => {
     const contextProfilesSubscription = contextProfilesClient.observeQuery({
@@ -109,7 +110,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     });
 
     return () => contextProfilesSubscription.unsubscribe();
-  }, [contextProfilesClient]);
+  }, []);
   
   useEffect(() => {
     if (editContextProfile) {
@@ -169,119 +170,146 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   }, [contextProfiles, searchTerm, searchBy, foundationModels]);
 
   const columns: ColumnDef<UIContextProfile>[] = [
-      {
-        header: 'Name',
-        accessor: 'name',
-        sortable: true,
-        width: '45%', 
-        render: (row) => {
-          const linkedModel = foundationModels.find(fm => fm.id === row.llmModelId);
-          const apiIdentifier = linkedModel?.apiIdentifier || row.foundationModel?.apiIdentifier;
-          return (
-            <div className="tbl-cell-user">
-              <img src={getModelIcon(apiIdentifier)} alt={row.name} />
-              <div className="user-info">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <span className="primary-text">{row.name}</span>
+    {
+      header: 'Name',
+      accessor: 'name',
+      sortable: true,
+      width: '45%', 
+      render: (row) => {
+        const linkedModel = foundationModels.find(fm => fm.id === row.llmModelId);
+        const apiIdentifier = linkedModel?.apiIdentifier || row.foundationModel?.apiIdentifier;
+        return (
+          <div className="tbl-cell-user" style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: '300px' }}>
+            <img src={getModelIcon(apiIdentifier)} alt={row.name} style={{ flexShrink: 0 }} />
+            <div className="user-info" style={{ minWidth: 0, flexGrow: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.2rem' }}>
+                <span 
+                  className="primary-text" 
+                  style={{ 
+                    display: '-webkit-box', 
+                    WebkitLineClamp: 2, 
+                    WebkitBoxOrient: 'vertical', 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word'
+                  }}
+                >
+                  {row.name}
+                </span>
+                <span style={{ 
+                  padding: '0.15rem 0.4rem', borderRadius: '999px', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.05em',
+                  backgroundColor: row.role === 'SUPERVISOR' ? '#4c1d95' : (row.role === 'COLLABORATOR' ? '#1e3a8a' : '#064e3b'),
+                  color: row.role === 'SUPERVISOR' ? '#ddd6fe' : (row.role === 'COLLABORATOR' ? '#bfdbfe' : '#a7f3d0'),
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}>
+                  {row.role || 'STANDARD'}
+                </span>
+                {row.role !== 'STANDARD' && (
                   <span style={{ 
-                    padding: '0.15rem 0.4rem', borderRadius: '999px', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.05em',
-                    backgroundColor: row.role === 'SUPERVISOR' ? '#4c1d95' : (row.role === 'COLLABORATOR' ? '#1e3a8a' : '#064e3b'),
-                    color: row.role === 'SUPERVISOR' ? '#ddd6fe' : (row.role === 'COLLABORATOR' ? '#bfdbfe' : '#a7f3d0')
+                    fontSize: '0.65rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.2rem',
+                    color: row.provisioningStatus === 'READY' ? '#10b981' : (row.provisioningStatus === 'PROVISIONING' ? '#3b82f6' : '#9ca3af'),
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
                   }}>
-                    {row.role || 'STANDARD'}
+                    {row.provisioningStatus === 'PROVISIONING' && <i className="fa-solid fa-circle-notch fa-spin"></i>}
+                    {row.provisioningStatus === 'READY' ? 'AWS Synced' : (row.provisioningStatus === 'PROVISIONING' ? 'Syncing...' : 'Out of Sync')}
                   </span>
-                  {row.role !== 'STANDARD' && (
-                    <span style={{ 
-                      fontSize: '0.65rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.2rem',
-                      color: row.provisioningStatus === 'READY' ? '#10b981' : (row.provisioningStatus === 'PROVISIONING' ? '#3b82f6' : '#9ca3af')
-                    }}>
-                      {row.provisioningStatus === 'PROVISIONING' && <i className="fa-solid fa-circle-notch fa-spin"></i>}
-                      {row.provisioningStatus === 'READY' ? 'AWS Synced' : (row.provisioningStatus === 'PROVISIONING' ? 'Syncing...' : 'Out of Sync')}
-                    </span>
-                  )}
-                  {!row.isActive && (
-                    <span style={{ fontSize: '0.65rem', color: '#ef4444', fontWeight: 600 }}>INACTIVE</span>
-                  )}
-                </div>
-                <span className="secondary-text" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>{row.description}</span>
+                )}
+                {!row.isActive && (
+                  <span style={{ fontSize: '0.65rem', color: '#ef4444', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>INACTIVE</span>
+                )}
               </div>
-            </div>
-          );
-        }
-      },
-      {
-        header: 'Context Boundary',
-        accessor: 'temperature',
-        sortable: true,
-        width: '20%', 
-        render: (row) => (
-          <div className="tbl-cell-stacked" style={{ whiteSpace: 'nowrap' }}>
-            <span className="primary-text">{row.temperature || 0}° <a className="secondary-text">ᵀᵉᵐᵖᵉʳᵃᵗᵘʳᵉ</a></span>
-            <span className="secondary-text">{row.systemPrompt.replace(/\s/g, "").length > 0 ? `${row.systemPrompt.replace(/\s/g, "").length} ˡᵉᵗᵗᵉʳ RAG prompt` : 'No system prompt'}</span>
-          </div>
-        )
-      },
-      {
-        header: 'Vector Embeddings',
-        accessor: 'vectorCollectionId',
-        sortable: false,
-        width: '20%', 
-        render: (row) => {
-          let collectionBadgeClass = 'info';
-          if (row.isActive === true) collectionBadgeClass = 'success';
-          if (row.isActive === false) collectionBadgeClass = 'danger';
-          if (!row.vectorCollection) collectionBadgeClass = 'warning'; 
-          const linkedCollection = vectorCollections.find(vc => vc.id === row.vectorCollectionId);
-          const collectionName = linkedCollection?.name || row.vectorCollection?.name || 'No Vector Collection';
-  
-          return (
-            <div style={{ whiteSpace: 'nowrap' }}>
-              <span className={`tbl-badge ${collectionBadgeClass}`}>
-                {collectionName}
+              <span 
+                className="secondary-text" 
+                style={{ 
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'normal',
+                  width: '100%' 
+                }}
+              >
+                {row.description || 'No description provided'}
               </span>
             </div>
-          );
-        }
-      },
-      {
-        header: 'Actions',
-        accessor: 'actions',
-        width: '15%', 
-        render: (row) => (
-          <div className="tbl-action-group" style={{ whiteSpace: 'nowrap' }}>
-            <button 
-              className="tbl-action-btn view-btn" 
-              onClick={() => {
-                setViewContextProfile(row);
-                setIsViewModalOpen(true);
-              }}
-            >
-              View
-            </button>
-            <button 
-              className="tbl-action-btn edit-btn" 
-              onClick={() => {
-                setEditContextProfile(row);
-                setEditWorkflowSearch('');
-                setIsEditModalOpen(true);
-              }}
-            >
-              Edit
-            </button>
-            <button 
-              className="tbl-action-btn delete-btn" 
-              onClick={() => {
-                setDeleteContextProfile(row);
-                setIsDeleteModalOpen(true);
-            }}
-            >
-              Delete
-            </button>
           </div>
         )
       }
-    ];
-  
+    },
+    {
+      header: 'Context Boundary',
+      accessor: 'temperature',
+      sortable: true,
+      width: '25%', 
+      render: (row) => (
+        <div className="tbl-cell-stacked" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+          <span className="primary-text" style={{ display: 'block' }}>
+            {row.temperature || 0}° <a className="secondary-text">ᵀᵉᵐᵖᵉʳᵃᵗᵘʳᵉ</a>
+          </span>
+          <span className="secondary-text" style={{ display: 'block' }}>
+            {row.systemPrompt.replace(/\s/g, "").length > 0 ? `${row.systemPrompt.replace(/\s/g, "").length} letter RAG prompt` : 'No system prompt'}
+          </span>
+        </div>
+      )
+    },
+    {
+      header: 'Embedding',
+      accessor: 'vectorCollectionId',
+      sortable: false,
+      width: '150px', 
+      render: (row) => {
+        let collectionBadgeClass = 'info';
+        if (row.isActive === true) collectionBadgeClass = 'success';
+        if (row.isActive === false) collectionBadgeClass = 'danger';
+        if (!row.vectorCollection) collectionBadgeClass = 'warning'; 
+        const linkedCollection = vectorCollections.find(vc => vc.id === row.vectorCollectionId);
+        const collectionName = linkedCollection?.name || row.vectorCollection?.name || 'NO COLLECTION';
+
+        return (
+          <div className="tbl-cell-stacked">
+            <span 
+              className={`tbl-badge ${collectionBadgeClass}`} 
+              style={{ 
+                width: 'fit-content', 
+                maxWidth: '130px', 
+                overflow: 'hidden', 
+                textOverflow: 'ellipsis', 
+                whiteSpace: 'nowrap',
+                display: 'inline-block'
+              }}
+              title={collectionName}
+            >
+              {collectionName}
+            </span>
+          </div>
+        )
+      }
+    },
+    {
+      header: 'Actions',
+      accessor: 'actions',
+      sortable: false,
+      width: '200px', 
+      render: (row) => (
+        <div className="tbl-action-group" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="tbl-action-btn view-btn" onClick={() => { setViewContextProfile(row); setIsViewModalOpen(true); }}>
+            View
+          </button>
+          <button className="tbl-action-btn edit-btn" onClick={() => { setEditContextProfile(row); setEditWorkflowSearch(''); setIsEditModalOpen(true); }}>
+            Edit
+          </button>
+          <button className="tbl-action-btn delete-btn" onClick={() => { setDeleteContextProfile(row); setIsDeleteModalOpen(true); }}>
+            Delete
+          </button>
+        </div>
+      )
+    }
+  ];
+
   const handleNewTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setNewContextProfileData((prev) => ({ ...prev, [name]: value }));
@@ -504,7 +532,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         onFilterChange={setSearchBy}
         filterOptions={filterOptions}
       />
-      <div style={{ padding: '2rem' }}>
+      <div style={{ padding: '2rem', boxSizing: 'border-box', maxWidth: '100%' }}>
       <DataTable 
           columns={columns} 
           data={filteredProfiles} 

@@ -4,6 +4,9 @@ import { data } from './data/resource';
 import { vectorCollectionsS3, ragArtifactsS3 } from './storage/resource';
 import { processVector } from './functions/process-vector/resource';
 import { updateVectorStatus } from './functions/update-vector-status/resource';
+import { agentProvisioner } from './functions/agent-provisioner/resource';
+import { webhookRouter } from './functions/webhook-router/resource';
+import { agentReaper } from './functions/agent-smith/resource';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -12,7 +15,9 @@ import * as s3vectors from 'aws-cdk-lib/aws-s3vectors';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
+import * as lambda from 'aws-cdk-lib/aws-lambda'; 
 import { RemovalPolicy } from 'aws-cdk-lib';
+import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 
 const backend = defineBackend({
   auth,
@@ -20,11 +25,17 @@ const backend = defineBackend({
   vectorCollectionsS3,
   ragArtifactsS3,
   processVector,
-  updateVectorStatus
+  updateVectorStatus,
+  agentProvisioner,
+  webhookRouter,
+  agentReaper
 });
 
 const customStack = backend.createStack('BedrockAIStack');
 
+// =================================================================================
+// PART 1: KNOWLEDGE BASE & VECTOR DB INFRASTRUCTURE (EXISTING)
+// =================================================================================
 
 const vectorBucket = new s3vectors.CfnVectorBucket(customStack, 'CentralVectorBucket', {});
 
@@ -56,7 +67,6 @@ const multimodalBucket = new s3.Bucket(customStack, 'MultimodalStorageBucket', {
   removalPolicy: RemovalPolicy.DESTROY, 
   autoDeleteObjects: true,
 });
-
 
 const bedrockKbRole = new iam.Role(customStack, 'BedrockKBRole', {
   assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
@@ -181,7 +191,7 @@ new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
   }
 });
 
-const processVectorLambda = backend.processVector.resources.lambda;
+const processVectorLambda = backend.processVector.resources.lambda as lambda.Function;
 
 backend.vectorCollectionsS3.resources.bucket.grantReadWrite(processVectorLambda);
 
@@ -200,7 +210,7 @@ backend.vectorCollectionsS3.resources.bucket.addEventNotification(
   { prefix: 'vector-collections/' }
 );
 
-const statusLambda = backend.updateVectorStatus.resources.lambda;
+const statusLambda = backend.updateVectorStatus.resources.lambda as lambda.Function;
 
 const bedrockEventRule = new events.Rule(customStack, 'BedrockIngestionStatusRule', {
   eventPattern: {
@@ -210,3 +220,77 @@ const bedrockEventRule = new events.Rule(customStack, 'BedrockIngestionStatusRul
 });
 
 bedrockEventRule.addTarget(new targets.LambdaFunction(statusLambda));
+
+
+// =================================================================================
+// PART 2: MULTI-AGENT PROVISIONING & WEBHOOK ROUTING INFRASTRUCTURE (NEW)
+// =================================================================================
+
+// 1. EXTRACT CDK RESOURCES AS CONCRETE LAMBDA FUNCTIONS
+// Casting to lambda.Function exposes the .addEnvironment() method required below
+const provisionerLambda = backend.agentProvisioner.resources.lambda as lambda.Function;
+const routerLambda = backend.webhookRouter.resources.lambda as lambda.Function;
+const reaperLambda = backend.agentReaper.resources.lambda as lambda.Function;
+
+// 2. EXTRACT DYNAMODB TABLES
+const profilesTable = backend.data.resources.tables["ContextProfile"];
+const workflowsTable = backend.data.resources.tables["ContextWorkflow"];
+const profileWorkflowsTable = backend.data.resources.tables["ContextProfileWorkflow"];
+
+// 3. ATTACH DYNAMODB STREAM TO PROVISIONER
+provisionerLambda.addEventSource(new DynamoEventSource(profilesTable, {
+  startingPosition: lambda.StartingPosition.LATEST,
+  batchSize: 1, 
+  retryAttempts: 3
+}));
+
+// 4. PASS ENVIRONMENT VARIABLES TO LAMBDAS
+provisionerLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
+provisionerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
+provisionerLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
+provisionerLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn);
+provisionerLambda.addEnvironment('ACCOUNT_ID', customStack.account);
+
+routerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
+reaperLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
+
+// 5. GRANT DYNAMODB PERMISSIONS
+profilesTable.grantReadWriteData(provisionerLambda);
+profilesTable.grantReadWriteData(reaperLambda);
+workflowsTable.grantReadData(provisionerLambda);
+profileWorkflowsTable.grantReadData(provisionerLambda);
+workflowsTable.grantReadData(routerLambda);
+
+// 6. CREATE BEDROCK IAM EXECUTION ROLE
+const bedrockAgentRole = new iam.Role(customStack, 'BedrockAgentExecutionRole', {
+  assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+  managedPolicies: [
+    iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonBedrockFullAccess')
+  ]
+});
+provisionerLambda.addEnvironment('BEDROCK_AGENT_ROLE_ARN', bedrockAgentRole.roleArn);
+
+// 7. GRANT BEDROCK ADMIN PERMISSIONS TO PROVISIONER AND REAPER
+const bedrockAdminPolicy = new iam.PolicyStatement({
+  actions: [
+    "bedrock:CreateAgent",
+    "bedrock:UpdateAgent",
+    "bedrock:DeleteAgent",
+    "bedrock:CreateAgentActionGroup",
+    "bedrock:AssociateAgentKnowledgeBase",
+    "bedrock:AssociateAgentCollaborator",
+    "bedrock:PrepareAgent",
+    "bedrock:CreateAgentAlias",
+    "iam:PassRole" 
+  ],
+  resources: ["*"], 
+});
+
+provisionerLambda.addToRolePolicy(bedrockAdminPolicy);
+reaperLambda.addToRolePolicy(bedrockAdminPolicy);
+
+// 8. GRANT BEDROCK PERMISSION TO INVOKE THE WEBHOOK ROUTER
+routerLambda.addPermission('AllowBedrockInvoke', {
+  principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+  action: 'lambda:InvokeFunction',
+});
