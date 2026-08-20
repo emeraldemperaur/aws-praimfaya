@@ -2,6 +2,7 @@ export type AutomationTool = 'N8N' | 'ZAPIER' | 'MAKE' | 'PIPEDREAM';
 
 export interface WorkflowParameter {
   variable: string;
+  type?: string;
   isRequired: boolean;
 }
 

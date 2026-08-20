@@ -42,7 +42,7 @@ export const handler: DynamoDBStreamHandler = async (event) => {
                
                if (wf.inputParameters && wf.inputParameters.length > 0) {
                    const inputs = wf.inputParameters
-                       .map((p: any) => `${p.variable}${p.isRequired ? ' (REQUIRED)' : ' (Optional)'}`)
+                       .map((p: any) => `${p.variable} [Type: ${p.type || 'String'}]${p.isRequired ? ' (REQUIRED)' : ' (Optional)'}`)
                        .join(', ');
                    dynamicInstruction += `Required Input JSON Keys: [${inputs}]\n`;
                } else {
@@ -51,7 +51,7 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 
                if (wf.outputVariables && wf.outputVariables.length > 0) {
                    const outputs = wf.outputVariables
-                       .map((p: any) => p.variable)
+                       .map((p: any) => `${p.variable} [Type: ${p.type || 'String'}]`)
                        .join(', ');
                    dynamicInstruction += `Expected Response JSON Keys: [${outputs}]\n`;
                }
@@ -113,6 +113,7 @@ export const handler: DynamoDBStreamHandler = async (event) => {
                 agentVersion: "DRAFT",
                 collaboratorName: collab.name.replace(/[^a-zA-Z0-9-]/g, '').substring(0, 32),
                 collaborationInstruction: collab.description,
+                
                 agentDescriptor: { aliasArn: `arn:aws:bedrock:${process.env.AWS_REGION}:${process.env.ACCOUNT_ID}:agent-alias/${collab.awsAgentId}/${collab.awsAliasId}` }
               }));
             }

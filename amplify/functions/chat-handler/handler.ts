@@ -16,7 +16,6 @@ const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE_NAME!;
 const PROFILE_WORKFLOWS_TABLE = process.env.PROFILE_WORKFLOWS_TABLE_NAME!;
 const WEBHOOK_ROUTER_ARN = process.env.WEBHOOK_ROUTER_LAMBDA_ARN!;
 
-
 interface CachedTools {
     tools: any[];
     expiresAt: number;
@@ -40,7 +39,6 @@ export const handler = async (event: ChatHandlerEvent) => {
 
         const history = event.chatHistory ? JSON.parse(event.chatHistory) : [];
 
-        
         const profileRes = await dynamodb.send(new GetCommand({
             TableName: PROFILES_TABLE,
             Key: { id: event.profileId }
@@ -80,7 +78,6 @@ export const handler = async (event: ChatHandlerEvent) => {
             }
         }
 
-    
         const assignedWorkflows = await getAssignedWorkflows(profile.id);
         
         const workflowTools = assignedWorkflows.map(wf => ({
@@ -101,7 +98,6 @@ export const handler = async (event: ChatHandlerEvent) => {
         const allTools = [...workflowTools, ...mcpTools];
         const toolConfig = allTools.length > 0 ? { tools: allTools } : undefined;
 
-        
         const messages = [...history, { role: "user", content: [{ text: event.userMessage }] }];
 
         let converseResponse = await bedrockRuntime.send(new ConverseCommand({
@@ -114,7 +110,6 @@ export const handler = async (event: ChatHandlerEvent) => {
             }
         }));
 
-        
         const outputMessage = converseResponse.output?.message;
         const toolUseBlocks = outputMessage?.content?.filter(block => block.toolUse) || [];
 
@@ -160,7 +155,6 @@ export const handler = async (event: ChatHandlerEvent) => {
                 });
             }
 
-           
             messages.push({ role: "user", content: toolResults });
 
             converseResponse = await bedrockRuntime.send(new ConverseCommand({
@@ -170,7 +164,6 @@ export const handler = async (event: ChatHandlerEvent) => {
             }));
         }
 
-        
         const responseText = converseResponse.output?.message?.content?.[0]?.text || "No response text generated.";
 
         return {
@@ -190,9 +183,6 @@ export const handler = async (event: ChatHandlerEvent) => {
     }
 };
 
-
-
-// 1. Invoke Webhook Router Lambda Function
 async function invokeWebhookRouter(workflowId: string, payload: any) {
     try {
         const command = new InvokeCommand({
@@ -284,6 +274,27 @@ async function executeMcpTool(mcpUrl: string, toolName: string, args: any) {
     }
 }
 
+function mapToBedrockType(uiType?: string): string {
+    if (!uiType) return "string";
+    switch (uiType.toLowerCase()) {
+        case 'number':
+        case 'float':
+            return "number";
+        case 'boolean':
+            return "boolean";
+        case 'array':
+        case 'tuple':
+            return "array";
+        case 'object':
+            return "object";
+        case 'date':
+        case 'datetime':
+        case 'string':
+        default:
+            return "string";
+    }
+}
+
 function buildJsonSchemaFromParams(inputParameters?: any[]) {
     if (!inputParameters || inputParameters.length === 0) {
         return { type: "object", properties: {} };
@@ -293,9 +304,11 @@ function buildJsonSchemaFromParams(inputParameters?: any[]) {
     const required: string[] = [];
 
     inputParameters.forEach(param => {
+        const bedrockType = mapToBedrockType(param.type);
+        
         properties[param.variable] = {
-            type: param.type || "string",
-            description: param.description || `Input parameter: ${param.variable}`
+            type: bedrockType,
+            description: `Input parameter: ${param.variable} (Format: ${param.type || 'String'})`
         };
         if (param.isRequired) required.push(param.variable);
     });

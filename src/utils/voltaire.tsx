@@ -232,6 +232,14 @@ export const MODEL_FAMILY_DESCRIPTIONS: Record<string, string> = {
   'LUMA': 'Primarily harnessed for high-fidelity physical world modeling and advanced continuous generation.'
 };
 
+export const ROLE_DESCRIPTIONS: Record<string, string> = {
+  'STANDARD': 'An independent agent assistant that interacts directly with you to answer questions and complete tasks.',
+  'SUPERVISOR': 'A manager agent that oversees complex projects by breaking them down and delegating steps to specialized Collaborators.',
+  'COLLABORATOR': 'A highly-focused worker agent designed to complete specialized tasks assigned by a Supervisor.'
+};
+
+export const DATA_TYPES = ['String', 'Number', 'Float', 'Boolean', 'Array', 'Tuple', 'Date', 'DateTime', 'Object'];
+
 export const getInitials = (name: string) => {
   const parts = name.split(/[\s._-]+/);
   if (parts.length >= 2) {

@@ -8,12 +8,9 @@ import DataTable from "../components/datatable";
 import BottomRightModal from "../components/bottomrightmodal";
 import ExtraLargeModal from "../components/extralargemodal";
 import FullScreenModal from "../components/fullscreenmodal";
-import { getModelIcon, MODEL_FAMILY_DESCRIPTIONS } from "../utils/voltaire";
+import { getModelIcon, MODEL_FAMILY_DESCRIPTIONS, ROLE_DESCRIPTIONS } from "../utils/voltaire";
 import type { UIContextProfile } from "../data/contextprofile";
 import { getUserEmail } from "../utils/asimov";
-
-const client = generateClient() as any;
-const contextProfilesClient = client.models.ContextProfile;
 
 const DEFAULT_PROFILE_STATE = {
   name: '',
@@ -34,6 +31,9 @@ const DEFAULT_PROFILE_STATE = {
 };
 
 const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
+  const client = generateClient() as any;
+  const contextProfilesClient = client.models.ContextProfile;
+
   const [searchTerm, setSearchTerm] = useState('');
   const [searchBy, setSearchBy] = useState('name');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -730,7 +730,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         </div>
       </ExtraLargeModal>
 
-      {/* CREATE MODAL */}
       <FullScreenModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -782,6 +781,24 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                   </label>
                 ))}
               </div>
+              <div style={{ 
+                  marginTop: '0.75rem', 
+                  padding: '0.5rem 0.75rem', 
+                  backgroundColor: darkMode ? '#1f2937' : '#f3f4f6', 
+                  borderLeft: `3px solid ${darkMode ? '#60a5fa' : '#3b82f6'}`, 
+                  borderRadius: '0 0.375rem 0.375rem 0',
+                  transition: 'background-color 0.3s ease, border-color 0.3s ease'
+                }}>
+              <p key={newContextProfileData.role} style={{ 
+                margin: 0, 
+                fontSize: '0.75rem', 
+                color: darkMode ? '#9ca3af' : '#4b5563', 
+                lineHeight: 1.4,
+                animation: 'fadeIn 0.3s ease-in-out'
+              }}>
+                {ROLE_DESCRIPTIONS[newContextProfileData.role || 'STANDARD']}
+              </p>
+            </div>
             </div>
 
             <div>
@@ -905,7 +922,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                   {newContextProfileData.role !== 'SUPERVISOR' && (
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <label style={labelStyle}>Custom MCP Server URL (Optional)</label>
-                    <input type="url" name="customMcpUrl" value={newContextProfileData.customMcpUrl || ''} onChange={handleNewTextChange} placeholder="https://..." style={inputStyle} />
+                    <input type="url" name="customMcpUrl" value={newContextProfileData.customMcpUrl || ''} onChange={handleNewTextChange} placeholder="https://..." 
+                      style={inputStyle} autoComplete="off" data-1p-ignore />
                     
                     <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       <input type="checkbox" name="mcpRequiresAuth" checked={newContextProfileData.mcpRequiresAuth || false} onChange={handleNewToggleChange} style={{ cursor: 'pointer' }} />
@@ -928,6 +946,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                           onChange={handleNewTextChange} 
                           placeholder="Bearer token or API key..." 
                           style={{ ...inputStyle, paddingRight: '2.5rem' }} 
+                          autoComplete="new-password"
+                          data-1p-ignore
                         />
                         <i 
                           className={`bx ${showCreateToken ? 'bx-hide' : 'bx-show'}`} 
@@ -1056,6 +1076,24 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                   </label>
                 ))}
               </div>
+              <div style={{ 
+                marginTop: '0.75rem', 
+                padding: '0.5rem 0.75rem', 
+                backgroundColor: darkMode ? '#1f2937' : '#f3f4f6', 
+                borderLeft: `3px solid ${darkMode ? '#60a5fa' : '#3b82f6'}`, 
+                borderRadius: '0 0.375rem 0.375rem 0',
+                transition: 'background-color 0.3s ease, border-color 0.3s ease'
+              }}>
+                <p key={editContextProfileData.role} style={{ 
+                  margin: 0, 
+                  fontSize: '0.75rem', 
+                  color: darkMode ? '#9ca3af' : '#4b5563', 
+                  lineHeight: 1.4,
+                  animation: 'fadeIn 0.3s ease-in-out'
+                }}>
+                  {ROLE_DESCRIPTIONS[editContextProfileData.role || 'STANDARD']}
+              </p>
+            </div>
             </div>
 
             <div>

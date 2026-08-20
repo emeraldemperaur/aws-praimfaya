@@ -72,6 +72,7 @@ const schema = a.schema({
   WorkflowParameter: a
     .customType({
       variable: a.string().required(),
+      type: a.string(),
       isRequired: a.boolean().required(),
     }),
 

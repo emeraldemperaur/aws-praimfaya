@@ -20,6 +20,8 @@ const isValidURL = (urlString?: string | null): boolean => {
   }
 };
 
+const DATA_TYPES = ['String', 'Number', 'Float', 'Boolean', 'Array', 'Tuple', 'Date', 'DateTime', 'Object'];
+
 const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   const client = generateClient() as any;
   const contextWorkflowsClient = client.models.ContextWorkflow;
@@ -149,10 +151,10 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   const handleCreateAddParameter = (type: 'input' | 'output') => {
     const key = type === 'input' ? 'inputParameters' : 'outputVariables';
     const currentList = newWorkflowData[key] || [];
-    setNewWorkflowData(prev => ({ ...prev, [key]: [...currentList, { variable: '', isRequired: false }] }));
+    setNewWorkflowData(prev => ({ ...prev, [key]: [...currentList, { variable: '', type: 'String', isRequired: false }] }));
   };
 
-  const handleCreateUpdateParameter = (type: 'input' | 'output', index: number, field: 'variable' | 'isRequired', value: string | boolean) => {
+  const handleCreateUpdateParameter = (type: 'input' | 'output', index: number, field: 'variable' | 'isRequired' | 'type', value: string | boolean) => {
     const key = type === 'input' ? 'inputParameters' : 'outputVariables';
     const currentList = newWorkflowData[key] || [];
     const updatedList = currentList.map((param, i) => i === index ? { ...param, [field]: value } : param);
@@ -219,10 +221,10 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   const handleEditAddParameter = (type: 'input' | 'output') => {
     const key = type === 'input' ? 'inputParameters' : 'outputVariables';
     const currentList = editWorkflowData[key] || [];
-    setEditWorkflowData(prev => ({ ...prev, [key]: [...currentList, { variable: '', isRequired: false }] }));
+    setEditWorkflowData(prev => ({ ...prev, [key]: [...currentList, { variable: '', type: 'String', isRequired: false }] }));
   };
 
-  const handleEditUpdateParameter = (type: 'input' | 'output', index: number, field: 'variable' | 'isRequired', value: string | boolean) => {
+  const handleEditUpdateParameter = (type: 'input' | 'output', index: number, field: 'variable' | 'isRequired' | 'type', value: string | boolean) => {
     const key = type === 'input' ? 'inputParameters' : 'outputVariables';
     const currentList = editWorkflowData[key] || [];
     const updatedList = currentList.map((param, i) => i === index ? { ...param, [field]: value } : param);
@@ -424,6 +426,7 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
         icon={AddAutomationWorkflowSVG}
       />
 
+      {/* VIEW MODAL */}
       <ExtraLargeModal
         isOpen={isViewModalOpen}
         onClose={() => setIsViewModalOpen(false)}
@@ -442,7 +445,7 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
         }
       >
         <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: '2rem', minHeight: '450px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0, overflowX: 'hidden' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
                 <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem' }}>
@@ -493,7 +496,7 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', minWidth: 0, overflowX: 'hidden' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div>
               <h4 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827', fontSize: '1rem' }}>Endpoints</h4>
               <div style={{ marginTop: '1rem' }}>
@@ -518,9 +521,12 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
                 {viewWorkflow?.inputParameters?.filter(p => p.variable.trim() !== '').length ? (
                   <ul style={{ margin: 0, paddingLeft: '1.25rem', color: darkMode ? '#d1d5db' : '#4b5563', fontSize: '0.875rem' }}>
                     {viewWorkflow.inputParameters.filter(p => p.variable.trim() !== '').map((param: any, i: number) => (
-                      <li key={i} style={{ marginBottom: '0.25rem' }}>
+                      <li key={i} style={{ marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <code style={{ color: darkMode ? '#fca5a5' : '#dc2626' }}>{param.variable}</code>
-                        {param.isRequired && <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', color: '#ef4444' }}>(Req)</span>}
+                        <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '4px', backgroundColor: darkMode ? '#374151' : '#e5e7eb', color: darkMode ? '#d1d5db' : '#4b5563', fontWeight: 600, letterSpacing: '0.02em' }}>
+                          {param.type || 'String'}
+                        </span>
+                        {param.isRequired && <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 600 }}>(Req)</span>}
                       </li>
                     ))}
                   </ul>
@@ -533,9 +539,12 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
                 {viewWorkflow?.outputVariables?.filter(p => p.variable.trim() !== '').length ? (
                   <ul style={{ margin: 0, paddingLeft: '1.25rem', color: darkMode ? '#d1d5db' : '#4b5563', fontSize: '0.875rem' }}>
                     {viewWorkflow.outputVariables.filter(p => p.variable.trim() !== '').map((param: any, i: number) => (
-                      <li key={i} style={{ marginBottom: '0.25rem' }}>
+                      <li key={i} style={{ marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <code style={{ color: darkMode ? '#6ee7b7' : '#059669' }}>{param.variable}</code>
-                        {param.isRequired && <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', color: '#ef4444' }}>(Req)</span>}
+                        <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '4px', backgroundColor: darkMode ? '#374151' : '#e5e7eb', color: darkMode ? '#d1d5db' : '#4b5563', fontWeight: 600, letterSpacing: '0.02em' }}>
+                          {param.type || 'String'}
+                        </span>
+                        {param.isRequired && <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 600 }}>(Req)</span>}
                       </li>
                     ))}
                   </ul>
@@ -548,200 +557,216 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
         </div>
       </ExtraLargeModal>
 
-      <ExtraLargeModal
-          isOpen={isCreateModalOpen}
-          onClose={() => setIsCreateModalOpen(false)}
-          title="Create Automation Workflow Synopsis"
-          darkMode={darkMode}
-          footer={
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-              <button 
-                onClick={() => setIsCreateModalOpen(false)}
-                style={{ padding: '0.75rem 1.5rem', cursor: 'pointer', backgroundColor: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px' }}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleCreateSubmit}
-                disabled={!isWorkflowValid}
-                style={{ padding: '0.75rem 1.5rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', cursor: isWorkflowValid ? 'pointer' : 'not-allowed', opacity: isWorkflowValid ? 1 : 0.5 }}
-              >
-                Save Workflow
-              </button>
+      <FullScreenModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        title="Create Automation Workflow Synopsis"
+        darkMode={darkMode}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+            <button 
+              onClick={() => setIsCreateModalOpen(false)}
+              style={{ padding: '0.75rem 1.5rem', cursor: 'pointer', backgroundColor: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px' }}
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={handleCreateSubmit}
+              disabled={!isWorkflowValid}
+              style={{ padding: '0.75rem 1.5rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', cursor: isWorkflowValid ? 'pointer' : 'not-allowed', opacity: isWorkflowValid ? 1 : 0.5 }}
+            >
+              Save Workflow
+            </button>
+          </div>
+        }
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2rem' }}>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingRight: '2rem', borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
+            <div>
+              <label style={labelStyle}>Workflow Name <span style={{ color: '#ef4444' }}>*</span></label>
+              <input 
+                type="text" name="name" value={newWorkflowData.name} onChange={handleCreateTextChange}
+                placeholder="e.g., Salesforce Lead Generator"
+                style={{ ...inputStyle, borderColor: isNameDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db') }}
+              />
+              {isNameDuplicate && <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>A workflow with this name already exists.</p>}
             </div>
-          }
-        >
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0, overflowX: 'hidden' }}>
-              <div>
-                <label style={labelStyle}>Workflow Name <span style={{ color: '#ef4444' }}>*</span></label>
-                <input 
-                  type="text" name="name" value={newWorkflowData.name} onChange={handleCreateTextChange}
-                  placeholder="e.g., Salesforce Lead Generator"
-                  style={{ ...inputStyle, borderColor: isNameDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db') }}
-                />
-                {isNameDuplicate && <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>A workflow with this name already exists.</p>}
+            <div>
+              <label style={labelStyle}>Platform Tool <span style={{ color: '#ef4444' }}>*</span></label>
+              <select name="tool" value={newWorkflowData.tool || ''} onChange={handleCreateTextChange} style={inputStyle}>
+                <option value="" disabled>Select an Automation Platform...</option>
+                <option value="N8N">n8n</option>
+                <option value="ZAPIER">Zapier</option>
+                <option value="MAKE">Make</option>
+                <option value="PIPEDREAM">Pipedream</option>
+              </select>
+            </div>
+            
+            <div>
+              <label style={labelStyle}>Description <span style={{ color: '#ef4444' }}>*</span></label>
+              <textarea name="description" value={newWorkflowData.description || ''} onChange={handleCreateTextChange} placeholder="What does this workflow do when triggered?" rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+            </div>
+            
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={labelStyle}>Vector Factor (Priority Weight)</label>
+                <span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 600 }}>
+                  {newWorkflowData.vectorFactor || 0}
+                </span>
               </div>
-              
-              <div>
-                <label style={labelStyle}>Platform Tool <span style={{ color: '#ef4444' }}>*</span></label>
-                <select name="tool" value={newWorkflowData.tool || ''} onChange={handleCreateTextChange} style={inputStyle}>
-                  <option value="" disabled>Select an Automation Platform...</option>
-                  <option value="N8N">n8n</option>
-                  <option value="ZAPIER">Zapier</option>
-                  <option value="MAKE">Make</option>
-                  <option value="PIPEDREAM">Pipedream</option>
-                </select>
+              <input 
+                type="range" 
+                name="vectorFactor" 
+                min="0" 
+                max="10" 
+                step="1"
+                value={newWorkflowData.vectorFactor || 0} 
+                onChange={handleCreateNumberChange} 
+                style={{ width: '100%', boxSizing: 'border-box', cursor: 'pointer', marginTop: '0.5rem' }} 
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', marginTop: '0.25rem' }}>
+                <span>0 (Low)</span>
+                <span>10 (High)</span>
               </div>
-              
-              <div>
-                <label style={labelStyle}>Description <span style={{ color: '#ef4444' }}>*</span></label>
-                <textarea name="description" value={newWorkflowData.description || ''} onChange={handleCreateTextChange} placeholder="What does this workflow do when triggered?" rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
-              </div>
-              
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={labelStyle}>Vector Factor (Priority Weight)</label>
-                  <span style={{ fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 600 }}>
-                    {newWorkflowData.vectorFactor || 0}
-                  </span>
-                </div>
-                <input 
-                  type="range" 
-                  name="vectorFactor" 
-                  min="0" 
-                  max="10" 
-                  step="1"
-                  value={newWorkflowData.vectorFactor || 0} 
-                  onChange={handleCreateNumberChange} 
-                  style={{ width: '100%', boxSizing: 'border-box', cursor: 'pointer', marginTop: '0.5rem' }} 
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', marginTop: '0.25rem' }}>
-                  <span>0 (Low)</span>
-                  <span>10 (High)</span>
-                </div>
-                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
-                  Determines priority when Bedrock Agents select between overlapping tools.
-                </p>
-              </div>
-              
-              <div style={{ backgroundColor: darkMode ? '#374151' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}` }}>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                  <input type="checkbox" name="archived" checked={newWorkflowData.archived || false} onChange={handleCreateToggleChange} style={{ width: '1.25rem', height: '1.25rem', marginRight: '0.75rem', cursor: 'pointer' }} />
-                  <span style={{ fontWeight: 500, color: darkMode ? '#f9fafb' : '#111827' }}>Archive this Workflow (Inactive)</span>
-                </label>
-              </div>
+              <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
+                Determines priority when Bedrock Agents select between overlapping tools.
+              </p>
+            </div>
+            
+            <div style={{ backgroundColor: darkMode ? '#374151' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}` }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input type="checkbox" name="archived" checked={newWorkflowData.archived || false} onChange={handleCreateToggleChange} style={{ width: '1.25rem', height: '1.25rem', marginRight: '0.75rem', cursor: 'pointer' }} />
+                <span style={{ fontWeight: 500, color: darkMode ? '#f9fafb' : '#111827' }}>Archive this Workflow (Inactive)</span>
+              </label>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div>
+              <label style={labelStyle}>Webhook Trigger URL <span style={{ color: '#ef4444' }}>*</span></label>
+              <input 
+                type="url" 
+                name="triggerURL" 
+                value={newWorkflowData.triggerURL || ''} 
+                onChange={handleCreateTextChange} 
+                placeholder="https://hook.us1.make.com/..." 
+                style={{ 
+                  ...inputStyle, 
+                  borderColor: (newWorkflowData.triggerURL && !isValidTrigger) ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
+                }} 
+                autoComplete="off" 
+                data-1p-ignore
+              />
+              {newWorkflowData.triggerURL && !isValidTrigger && (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>Please enter a valid HTTP/HTTPS URL.</p>
+              )}
+            </div>
+            <div>
+              <label style={labelStyle}>Callback URL (Optional)</label>
+              <input 
+                type="url" 
+                name="callbackURL" 
+                value={newWorkflowData.callbackURL || ''} 
+                onChange={handleCreateTextChange} 
+                placeholder="https://api.yourdomain.com/webhook/callback" 
+                style={{ 
+                  ...inputStyle, 
+                  borderColor: (newWorkflowData.callbackURL && !isValidCallback) ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
+                }} 
+                autoComplete="off" 
+                data-1p-ignore
+              />
+              {newWorkflowData.callbackURL && !isValidCallback && (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>Please enter a valid HTTP/HTTPS URL.</p>
+              )}
+            </div>
+            <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <input type="checkbox" name="requiresAuth" checked={newWorkflowData.requiresAuth || false} onChange={handleCreateToggleChange} style={{ cursor: 'pointer' }} />
+              <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Authentication Required</span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0, overflowX: 'hidden' }}>
-              <div>
-                <label style={labelStyle}>Webhook Trigger URL <span style={{ color: '#ef4444' }}>*</span></label>
+            <div style={{
+              maxHeight: newWorkflowData.requiresAuth ? '100px' : '0',
+              opacity: newWorkflowData.requiresAuth ? 1 : 0,
+              overflow: 'hidden',
+              transition: 'all 0.3s ease-in-out',
+              marginTop: newWorkflowData.requiresAuth ? '0.75rem' : '0'
+            }}>
+              <label style={labelStyle}>Authentication Token</label>
+              <div style={{ position: 'relative' }}>
                 <input 
-                  type="url" 
-                  name="triggerURL" 
-                  value={newWorkflowData.triggerURL || ''} 
+                  type={showCreateToken ? "text" : "password"} 
+                  name="authHeader" 
+                  value={newWorkflowData.authHeader || ''} 
                   onChange={handleCreateTextChange} 
-                  placeholder="https://hook.us1.make.com/..." 
-                  style={{ 
-                    ...inputStyle, 
-                    borderColor: (newWorkflowData.triggerURL && !isValidTrigger) ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
-                  }} 
+                  placeholder="Bearer token or API key..." 
+                  style={{ ...inputStyle, paddingRight: '2.5rem' }} 
+                  autoComplete="new-password"
+                  data-1p-ignore
                 />
-                {newWorkflowData.triggerURL && !isValidTrigger && (
-                  <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>Please enter a valid HTTP/HTTPS URL.</p>
-                )}
+                <i 
+                  className={`bx ${showCreateToken ? 'bx-hide' : 'bx-show'}`} 
+                  onClick={() => setShowCreateToken(!showCreateToken)} 
+                  style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '1.1rem' }}
+                ></i>
               </div>
-              <div>
-                <label style={labelStyle}>Callback URL (Optional)</label>
-                <input 
-                  type="url" 
-                  name="callbackURL" 
-                  value={newWorkflowData.callbackURL || ''} 
-                  onChange={handleCreateTextChange} 
-                  placeholder="https://api.yourdomain.com/webhook/callback" 
-                  style={{ 
-                    ...inputStyle, 
-                    borderColor: (newWorkflowData.callbackURL && !isValidCallback) ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
-                  }} 
-                />
-                {newWorkflowData.callbackURL && !isValidCallback && (
-                  <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>Please enter a valid HTTP/HTTPS URL.</p>
-                )}
-              </div>
-              <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <input type="checkbox" name="requiresAuth" checked={newWorkflowData.requiresAuth || false} onChange={handleCreateToggleChange} style={{ cursor: 'pointer' }} />
-                <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Authentication Required</span>
-              </div>
+            </div>
+            <hr style={{ borderColor: darkMode ? '#374151' : '#e5e7eb', margin: '0.5rem 0' }} />
+            
+            <div style={{ display: 'flex', gap: '1rem', flexGrow: 1 }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h4 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>Input Parameters</h4>
+                  <button onClick={() => handleCreateAddParameter('input')} style={{ padding: '0.25rem 0.75rem', cursor: 'pointer', backgroundColor: darkMode ? '#374151' : '#e5e7eb', border: 'none', color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>+ Add</button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {!newWorkflowData.inputParameters?.length && <div style={{ padding: '1rem', textAlign: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '0.5rem', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '0.8rem' }}>No input parameters.</div>}
+                  {newWorkflowData.inputParameters?.map((param, index) => (
+                    <div key={`input-${index}`} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '0.5rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, boxSizing: 'border-box' }}>
+                      <input type="text" value={param.variable} onChange={(e) => handleCreateUpdateParameter('input', index, 'variable', e.target.value)} placeholder="e.g. emailAddress" style={{ ...inputStyle, flexGrow: 1, padding: '0.4rem', margin: 0, fontSize: '0.8rem', fontFamily: 'monospace', minWidth: '100px' }} />
+                      
+                      <select value={param.type || 'String'} onChange={(e) => handleCreateUpdateParameter('input', index, 'type', e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '0.3rem 0.5rem', margin: 0, fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0 }}>
+                        {DATA_TYPES.map(dt => <option key={dt} value={dt}>{dt}</option>)}
+                      </select>
 
-              <div style={{
-                maxHeight: newWorkflowData.requiresAuth ? '100px' : '0',
-                opacity: newWorkflowData.requiresAuth ? 1 : 0,
-                overflow: 'hidden',
-                transition: 'all 0.3s ease-in-out',
-                marginTop: newWorkflowData.requiresAuth ? '0.75rem' : '0'
-              }}>
-                <label style={labelStyle}>Authentication Token</label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type={showCreateToken ? "text" : "password"} 
-                    name="authHeader" 
-                    value={newWorkflowData.authHeader || ''} 
-                    onChange={handleCreateTextChange} 
-                    placeholder="Bearer token or API key..." 
-                    style={{ ...inputStyle, paddingRight: '2.5rem' }} 
-                  />
-                  <i 
-                    className={`bx ${showCreateToken ? 'bx-hide' : 'bx-show'}`} 
-                    onClick={() => setShowCreateToken(!showCreateToken)} 
-                    style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '1.1rem' }}
-                  ></i>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer', flexShrink: 0 }}>
+                        <input type="checkbox" checked={param.isRequired} onChange={(e) => handleCreateUpdateParameter('input', index, 'isRequired', e.target.checked)} /> Req
+                      </label>
+                      <button onClick={() => handleCreateRemoveParameter('input', index)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem', flexShrink: 0 }}><i className="bx bx-trash"></i></button>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <hr style={{ borderColor: darkMode ? '#374151' : '#e5e7eb', margin: '0.5rem 0' }} />
               
-              <div style={{ display: 'flex', gap: '1rem', flexGrow: 1 }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h4 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>Input Parameters</h4>
-                    <button onClick={() => handleCreateAddParameter('input')} style={{ padding: '0.25rem 0.75rem', cursor: 'pointer', backgroundColor: darkMode ? '#374151' : '#e5e7eb', border: 'none', color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>+ Add</button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {!newWorkflowData.inputParameters?.length && <div style={{ padding: '1rem', textAlign: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '0.5rem', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '0.8rem' }}>No input parameters.</div>}
-                    {newWorkflowData.inputParameters?.map((param, index) => (
-                      <div key={`input-${index}`} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '0.5rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, boxSizing: 'border-box' }}>
-                        <input type="text" value={param.variable} onChange={(e) => handleCreateUpdateParameter('input', index, 'variable', e.target.value)} placeholder="e.g. emailAddress" style={{ ...inputStyle, flexGrow: 1, padding: '0.4rem', margin: 0, fontSize: '0.8rem', fontFamily: 'monospace' }} />
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer' }}>
-                          <input type="checkbox" checked={param.isRequired} onChange={(e) => handleCreateUpdateParameter('input', index, 'isRequired', e.target.checked)} /> Req
-                        </label>
-                        <button onClick={() => handleCreateRemoveParameter('input', index)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem' }}><i className="bx bx-trash"></i></button>
-                      </div>
-                    ))}
-                  </div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h4 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>Output Variables</h4>
+                  <button onClick={() => handleCreateAddParameter('output')} style={{ padding: '0.25rem 0.75rem', cursor: 'pointer', backgroundColor: darkMode ? '#374151' : '#e5e7eb', border: 'none', color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>+ Add</button>
                 </div>
-                
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h4 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>Output Variables</h4>
-                    <button onClick={() => handleCreateAddParameter('output')} style={{ padding: '0.25rem 0.75rem', cursor: 'pointer', backgroundColor: darkMode ? '#374151' : '#e5e7eb', border: 'none', color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>+ Add</button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {!newWorkflowData.outputVariables?.length && <div style={{ padding: '1rem', textAlign: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '0.5rem', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '0.8rem' }}>No output variables.</div>}
-                    {newWorkflowData.outputVariables?.map((param, index) => (
-                      <div key={`output-${index}`} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '0.5rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, boxSizing: 'border-box' }}>
-                        <input type="text" value={param.variable} onChange={(e) => handleCreateUpdateParameter('output', index, 'variable', e.target.value)} placeholder="e.g. status" style={{ ...inputStyle, flexGrow: 1, padding: '0.4rem', margin: 0, fontSize: '0.8rem', fontFamily: 'monospace' }} />
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer' }}>
-                          <input type="checkbox" checked={param.isRequired} onChange={(e) => handleCreateUpdateParameter('output', index, 'isRequired', e.target.checked)} /> Req
-                        </label>
-                        <button onClick={() => handleCreateRemoveParameter('output', index)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem' }}><i className="bx bx-trash"></i></button>
-                      </div>
-                    ))}
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {!newWorkflowData.outputVariables?.length && <div style={{ padding: '1rem', textAlign: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '0.5rem', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '0.8rem' }}>No output variables.</div>}
+                  {newWorkflowData.outputVariables?.map((param, index) => (
+                    <div key={`output-${index}`} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '0.5rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, boxSizing: 'border-box' }}>
+                      <input type="text" value={param.variable} onChange={(e) => handleCreateUpdateParameter('output', index, 'variable', e.target.value)} placeholder="e.g. status" style={{ ...inputStyle, flexGrow: 1, padding: '0.4rem', margin: 0, fontSize: '0.8rem', fontFamily: 'monospace', minWidth: '100px' }} />
+                      
+                      <select value={param.type || 'String'} onChange={(e) => handleCreateUpdateParameter('output', index, 'type', e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '0.3rem 0.5rem', margin: 0, fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0 }}>
+                        {DATA_TYPES.map(dt => <option key={dt} value={dt}>{dt}</option>)}
+                      </select>
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer', flexShrink: 0 }}>
+                        <input type="checkbox" checked={param.isRequired} onChange={(e) => handleCreateUpdateParameter('output', index, 'isRequired', e.target.checked)} /> Req
+                      </label>
+                      <button onClick={() => handleCreateRemoveParameter('output', index)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem', flexShrink: 0 }}><i className="bx bx-trash"></i></button>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
-        </ExtraLargeModal>
+        </div>
+      </FullScreenModal>
 
       <FullScreenModal
         isOpen={isEditModalOpen}
@@ -755,8 +780,8 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
           </div>
         }
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2rem', height: '100%' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingRight: '2rem', borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, overflowY: 'auto', minWidth: 0, overflowX: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingRight: '2rem', borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
             <div style={{ backgroundColor: darkMode ? '#374151' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}` }}>
               <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                 <input type="checkbox" name="archived" checked={editWorkflowData.archived || false} onChange={handleEditToggleChange} style={{ width: '1.25rem', height: '1.25rem', marginRight: '0.75rem', cursor: 'pointer' }} />
@@ -811,7 +836,7 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, overflowX: 'hidden', gap: '1.5rem' }}> 
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}> 
             <div>
               <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>Endpoint Configuration</h3>
               <div style={{ marginBottom: '1rem', marginTop: '1rem' }}>
@@ -825,7 +850,9 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
                     ...inputStyle, 
                     fontFamily: 'monospace',
                     borderColor: (editWorkflowData.triggerURL && !isEditValidTrigger) ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
-                  }} 
+                  }}
+                  autoComplete="off"
+                  data-1p-ignore
                 />
                 {editWorkflowData.triggerURL && !isEditValidTrigger && (
                   <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>Please enter a valid HTTP/HTTPS URL.</p>
@@ -842,7 +869,9 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
                     ...inputStyle, 
                     fontFamily: 'monospace',
                     borderColor: (editWorkflowData.callbackURL && !isEditValidCallback) ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
-                  }} 
+                  }}
+                  autoComplete="off"
+                  data-1p-ignore
                 />
                 {editWorkflowData.callbackURL && !isEditValidCallback && (
                   <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>Please enter a valid HTTP/HTTPS URL.</p>
@@ -868,7 +897,9 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
                     value={editWorkflowData.authHeader || ''} 
                     onChange={handleEditTextChange} 
                     placeholder="Bearer token or API key..." 
-                    style={{ ...inputStyle, paddingRight: '2.5rem' }} 
+                    style={{ ...inputStyle, paddingRight: '2.5rem' }}
+                    autoComplete="new-password"
+                    data-1p-ignore 
                   />
                   <i 
                     className={`bx ${showEditToken ? 'bx-hide' : 'bx-show'}`} 
@@ -890,11 +921,16 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
                   {!editWorkflowData.inputParameters?.length && <div style={{ padding: '1rem', textAlign: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '0.5rem', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '0.8rem' }}>No input parameters.</div>}
                   {editWorkflowData.inputParameters?.map((param, index) => (
                     <div key={`input-${index}`} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '0.5rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, boxSizing: 'border-box' }}>
-                      <input type="text" value={param.variable} onChange={(e) => handleEditUpdateParameter('input', index, 'variable', e.target.value)} style={{ ...inputStyle, flexGrow: 1, padding: '0.4rem', margin: 0, fontSize: '0.8rem', fontFamily: 'monospace' }} />
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer' }}>
+                      <input type="text" value={param.variable} onChange={(e) => handleEditUpdateParameter('input', index, 'variable', e.target.value)} style={{ ...inputStyle, flexGrow: 1, padding: '0.4rem', margin: 0, fontSize: '0.8rem', fontFamily: 'monospace', minWidth: '100px' }} />
+                      
+                      <select value={param.type || 'String'} onChange={(e) => handleEditUpdateParameter('input', index, 'type', e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '0.3rem 0.5rem', margin: 0, fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0 }}>
+                        {DATA_TYPES.map(dt => <option key={dt} value={dt}>{dt}</option>)}
+                      </select>
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer', flexShrink: 0 }}>
                         <input type="checkbox" checked={param.isRequired} onChange={(e) => handleEditUpdateParameter('input', index, 'isRequired', e.target.checked)} /> Req
                       </label>
-                      <button onClick={() => handleEditRemoveParameter('input', index)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem' }}><i className="bx bx-trash"></i></button>
+                      <button onClick={() => handleEditRemoveParameter('input', index)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem', flexShrink: 0 }}><i className="bx bx-trash"></i></button>
                     </div>
                   ))}
                 </div>
@@ -908,11 +944,16 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
                   {!editWorkflowData.outputVariables?.length && <div style={{ padding: '1rem', textAlign: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '0.5rem', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '0.8rem' }}>No output variables.</div>}
                   {editWorkflowData.outputVariables?.map((param, index) => (
                     <div key={`output-${index}`} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '0.5rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, boxSizing: 'border-box' }}>
-                      <input type="text" value={param.variable} onChange={(e) => handleEditUpdateParameter('output', index, 'variable', e.target.value)} style={{ ...inputStyle, flexGrow: 1, padding: '0.4rem', margin: 0, fontSize: '0.8rem', fontFamily: 'monospace' }} />
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer' }}>
+                      <input type="text" value={param.variable} onChange={(e) => handleEditUpdateParameter('output', index, 'variable', e.target.value)} style={{ ...inputStyle, flexGrow: 1, padding: '0.4rem', margin: 0, fontSize: '0.8rem', fontFamily: 'monospace', minWidth: '100px' }} />
+                      
+                      <select value={param.type || 'String'} onChange={(e) => handleEditUpdateParameter('output', index, 'type', e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '0.3rem 0.5rem', margin: 0, fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0 }}>
+                        {DATA_TYPES.map(dt => <option key={dt} value={dt}>{dt}</option>)}
+                      </select>
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer', flexShrink: 0 }}>
                         <input type="checkbox" checked={param.isRequired} onChange={(e) => handleEditUpdateParameter('output', index, 'isRequired', e.target.checked)} /> Req
                       </label>
-                      <button onClick={() => handleEditRemoveParameter('output', index)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem' }}><i className="bx bx-trash"></i></button>
+                      <button onClick={() => handleEditRemoveParameter('output', index)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem', flexShrink: 0 }}><i className="bx bx-trash"></i></button>
                     </div>
                   ))}
                 </div>
