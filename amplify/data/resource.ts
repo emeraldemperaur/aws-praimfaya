@@ -66,6 +66,7 @@ const schema = a.schema({
       awsAliasId: a.string(),
       lastUsedAt: a.datetime(),
       provisioningStatus: a.enum(ProvisioningStatus),
+      subagentEavesdrop: a.boolean().default(false),
     })
     .authorization(headerRBAC),
 

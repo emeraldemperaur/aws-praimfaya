@@ -108,12 +108,13 @@ export const handler: DynamoDBStreamHandler = async (event) => {
           const collaborators = await getCollaborators(profileId);
           for (const collab of collaborators) {
             if (collab.awsAgentId && collab.awsAliasId) {
+              const eavesdropSetting = collab.relayConversationHistory ? "TO_COLLABORATOR" : "DISABLED";
               await bedrock.send(new AssociateAgentCollaboratorCommand({
                 agentId: agentId,
                 agentVersion: "DRAFT",
                 collaboratorName: collab.name.replace(/[^a-zA-Z0-9-]/g, '').substring(0, 32),
                 collaborationInstruction: collab.description,
-                
+                relayConversationHistory: eavesdropSetting,
                 agentDescriptor: { aliasArn: `arn:aws:bedrock:${process.env.AWS_REGION}:${process.env.ACCOUNT_ID}:agent-alias/${collab.awsAgentId}/${collab.awsAliasId}` }
               }));
             }

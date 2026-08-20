@@ -26,6 +26,7 @@ export interface ContextProfile {
   workflows?: any[] | null; 
   collaborators?: any[] | null; 
   provisioningStatus?: 'READY' | 'PROVISIONING' | 'UNPROVISIONED' | 'FAILED' | null;
+  subagentEavesdrop?: boolean | null;
   createdAt: string;
   updatedAt?: string;
   updatedBy?: string | null;
@@ -55,6 +56,7 @@ export interface UIContextProfile {
   workflows?: any[] | null; 
   collaborators?: any[] | null; 
   provisioningStatus?: 'READY' | 'PROVISIONING' | 'UNPROVISIONED' | 'FAILED' | null;
+  subagentEavesdrop?: boolean | null;
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string | null;
