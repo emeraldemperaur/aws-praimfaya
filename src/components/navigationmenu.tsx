@@ -206,9 +206,9 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
                             </li>
                             <li role="menuitem">
                             <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="/dashboard/rag-transactions" onClick={() => closeDropDowns()}>
-                                <img style={{width: '40px', height: '40px'}} src={transactionsIcon} className="icon" alt="RAG Transactions" />
+                                <img style={{width: '40px', height: '40px'}} src={transactionsIcon} className="icon" alt="RAG Artifacts" />
                                 <div>
-                                <span className="ux-dropdown-link-title" style={titleStyle}>RAG Transactions</span>
+                                <span className="ux-dropdown-link-title" style={titleStyle}>RAG Artifacts</span>
                                 <p>Reconnoitre and develop interfaces with Agentic AIs</p>
                                 </div>
                             </NavLink>

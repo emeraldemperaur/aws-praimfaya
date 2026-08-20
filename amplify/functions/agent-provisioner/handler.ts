@@ -108,7 +108,7 @@ export const handler: DynamoDBStreamHandler = async (event) => {
           const collaborators = await getCollaborators(profileId);
           for (const collab of collaborators) {
             if (collab.awsAgentId && collab.awsAliasId) {
-              const eavesdropSetting = collab.relayConversationHistory ? "TO_COLLABORATOR" : "DISABLED";
+              const eavesdropSetting = collab.subagentEavesdrop ? "TO_COLLABORATOR" : "DISABLED";
               await bedrock.send(new AssociateAgentCollaboratorCommand({
                 agentId: agentId,
                 agentVersion: "DRAFT",
