@@ -104,6 +104,45 @@ export const handler: DynamoDBStreamHandler = async (event) => {
           }
         }));
 
+        if (process.env.MULTIMEDIA_EXECUTOR_LAMBDA_ARN) {
+          await bedrock.send(new CreateAgentActionGroupCommand({
+            agentId: agentId,
+            agentVersion: "DRAFT",
+            actionGroupName: "MultimediaEngine",
+            actionGroupExecutor: { lambda: process.env.MULTIMEDIA_EXECUTOR_LAMBDA_ARN! },
+            functionSchema: {
+              functions: [
+                {
+                  name: "generate_image",
+                  description: "Generates high-fidelity images using Stability AI SD3.5 Large.",
+                  parameters: { "prompt": { type: "string", description: "Detailed visual description of the image to generate.", required: true } }
+                },
+                {
+                  name: "generate_enterprise_image",
+                  description: "Generates enterprise/corporate images using Amazon Titan Image Generator v2.",
+                  parameters: { "prompt": { type: "string", description: "Detailed visual description of the image.", required: true } }
+                },
+                {
+                  name: "generate_audio",
+                  description: "Converts text to spoken audio using Amazon Polly Generative Engine.",
+                  parameters: {
+                    "text": { type: "string", description: "The text to convert to speech.", required: true },
+                    "voiceId": { type: "string", description: "Optional voice identifier.", required: false }
+                  }
+                },
+                {
+                  name: "generate_luma_video",
+                  description: "Generates realistic video content using Luma Dream Machine.",
+                  parameters: {
+                    "prompt": { type: "string", description: "Detailed visual description of the video.", required: true },
+                    "aspectRatio": { type: "string", description: "16:9, 9:16, or 1:1", required: false }
+                  }
+                }
+              ]
+            }
+          }));
+        }
+
         if (role === 'SUPERVISOR') {
           const collaborators = await getCollaborators(profileId);
           for (const collab of collaborators) {

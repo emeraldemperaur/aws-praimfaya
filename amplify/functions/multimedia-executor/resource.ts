@@ -1,9 +1,9 @@
 import { defineFunction } from '@aws-amplify/backend';
 
-export const chatHandler = defineFunction({
-  name: 'chat-handler',
+export const multimediaExecutor = defineFunction({
+  name: 'multimedia-executor',
   entry: './handler.ts',
-  timeoutSeconds: 900, 
+  timeoutSeconds: 900,
   memoryMB: 1024,
   resourceGroupName: 'data',
   environment: {

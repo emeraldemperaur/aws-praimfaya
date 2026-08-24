@@ -1,5 +1,8 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { chronos } from '../functions/chronos/resource';
+import { createCheckoutSession } from '../functions/stripe-checkout/resource';
+import { grantPromoCredits } from '../functions/admin-promo/resource';
+import { chatHandler } from '../functions/chat-handler/resource';
 
 const headerRBAC = (allow: any) => [
   allow.owner(),
@@ -34,6 +37,20 @@ const schema = a.schema({
     .arguments({ name: a.string() })
     .returns(a.string())
     .handler(a.handler.function(chronos))
+    .authorization((allow) => [allow.authenticated()]),
+
+  askAssistant: a.query()
+    .arguments({
+      prompt: a.string(),
+      systemPrompt: a.string(),
+      modelId: a.string(),
+      profileId: a.id(),
+      cognitoUserId: a.string(),
+      chatHistory: a.string(),
+      ephemeralSecretsJson: a.string(), // SECURE SIDE CHANNEL CREDENTIAL INJECTION
+    })
+    .returns(a.string())
+    .handler(a.handler.function(chatHandler))
     .authorization((allow) => [allow.authenticated()]),
 
   ContextProfile: a
@@ -175,8 +192,21 @@ const schema = a.schema({
       planName: a.string(),
       currentPeriodEnd: a.datetime(),
       computeCredits: a.integer().default(0), 
+      maxCredits: a.integer().default(0),
     })
     .authorization(iamRBAC),
+
+  createCheckoutSession: a.mutation()
+    .arguments({ planTier: a.enum(['VANGUARD', 'VANGUARD_ELITE', 'TOP_UP']) })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(createCheckoutSession)),
+
+  grantPromoCredits: a.mutation()
+    .arguments({ targetCognitoUserId: a.string().required(), creditAmount: a.integer().required() })
+    .returns(a.boolean())
+    .authorization((allow) => [allow.groups(['superadmin', 'admin', 'root'])])
+    .handler(a.handler.function(grantPromoCredits)),
 
   
 

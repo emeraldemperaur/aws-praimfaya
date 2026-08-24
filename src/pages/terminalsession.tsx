@@ -4,6 +4,7 @@ import { generateClient } from 'aws-amplify/api';
 import { getInitials, getModelIcon } from '../utils/voltaire';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { EphemeralSecrets } from '../data/consoleterminal';
 
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -15,9 +16,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
+  const [ephemeralSecrets, setEphemeralSecrets] = useState<EphemeralSecrets>({});
+  const [activeAuthPrompt, setActiveAuthPrompt] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(20);
-
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -68,15 +69,17 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     hydrateTerminalSession();
   }, [sessionId, navigate]);
 
-  const handleExecutePrompt = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputMessage.trim() || isAiTyping || session?.status === 'ARCHIVED') return;
+  const handleExecutePrompt = async (e?: React.FormEvent, overridePrompt?: string) => {
+    if (e) e.preventDefault();
+    
+    const queryText = (overridePrompt || inputMessage).trim();
+    if (!queryText || isAiTyping || session?.status === 'ARCHIVED') return;
 
-    const queryText = inputMessage.trim();
-    setInputMessage('');
+    if (!overridePrompt) setInputMessage('');
     setIsAiTyping(true);
 
     try {
+      // Save new user message to DynamoDB
       const { data: committedUserMsg } = await client.models.TerminalMessage.create({
         role: 'USER',
         content: queryText,
@@ -87,14 +90,34 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       const activeProfile = session.contextProfile;
       const targetModelIdentifier = activeProfile?.foundationModel?.apiIdentifier || "us.amazon.nova-pro-v1:0";
 
+      // Format historic messages from DynamoDB for Bedrock Agent Context
+      const bedrockHistory = messages.map((m: any) => ({
+        role: m.role === 'USER' ? 'user' : 'assistant',
+        content: [{ text: m.content }]
+      }));
+
+      // Invoke Bedrock Agent via Backend with request schema arguments
       const response = await client.queries.askAssistant({
         prompt: queryText,
         systemPrompt: activeProfile?.systemPrompt || "Act as a factual system console.",
-        modelId: targetModelIdentifier
+        modelId: targetModelIdentifier,
+        profileId: session.contextProfileId,
+        cognitoUserId: session.userId,
+        chatHistory: JSON.stringify(bedrockHistory),
+        ephemeralSecretsJson: JSON.stringify(ephemeralSecrets)
       });
 
       const transactionPayload = JSON.parse(response.data);
-      const outputText = transactionPayload.answer;
+
+      // Determine if Backend LLM requested external credentials
+      if (transactionPayload.requestedCredentials && transactionPayload.requestedCredentials.length > 0) {
+        setActiveAuthPrompt(transactionPayload.requestedCredentials[0]);
+      } else {
+        setActiveAuthPrompt(null);
+      }
+
+      // Save AI response to DynamoDB
+      const outputText = transactionPayload.answer || transactionPayload.error || "No response generated.";
       
       const generatedChips = transactionPayload.citations?.map((source: any) => {
         if (source.type === 'media') return `📸 Media Reference: ${source.uri.split('/').pop()}`;
@@ -110,30 +133,38 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       });
       setMessages(prev => [...prev, committedAiMsg]);
 
+      // Calculate token billing
       const inboundTokens = transactionPayload.tokenUsage?.inputTokens || 0;
       const outboundTokens = transactionPayload.tokenUsage?.outputTokens || 0;
       const aggregatedCost = inboundTokens + outboundTokens;
 
-      const incrementedSessionTotal = (session.totalTokensUsed || 0) + aggregatedCost;
-
-      await client.models.ConsoleTerminal.update({
-        id: session.id,
-        totalTokensUsed: incrementedSessionTotal
-      });
-
-      setSession((prev: any) => ({ ...prev, totalTokensUsed: incrementedSessionTotal }));
+      if (aggregatedCost > 0) {
+        const incrementedSessionTotal = (session.totalTokensUsed || 0) + aggregatedCost;
+        await client.models.ConsoleTerminal.update({
+          id: session.id,
+          totalTokensUsed: incrementedSessionTotal
+        });
+        setSession((prev: any) => ({ ...prev, totalTokensUsed: incrementedSessionTotal }));
+      }
 
     } catch (err) {
       console.error("Relay framework dropped socket connection during model invocation:", err);
       setMessages(prev => [...prev, {
         id: 'runtime-err-' + Date.now(),
         role: 'ASSISTANT',
-        content: "RAG Pipeline Routing Interface Timeout. Verify cross-region endpoint models are activated inside the AWS Bedrock Control Panel console.",
+        content: "RAG Pipeline Routing Interface Timeout or Configuration Error.",
         createdAt: new Date().toISOString()
       }]);
     } finally {
       setIsAiTyping(false);
     }
+  };
+
+  const handleSecretSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setActiveAuthPrompt(null);
+    // Auto-resume workflow
+    handleExecutePrompt(undefined, "Credentials securely injected into ephemeral memory. Please resume and complete the requested operation.");
   };
 
   const handleDownloadTranscript = () => {
@@ -196,6 +227,20 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
   const visibleMessages = messages.slice(-visibleCount);
   const hasMoreMessages = messages.length > visibleCount;
+
+  // Reusable inline style for modal inputs
+  const inputStyle = {
+    width: '100%',
+    backgroundColor: darkMode ? '#1f2937' : '#f3f4f6',
+    border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+    borderRadius: '4px',
+    padding: '0.65rem',
+    fontSize: '0.85rem',
+    color: darkMode ? '#f9fafb' : '#111827',
+    marginBottom: '0.75rem',
+    boxSizing: 'border-box' as const,
+    fontFamily: 'Google Sans Code, monospace'
+  };
 
   return (
     <>
@@ -439,7 +484,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           <div ref={scrollRef} />
         </div>
 
-        <form onSubmit={handleExecutePrompt} style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexShrink: 0 }}>
+        <form onSubmit={(e) => handleExecutePrompt(e)} style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexShrink: 0 }}>
           <input
             type="text"
             value={inputMessage}
@@ -475,6 +520,118 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           </button>
         </form>
       </div>
+
+      {/* ========================================================================= */}
+      {/* SECURE SIDE-CHANNEL CREDENTIAL MODAL                                      */}
+      {/* ========================================================================= */}
+      {activeAuthPrompt && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: darkMode ? '#111827' : '#ffffff',
+            border: `1px solid ${darkMode ? '#0891b2' : '#06b6d4'}`,
+            borderRadius: '0.75rem', padding: '2rem', maxWidth: '32rem', width: '100%',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            color: darkMode ? '#f9fafb' : '#111827',
+            fontFamily: 'Google Sans Code, monospace'
+          }}>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', color: darkMode ? '#22d3ee' : '#0891b2' }}>
+              <i className="fa-solid fa-lock" style={{ fontSize: '1.25rem' }}></i>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Authentication Required
+              </h3>
+            </div>
+            
+            <p style={{ fontSize: '0.8rem', color: darkMode ? '#9ca3af' : '#6b7280', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              Action requires dynamic credentials for <strong style={{ color: darkMode ? '#67e8f9' : '#0891b2', textTransform: 'uppercase' }}>{activeAuthPrompt}</strong>. 
+              Credentials are stored securely in ephemeral browser memory and clear upon refresh.
+            </p>
+
+            <form onSubmit={handleSecretSubmit}>
+              
+              {/* AIRTABLE */}
+              {activeAuthPrompt === 'airtable' && (
+                <input type="password" placeholder="Airtable API Key / PAT" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, airtableApiKey: e.target.value })} required style={inputStyle} />
+              )}
+
+              {/* SNOWFLAKE */}
+              {activeAuthPrompt === 'snowflake' && (
+                <>
+                  <input type="text" placeholder="Account Identifier (e.g. xy12345.us-east-1)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, snowflakeAccount: e.target.value })} required style={inputStyle} />
+                  <input type="text" placeholder="Username" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, snowflakeUser: e.target.value })} required style={inputStyle} />
+                  <textarea placeholder="RSA Private Key (PEM format)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, snowflakePrivateKey: e.target.value })} required style={{...inputStyle, height: '100px', resize: 'none'}} />
+                </>
+              )}
+
+              {/* AIRFLOW */}
+              {activeAuthPrompt === 'airflow' && (
+                <input type="url" placeholder="Airflow Webserver Base URL" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, airflowBaseUrl: e.target.value })} required style={inputStyle} />
+              )}
+
+              {/* RIPPLING */}
+              {activeAuthPrompt === 'rippling' && (
+                <input type="password" placeholder="Rippling Platform Access Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, ripplingApiKey: e.target.value })} required style={inputStyle} />
+              )}
+
+              {/* BAMBOOHR */}
+              {activeAuthPrompt === 'bamboohr' && (
+                <>
+                  <input type="text" placeholder="Subdomain (e.g. mycompany)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, bambooSubdomain: e.target.value })} required style={inputStyle} />
+                  <input type="password" placeholder="API Key" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, bambooApiKey: e.target.value })} required style={inputStyle} />
+                </>
+              )}
+
+              {/* ZENDESK */}
+              {activeAuthPrompt === 'zendesk' && (
+                <>
+                  <input type="text" placeholder="Subdomain" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, zendeskSubdomain: e.target.value })} required style={inputStyle} />
+                  <input type="email" placeholder="Admin Email" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, zendeskEmail: e.target.value })} required style={inputStyle} />
+                  <input type="password" placeholder="API Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, zendeskToken: e.target.value })} required style={inputStyle} />
+                </>
+              )}
+
+              {/* SERVICENOW */}
+              {activeAuthPrompt === 'servicenow' && (
+                <>
+                  <input type="text" placeholder="Instance Name (e.g. dev12345)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, serviceNowInstance: e.target.value })} required style={inputStyle} />
+                  <input type="text" placeholder="Username" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, serviceNowUser: e.target.value })} required style={inputStyle} />
+                  <input type="password" placeholder="Password" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, serviceNowPassword: e.target.value })} required style={inputStyle} />
+                </>
+              )}
+
+              {/* PAGERDUTY */}
+              {activeAuthPrompt === 'pagerduty' && (
+                <>
+                  <input type="password" placeholder="API Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, pagerDutyApiKey: e.target.value })} required style={inputStyle} />
+                  <input type="email" placeholder="User Email (Required for incident updates)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, pagerDutyUserEmail: e.target.value })} required style={inputStyle} />
+                </>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setActiveAuthPrompt(null)}
+                  style={{ padding: '0.65rem 1rem', background: 'transparent', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  style={{ padding: '0.65rem 1.25rem', backgroundColor: '#0891b2', color: '#ffffff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Inject Credentials
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 };

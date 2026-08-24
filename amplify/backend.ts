@@ -7,6 +7,8 @@ import { updateVectorStatus } from './functions/update-vector-status/resource';
 import { agentProvisioner } from './functions/agent-provisioner/resource';
 import { webhookRouter } from './functions/webhook-router/resource';
 import { agentReaper } from './functions/agent-smith/resource';
+import { chatHandler } from './functions/chat-handler/resource';
+
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -16,9 +18,19 @@ import * as cr from 'aws-cdk-lib/custom-resources';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as lambda from 'aws-cdk-lib/aws-lambda'; 
-import { RemovalPolicy } from 'aws-cdk-lib';
+import * as cdk from 'aws-cdk-lib';
+import { RemovalPolicy, Duration } from 'aws-cdk-lib';
 import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
-import { chatHandler } from './functions/chat-handler/resource';
+
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { createCheckoutSession } from './functions/stripe-checkout/resource';
+import { grantPromoCredits } from './functions/admin-promo/resource';
+import { stripeWebhook } from './functions/stripe-webhook/resource';
+import { multimediaExecutor } from './functions/multimedia-executor/resource';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const backend = defineBackend({
   auth,
@@ -30,14 +42,18 @@ const backend = defineBackend({
   agentProvisioner,
   webhookRouter,
   agentReaper,
-  chatHandler
+  chatHandler,
+  createCheckoutSession,
+  grantPromoCredits,
+  stripeWebhook,
+  multimediaExecutor
 });
 
 const customStack = backend.createStack('BedrockAIStack');
 
-// =================================================================================
-// KNOWLEDGE BASE & VECTOR DB INFRASTRUCTURE
-// =================================================================================
+// ===========================================
+// BEDROCK KNOWLEDGE BASE & S3 VECTOR DATABASE
+// ===========================================
 
 const vectorBucket = new s3vectors.CfnVectorBucket(customStack, 'CentralVectorBucket', {});
 
@@ -222,11 +238,10 @@ const bedrockEventRule = new events.Rule(customStack, 'BedrockIngestionStatusRul
 bedrockEventRule.addTarget(new targets.LambdaFunction(statusLambda));
 
 
-// =================================================================================
+// ===========================================
 // MULTI-AGENT PROVISIONING & WEBHOOK ROUTING
-// =================================================================================
+// ===========================================
 
-// Casting to lambda.Function exposes the .addEnvironment() method required below
 const provisionerLambda = backend.agentProvisioner.resources.lambda as lambda.Function;
 const routerLambda = backend.webhookRouter.resources.lambda as lambda.Function;
 const reaperLambda = backend.agentReaper.resources.lambda as lambda.Function;
@@ -234,6 +249,7 @@ const reaperLambda = backend.agentReaper.resources.lambda as lambda.Function;
 const profilesTable = backend.data.resources.tables["ContextProfile"];
 const workflowsTable = backend.data.resources.tables["ContextWorkflow"];
 const profileWorkflowsTable = backend.data.resources.tables["ContextProfileWorkflow"];
+const userProfilesTable = backend.data.resources.tables["UserProfile"]; // <-- FIX: Mapped User Profiles table
 
 provisionerLambda.addEventSource(new DynamoEventSource(profilesTable, {
   startingPosition: lambda.StartingPosition.LATEST,
@@ -287,6 +303,11 @@ routerLambda.addPermission('AllowBedrockInvoke', {
   action: 'lambda:InvokeFunction',
 });
 
+
+// ====================================
+// CHAT HANDLER & PYTHON DAG VALIDATOR
+// ====================================
+
 const chatLambda = backend.chatHandler.resources.lambda as lambda.Function;
 
 chatLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
@@ -297,14 +318,86 @@ chatLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn)
 profilesTable.grantReadData(chatLambda);
 workflowsTable.grantReadData(chatLambda);
 profileWorkflowsTable.grantReadData(chatLambda);
-
 routerLambda.grantInvoke(chatLambda);
+
+
+chatLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+userProfilesTable.grantReadWriteData(chatLambda);
+
+
+// Multimodal S3 Storage Link for RAG Artifacts (Images, Audio, Video, etc.)
+chatLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
+multimodalBucket.grantReadWrite(chatLambda);
+
+
+// Python DAG Validator Service Deployment & Permissions
+const dagValidatorLambda = new lambda.Function(customStack, 'DagValidatorFunction', {
+  runtime: lambda.Runtime.PYTHON_3_12,
+  handler: 'handler.lambda_handler',
+  code: lambda.Code.fromAsset(join(__dirname, 'functions', 'dag-validator')),
+  timeout: Duration.seconds(10),
+  memorySize: 128,
+});
+
+chatLambda.addEnvironment('PYTHON_VALIDATOR_LAMBDA_ARN', dagValidatorLambda.functionArn);
+dagValidatorLambda.grantInvoke(chatLambda);
+
 
 chatLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: [
     'bedrock:InvokeModel',
     'bedrock:InvokeModelWithResponseStream',
-    'bedrock:Retrieve'
+    'bedrock:StartAsyncInvoke', 
+    'bedrock:Retrieve',
+    'polly:SynthesizeSpeech'    
   ],
   resources: ['*']
 }));
+
+// ============================
+// STRIPE BILLING & PROMO CODE
+// ============================
+
+// Stripe Webhook Public URL Configuration
+const webhookLambda = backend.stripeWebhook.resources.lambda as lambda.Function;
+
+// `UserProfiles subscription status permissions 
+webhookLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+userProfilesTable.grantReadWriteData(webhookLambda);
+
+// Stripe Webhook POST Public Function URL
+const webhookUrl = webhookLambda.addFunctionUrl({
+  authType: lambda.FunctionUrlAuthType.NONE,
+});
+
+// Stripe Webhook Public Function URL Output
+new cdk.CfnOutput(customStack, 'StripeWebhookUrl', {
+  value: webhookUrl.url,
+  description: 'Copy this URL and paste it into the Stripe Webhook Dashboard',
+});
+
+// Admin Promo Credits Lambda
+const promoLambda = backend.grantPromoCredits.resources.lambda as lambda.Function;
+promoLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+userProfilesTable.grantReadWriteData(promoLambda);
+
+
+const mediaLambda = backend.multimediaExecutor.resources.lambda as lambda.Function;
+mediaLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
+multimodalBucket.grantReadWrite(mediaLambda);
+
+mediaLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: [
+    'bedrock:InvokeModel',
+    'bedrock:StartAsyncInvoke',
+    'polly:SynthesizeSpeech'
+  ],
+  resources: ['*']
+}));
+
+mediaLambda.addPermission('AllowBedrockAgentInvoke', {
+  principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+  action: 'lambda:InvokeFunction',
+});
+
+provisionerLambda.addEnvironment('MULTIMEDIA_EXECUTOR_LAMBDA_ARN', mediaLambda.functionArn);

@@ -34,3 +34,22 @@ export interface UIConsoleTerminal {
   contextProfile?: any | null;
   messages?: any[] | null;
 }
+
+export interface EphemeralSecrets {
+  airtableApiKey?: string;
+  snowflakeAccount?: string;
+  snowflakeUser?: string;
+  snowflakePrivateKey?: string;
+  airflowBaseUrl?: string;
+  ripplingApiKey?: string;
+  bambooSubdomain?: string;
+  bambooApiKey?: string;
+  zendeskSubdomain?: string;
+  zendeskEmail?: string;
+  zendeskToken?: string;
+  serviceNowInstance?: string;
+  serviceNowUser?: string;
+  serviceNowPassword?: string;
+  pagerDutyApiKey?: string;
+  pagerDutyUserEmail?: string;
+}
