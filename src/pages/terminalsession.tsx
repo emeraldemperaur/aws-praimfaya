@@ -807,6 +807,27 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 />
               )}
 
+              {/* GOOGLE HOME */}
+              {activeAuthPrompt === 'google_home' && (
+                <>
+                  <input type="text" placeholder="Google Cloud Project ID (SDM)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, googleHomeProjectId: e.target.value })} required style={inputStyle} />
+                  <input type="password" placeholder="Google Home API / SDM Bearer Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, googleHomeToken: e.target.value })} required style={inputStyle} />
+                </>
+              )}
+
+              {/* APPLE HOMEKIT / HOME ASSISTANT */}
+              {activeAuthPrompt === 'homekit' && (
+                <>
+                  <input type="url" placeholder="Home Assistant URL (e.g. http://homeassistant.local:8123)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, homeAssistantUrl: e.target.value })} required style={inputStyle} />
+                  <input type="password" placeholder="Long-Lived Access Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, homeAssistantToken: e.target.value })} required style={inputStyle} />
+                </>
+              )}
+
+              {/* AMAZON ALEXA */}
+              {activeAuthPrompt === 'alexa' && (
+                <input type="password" placeholder="Alexa Smart Home API Bearer Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, alexaToken: e.target.value })} required style={inputStyle} />
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
                 <button 
                   type="button" 

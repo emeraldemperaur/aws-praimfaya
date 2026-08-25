@@ -84,4 +84,9 @@ export interface EphemeralSecrets {
   vrboApiKey?: string;
   mitoToken?: string;
   apotheosisToken?: string;
+  googleHomeProjectId?: string;
+  googleHomeToken?: string;
+  homeAssistantUrl?: string;
+  homeAssistantToken?: string;
+  alexaToken?: string;
 }

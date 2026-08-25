@@ -1153,12 +1153,112 @@ export const handler = async (event: any) => {
                 }
 
                 // =========================================
+                // ENTERPRISE SMART HOME MANAGEMENT
+                // =========================================
+
+                else if (toolUse.name === 'google_home_agent') {
+                    const GH_PROJECT = ephemeralSecrets.googleHomeProjectId;
+                    const GH_TOKEN = ephemeralSecrets.googleHomeToken;
+                    
+                    if (!GH_PROJECT || !GH_TOKEN) {
+                        executionResult = { error: "Missing Google Home credentials. Call 'request_secure_credentials' with serviceName 'google_home'." };
+                    } else {
+                        try {
+                            const headers = { Authorization: `Bearer ${GH_TOKEN}`, 'Content-Type': 'application/json' };
+                            const { action, deviceId, command, params, roomAction, roomName } = toolInput;
+                            const baseUrl = `https://smartdevicemanagement.googleapis.com/v1/enterprises/${GH_PROJECT}`;
+
+                            if (action === 'GET_DEVICES') {
+                                const res = await axios.get(`${baseUrl}/devices`, { headers });
+                                executionResult = { status: "Success", devices: res.data.devices };
+                            } else if (action === 'CONTROL_DEVICE' && deviceId && command) {
+                                const payload = { command: command, params: JSON.parse(params || '{}') };
+                                const res = await axios.post(`${baseUrl}/devices/${deviceId}:executeCommand`, payload, { headers });
+                                executionResult = { status: "Success", results: res.data };
+                            } else if (action === 'GET_ROOMS') {
+                                const res = await axios.get(`${baseUrl}/structures`, { headers });
+                                executionResult = { status: "Success", structures: res.data.structures };
+                            } else if (action === 'MANAGE_ROOM') {
+                                executionResult = { error: "Google Smart Device Management (SDM) API restricts third-party applications from programmatically creating, deleting, or renaming rooms/structures. Inform the user they must perform layout changes directly in the Google Home App." };
+                            } else {
+                                executionResult = { error: `Missing required parameters for Google Home action: ${action}` };
+                            }
+                        } catch (err: any) { executionResult = { error: `Google Home Error: ${err.response?.data?.error?.message || err.message}` }; }
+                    }
+                }
+
+                else if (toolUse.name === 'apple_homekit_agent') {
+                    const HA_URL = ephemeralSecrets.homeAssistantUrl;
+                    const HA_TOKEN = ephemeralSecrets.homeAssistantToken;
+                    
+                    if (!HA_URL || !HA_TOKEN) {
+                        executionResult = { error: "Missing Apple HomeKit / Home Assistant credentials. Call 'request_secure_credentials' with serviceName 'homekit'." };
+                    } else {
+                        try {
+                            const headers = { Authorization: `Bearer ${HA_TOKEN}`, 'Content-Type': 'application/json' };
+                            const { action, entityId, domain, service, serviceData, roomAction } = toolInput;
+                            const baseUrl = `${HA_URL.replace(/\/$/, "")}/api`;
+
+                            if (action === 'GET_DEVICES') {
+                                const res = await axios.get(`${baseUrl}/states`, { headers });
+                                executionResult = { status: "Success", devices: res.data };
+                            } else if (action === 'CONTROL_DEVICE' && domain && service) {
+                                const payload = serviceData ? JSON.parse(serviceData) : {};
+                                if (entityId) payload.entity_id = entityId;
+                                const res = await axios.post(`${baseUrl}/services/${domain}/${service}`, payload, { headers });
+                                executionResult = { status: "Success", changedStates: res.data };
+                            } else if (action === 'GET_ROOMS') {
+                                const res = await axios.post(`${baseUrl}/template`, { template: "{{ areas() }}" }, { headers });
+                                executionResult = { status: "Success", areas: res.data };
+                            } else if (action === 'MANAGE_ROOM') {
+                                executionResult = { error: "The Home Assistant REST API does not support Area/Room mutation. Area management requires direct registry access or undocumented WebSocket commands. Inform the user this action is unsupported via text." };
+                            } else {
+                                executionResult = { error: `Missing required parameters for HomeKit action: ${action}` };
+                            }
+                        } catch (err: any) { executionResult = { error: `HomeKit Error: ${err.response?.data?.message || err.message}` }; }
+                    }
+                }
+
+                else if (toolUse.name === 'amazon_alexa_smarthome_agent') {
+                    const ALEXA_TOKEN = ephemeralSecrets.alexaToken;
+                    
+                    if (!ALEXA_TOKEN) {
+                        executionResult = { error: "Missing Amazon Alexa credentials. Call 'request_secure_credentials' with serviceName 'alexa'." };
+                    } else {
+                        try {
+                            const headers = { Authorization: `Bearer ${ALEXA_TOKEN}`, 'Content-Type': 'application/json' };
+                            const { action, endpointId, namespace, name, payload } = toolInput;
+                            const baseUrl = `https://api.amazonalexa.com/v3`;
+
+                            if (action === 'GET_DEVICES') {
+                                executionResult = { error: "Proactive device discovery is not supported via the Alexa Event Gateway. You must rely on the user providing the target device name/ID." };
+                            } else if (action === 'CONTROL_DEVICE' && endpointId && namespace && name) {
+                                const eventPayload = {
+                                    context: {},
+                                    event: {
+                                        header: { namespace: namespace, name: name, payloadVersion: "3", messageId: Date.now().toString() },
+                                        endpoint: { endpointId: endpointId },
+                                        payload: JSON.parse(payload || '{}')
+                                    }
+                                };
+                                const res = await axios.post(`${baseUrl}/events`, eventPayload, { headers });
+                                executionResult = { status: "Success", eventResponse: res.data };
+                            } else if (action === 'GET_ROOMS' || action === 'MANAGE_ROOM') {
+                                executionResult = { error: "Alexa Smart Home Skill API strictly prohibits third-party group/room management. Inform the user they must manage their Alexa Groups directly in the Alexa App." };
+                            } else {
+                                executionResult = { error: `Missing required parameters for Alexa action: ${action}` };
+                            }
+                        } catch (err: any) { executionResult = { error: `Alexa Error: ${err.response?.data?.message || err.message}` }; }
+                    }
+                }
+
+                // =========================================
                 // ENTERPRISE FULL STACK DEVELOPER (MCPs)
                 // =========================================
 
                 else if (toolUse.name === 'mito_mcp_agent') {
                     const MITO_URL = process.env.MITO_MCP_URL;
-                    const MITO_TOKEN = ephemeralSecrets.mitoToken; // Optional auth
+                    const MITO_TOKEN = ephemeralSecrets.mitoToken;
                     
                     if (!MITO_URL) {
                         executionResult = { error: "Mito MCP URL is not configured in the backend environment variables." };

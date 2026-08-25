@@ -525,7 +525,7 @@ export const NATIVE_TOOLS_REGISTRY = [
     {
         toolSpec: {
             name: "mito_mcp_agent",
-            description: "Full Stack Developer agent for Mito MCP Server. Enables advanced data analysis, Python automation, and data visualization. Call action='LIST_TOOLS' to discover capabilities, then 'CALL_TOOL' to execute them.",
+            description: "Full Stack Developer agent for Mito MCP Server. Generates full-stack components, uses frontend components based on a variant UI design system. Call action='LIST_TOOLS' to discover capabilities, then 'CALL_TOOL' to execute them.",
             inputSchema: { 
                 json: { 
                     type: "object", 
@@ -542,7 +542,7 @@ export const NATIVE_TOOLS_REGISTRY = [
     {
         toolSpec: {
             name: "apotheosis_mcp_agent",
-            description: "Full Stack Developer agent for Apotheosis MCP Server. Automates DevOps, provisions Vercel/Supabase, and generates full-stack components. Call action='LIST_TOOLS' to discover capabilities, then 'CALL_TOOL' to execute them.",
+            description: "Full Stack Developer agent for Apotheosis MCP Server. Generates full-stack components, uses frontend components based on a strictly neumorphic UI design system. Call action='LIST_TOOLS' to discover capabilities, then 'CALL_TOOL' to execute them.",
             inputSchema: { 
                 json: { 
                     type: "object", 
@@ -568,6 +568,72 @@ export const NATIVE_TOOLS_REGISTRY = [
                         action: { type: "string", enum: ["LIST_TOOLS", "CALL_TOOL"] }, 
                         mcpToolName: { type: "string", description: "The specific custom MCP tool to execute (required for CALL_TOOL)." },
                         mcpArguments: { type: "string", description: "JSON stringified arguments required for the specific tool." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    // --- Enterprise Smart Home Management ---
+    {
+        toolSpec: {
+            name: "google_home_agent",
+            description: "Google Home Smart Home agent. EXPLICIT TRIGGER REQUIRED: Only use this tool if the user explicitly mentions 'Google Home' or 'Google Assistant'. Do not use for generic automation requests. Manages devices, states, and Structure/Room APIs.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["GET_DEVICES", "CONTROL_DEVICE", "UPDATE_DEVICE", "GET_ROOMS", "MANAGE_ROOM"] }, 
+                        deviceId: { type: "string", description: "Google Home Device ID." },
+                        roomId: { type: "string", description: "Google Home Room/Structure ID." },
+                        command: { type: "string", description: "Command payload (e.g., action.devices.commands.OnOff)." },
+                        params: { type: "string", description: "JSON stringified command parameters (e.g., {\"on\": true})." },
+                        roomAction: { type: "string", enum: ["add", "delete", "rename", "assign_device"] },
+                        roomName: { type: "string" }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "apple_homekit_agent",
+            description: "Apple HomeKit agent (via Home Assistant REST API). EXPLICIT TRIGGER REQUIRED: Only use this tool if the user explicitly mentions 'Apple HomeKit', 'HomeKit', or 'Siri'. Manages entities, states, areas, and services.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["GET_DEVICES", "CONTROL_DEVICE", "GET_ROOMS", "MANAGE_ROOM"] }, 
+                        entityId: { type: "string", description: "HomeKit/HA Entity ID (e.g., light.living_room)." },
+                        domain: { type: "string", description: "Device domain (e.g., light, switch)." },
+                        service: { type: "string", description: "Service to call (e.g., turn_on, turn_off)." },
+                        serviceData: { type: "string", description: "JSON stringified service data payload." },
+                        areaId: { type: "string", description: "HomeKit Area/Room ID." },
+                        roomAction: { type: "string", enum: ["add", "delete", "rename", "assign_device"] },
+                        roomName: { type: "string" }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "amazon_alexa_smarthome_agent",
+            description: "Amazon Alexa Smart Home agent. EXPLICIT TRIGGER REQUIRED: Only use this tool if the user explicitly mentions 'Alexa' or 'Echo'. Do not use for generic automation requests. Manages devices, state subscriptions, and groups/rooms.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["GET_DEVICES", "CONTROL_DEVICE", "GET_ROOMS", "MANAGE_ROOM"] }, 
+                        endpointId: { type: "string", description: "Alexa Endpoint/Device ID." },
+                        namespace: { type: "string", description: "Alexa interface namespace (e.g., Alexa.PowerController)." },
+                        name: { type: "string", description: "Command name (e.g., TurnOn, TurnOff)." },
+                        payload: { type: "string", description: "JSON stringified command payload." },
+                        groupId: { type: "string", description: "Alexa Group/Room ID." },
+                        roomAction: { type: "string", enum: ["add", "delete", "rename", "assign_device"] },
+                        roomName: { type: "string" }
                     }, 
                     required: ["action"] 
                 } 
