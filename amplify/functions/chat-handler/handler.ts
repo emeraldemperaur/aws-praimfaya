@@ -8,7 +8,7 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import axios from "axios";
 import * as jwt from "jsonwebtoken";
 import * as xlsx from "xlsx";
-import { CORE_SYSTEM_TOOLS, NATIVE_TOOLS_REGISTRY } from "./tool-registry"; // Assuming you moved the registry to a separate file
+import { CORE_SYSTEM_TOOLS, isValidUrl, NATIVE_TOOLS_REGISTRY } from "./tool-registry"; // Assuming you moved the registry to a separate file
 
 const bedrockRuntime = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const bedrockAgentRuntime = new BedrockAgentRuntimeClient({ region: process.env.AWS_REGION });
@@ -140,7 +140,15 @@ export const handler = async (event: any) => {
             toolSpec: { name: sanitizeToolName(`wf_${wf.id}`), description: wf.description || '', inputSchema: { json: buildJsonSchemaFromParams(wf.inputParameters) } }
         }));
 
-        let relevantNativeTools = NATIVE_TOOLS_REGISTRY;
+        const allowedNativeTools = NATIVE_TOOLS_REGISTRY.filter(tool => {
+            if (tool.toolSpec.name === 'mito_mcp_agent' && !profile.enableMitoMcp) return false;
+            if (tool.toolSpec.name === 'apotheosis_mcp_agent' && !profile.enableApotheosisMcp) return false;
+            if (tool.toolSpec.name === 'custom_mcp_agent') {
+                if (!profile.customMcpUrl || profile.customMcpUrl.trim() === '' || !isValidUrl(profile.customMcpUrl)) { return false;}}
+            return true;
+        });
+
+        let relevantNativeTools = allowedNativeTools;
         if (userQueryVector.length > 0) {
             const scoredNativeTools = await Promise.all(
                 NATIVE_TOOLS_REGISTRY.map(async (tool) => {
@@ -153,11 +161,11 @@ export const handler = async (event: any) => {
             relevantNativeTools = scoredNativeTools.filter(item => item.similarity >= 0.20).slice(0, 6).map(item => item.tool);
         }
 
-        let mcpTools: any[] = [];
-        if (profile.role === 'STANDARD' && profile.customMcpUrl) mcpTools = await fetchMcpToolsWithCache(profile.customMcpUrl);
+        //let mcpTools: any[] = [];
+        //if (profile.role === 'STANDARD' && profile.customMcpUrl) mcpTools = await fetchMcpToolsWithCache(profile.customMcpUrl);
 
-        const allTools = [...workflowTools, ...CORE_SYSTEM_TOOLS, ...relevantNativeTools, ...mcpTools];
-        const toolConfig = allTools.length > 0 ? { tools: allTools } : undefined;
+        const allTools = [...workflowTools, ...CORE_SYSTEM_TOOLS, ...relevantNativeTools];
+        const toolConfig = allTools.length > 0 ? { tools: allTools as any[] } : undefined;
         const messages = [...history, { role: "user", content: [{ text: userMessage }] }];
 
         let totalInboundTokens = 0; let totalOutboundTokens = 0; let flatToolCredits = 0;
@@ -1141,6 +1149,117 @@ export const handler = async (event: any) => {
                                 executionResult = { error: `Missing required parameters for Vrbo action: ${action}` };
                             }
                         } catch (err: any) { executionResult = { error: `Vrbo Error: ${err.response?.data?.message || err.message}` }; }
+                    }
+                }
+
+                // =========================================
+                // ENTERPRISE FULL STACK DEVELOPER (MCPs)
+                // =========================================
+
+                else if (toolUse.name === 'mito_mcp_agent') {
+                    const MITO_URL = process.env.MITO_MCP_URL;
+                    const MITO_TOKEN = ephemeralSecrets.mitoToken; // Optional auth
+                    
+                    if (!MITO_URL) {
+                        executionResult = { error: "Mito MCP URL is not configured in the backend environment variables." };
+                    } else {
+                        try {
+                            const headers: any = { 'Content-Type': 'application/json' };
+                            if (MITO_TOKEN) headers['Authorization'] = `Bearer ${MITO_TOKEN}`;
+
+                            const { action, mcpToolName, mcpArguments } = toolInput;
+                            
+                            if (action === 'LIST_TOOLS') {
+                                const res = await axios.post(`${MITO_URL}/tools/list`, {}, { headers, timeout: 10000 });
+                                executionResult = { status: "Success", tools: res.data.tools };
+                            } else if (action === 'CALL_TOOL' && mcpToolName) {
+                                const res = await axios.post(`${MITO_URL}/tools/call`, { 
+                                    name: mcpToolName, 
+                                    arguments: JSON.parse(mcpArguments || '{}') 
+                                }, { headers, timeout: 25000 });
+                                executionResult = { status: "Success", data: res.data };
+                            } else {
+                                executionResult = { error: "Missing mcpToolName for CALL_TOOL action." };
+                            }
+                        } catch (err: any) { 
+                            if (err.response?.status === 401) {
+                                executionResult = { error: "Missing or invalid Mito credentials. Call 'request_secure_credentials' with serviceName 'mito'." };
+                            } else {
+                                executionResult = { error: `Mito MCP Error: ${err.response?.data?.error || err.message}` }; 
+                            }
+                        }
+                    }
+                }
+
+                else if (toolUse.name === 'apotheosis_mcp_agent') {
+                    const APOTHEOSIS_URL = process.env.APOTHEOSIS_MCP_URL;
+                    const APOTHEOSIS_TOKEN = ephemeralSecrets.apotheosisToken; 
+
+                    if (!APOTHEOSIS_URL) {
+                        executionResult = { error: "Apotheosis MCP URL is not configured in the backend environment variables." };
+                    } else {
+                        try {
+                            const headers: any = { 'Content-Type': 'application/json' };
+                            if (APOTHEOSIS_TOKEN) headers['Authorization'] = `Bearer ${APOTHEOSIS_TOKEN}`;
+
+                            const { action, mcpToolName, mcpArguments } = toolInput;
+                            
+                            if (action === 'LIST_TOOLS') {
+                                const res = await axios.post(`${APOTHEOSIS_URL}/tools/list`, {}, { headers, timeout: 10000 });
+                                executionResult = { status: "Success", tools: res.data.tools };
+                            } else if (action === 'CALL_TOOL' && mcpToolName) {
+                                const res = await axios.post(`${APOTHEOSIS_URL}/tools/call`, { 
+                                    name: mcpToolName, 
+                                    arguments: JSON.parse(mcpArguments || '{}') 
+                                }, { headers, timeout: 25000 });
+                                executionResult = { status: "Success", data: res.data };
+                            } else {
+                                executionResult = { error: "Missing mcpToolName for CALL_TOOL action." };
+                            }
+                        } catch (err: any) { 
+                            if (err.response?.status === 401) {
+                                executionResult = { error: "Missing or invalid Apotheosis credentials. Call 'request_secure_credentials' with serviceName 'apotheosis'." };
+                            } else {
+                                executionResult = { error: `Apotheosis MCP Error: ${err.response?.data?.error || err.message}` }; 
+                            }
+                        }
+                    }
+                }
+
+                // =========================================
+                // BRING YOUR OWN MCP (BYOMCP)
+                // =========================================
+
+                else if (toolUse.name === 'custom_mcp_agent') {
+                    const CUSTOM_URL = profile.customMcpUrl;
+                    
+                    if (!CUSTOM_URL) {
+                        executionResult = { error: "Custom MCP URL is not configured or is invalid." };
+                    } else {
+                        try {
+                            const headers: any = { 'Content-Type': 'application/json' };
+                            
+                            if (profile.mcpRequiresAuth && profile.mcpAuthToken) {
+                                headers['Authorization'] = `Bearer ${profile.mcpAuthToken}`;
+                            }
+
+                            const { action, mcpToolName, mcpArguments } = toolInput;
+                            
+                            if (action === 'LIST_TOOLS') {
+                                const res = await axios.post(`${CUSTOM_URL}/tools/list`, {}, { headers, timeout: 10000 });
+                                executionResult = { status: "Success", tools: res.data.tools };
+                            } else if (action === 'CALL_TOOL' && mcpToolName) {
+                                const res = await axios.post(`${CUSTOM_URL}/tools/call`, { 
+                                    name: mcpToolName, 
+                                    arguments: JSON.parse(mcpArguments || '{}') 
+                                }, { headers, timeout: 25000 });
+                                executionResult = { status: "Success", data: res.data };
+                            } else {
+                                executionResult = { error: "Missing mcpToolName for CALL_TOOL action." };
+                            }
+                        } catch (err: any) { 
+                            executionResult = { error: `Custom MCP Error: ${err.response?.data?.error || err.message}` }; 
+                        }
                     }
                 }
 

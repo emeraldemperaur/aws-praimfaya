@@ -315,6 +315,8 @@ chatLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 chatLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
 chatLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn);
 chatLambda.addEnvironment('YARDI_MCP_URL', process.env.YARDI_MCP_URL || 'https://virtuoso.yardi.com/mcp');
+chatLambda.addEnvironment('MITO_MCP_URL', process.env.MITO_MCP_URL || 'http://mito-ui.com/mcp');
+chatLambda.addEnvironment('APOTHEOSIS_MCP_URL', process.env.APOTHEOSIS_MCP_URL || 'https://apotheosis-ux.com/mcp');
 
 profilesTable.grantReadData(chatLambda);
 workflowsTable.grantReadData(chatLambda);

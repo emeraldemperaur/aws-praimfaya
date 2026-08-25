@@ -785,6 +785,28 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 </>
               )}
 
+              {/* MITO MCP */}
+              {activeAuthPrompt === 'mito' && (
+                <input 
+                  type="password" 
+                  placeholder="Mito UI MCP API Key" 
+                  onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, mitoToken: e.target.value })} 
+                  required 
+                  style={inputStyle} 
+                />
+              )}
+
+              {/* APOTHEOSIS MCP */}
+              {activeAuthPrompt === 'apotheosis' && (
+                <input 
+                  type="password" 
+                  placeholder="Apotheosis UX MCP API Key" 
+                  onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, apotheosisToken: e.target.value })} 
+                  required 
+                  style={inputStyle} 
+                />
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
                 <button 
                   type="button" 

@@ -521,4 +521,62 @@ export const NATIVE_TOOLS_REGISTRY = [
             }
         }
     },
+    // --- Enterprise Full Stack Developer (MCP Wrappers) ---
+    {
+        toolSpec: {
+            name: "mito_mcp_agent",
+            description: "Full Stack Developer agent for Mito MCP Server. Enables advanced data analysis, Python automation, and data visualization. Call action='LIST_TOOLS' to discover capabilities, then 'CALL_TOOL' to execute them.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["LIST_TOOLS", "CALL_TOOL"] }, 
+                        mcpToolName: { type: "string", description: "The specific Mito MCP tool to execute (required for CALL_TOOL)." },
+                        mcpArguments: { type: "string", description: "JSON stringified arguments required for the specific Mito tool." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "apotheosis_mcp_agent",
+            description: "Full Stack Developer agent for Apotheosis MCP Server. Automates DevOps, provisions Vercel/Supabase, and generates full-stack components. Call action='LIST_TOOLS' to discover capabilities, then 'CALL_TOOL' to execute them.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["LIST_TOOLS", "CALL_TOOL"] }, 
+                        mcpToolName: { type: "string", description: "The specific Apotheosis MCP tool to execute (required for CALL_TOOL)." },
+                        mcpArguments: { type: "string", description: "JSON stringified arguments required for the specific Apotheosis tool." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    // --- Enterprise Bring Your Own MCP (BYOMCP) ---
+    {
+        toolSpec: {
+            name: "custom_mcp_agent",
+            description: "Agent for the user's custom Bring Your Own MCP (BYOMCP) server. Connects to their proprietary infrastructure. Call action='LIST_TOOLS' to discover capabilities, then 'CALL_TOOL' to execute them.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["LIST_TOOLS", "CALL_TOOL"] }, 
+                        mcpToolName: { type: "string", description: "The specific custom MCP tool to execute (required for CALL_TOOL)." },
+                        mcpArguments: { type: "string", description: "JSON stringified arguments required for the specific tool." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
 ];
+
+export const isValidUrl = (urlString: string) => {
+            try { return Boolean(new URL(urlString)); }
+            catch(e) { return false; }
+        };

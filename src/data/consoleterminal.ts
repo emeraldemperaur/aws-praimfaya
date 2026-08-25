@@ -82,4 +82,6 @@ export interface EphemeralSecrets {
   pricelineApiKey?: string;
   vrboPartnerId?: string;
   vrboApiKey?: string;
+  mitoToken?: string;
+  apotheosisToken?: string;
 }
