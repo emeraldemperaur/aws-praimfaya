@@ -215,5 +215,310 @@ export const NATIVE_TOOLS_REGISTRY = [
             description: "Collaboration agent for Slack. Dispatches messages to channels, reads channel history for summaries, objectives, and next steps.",
             inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["READ_CHANNEL_HISTORY", "POST_MESSAGE"] }, channelId: { type: "string" }, message: { type: "string" } }, required: ["action", "channelId"] } }
         }
-    }
+    },
+    // --- Enterprise Software Development ---
+    {
+        toolSpec: {
+            name: "github_developer_agent",
+            description: "Software developer agent for GitHub. Integrates with the GitHub REST API to securely review repositories, read files, commit code, and manage pull requests.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["GET_REPO", "GET_FILE", "CREATE_OR_UPDATE_FILE", "CREATE_PULL_REQUEST", "MERGE_PULL_REQUEST"] }, 
+                        owner: { type: "string", description: "Repository owner (user or organization)." }, 
+                        repo: { type: "string", description: "Repository name." },
+                        path: { type: "string", description: "File path in the repository." },
+                        branch: { type: "string", description: "Target branch name." },
+                        sourceBranch: { type: "string", description: "Source branch for Pull Requests." },
+                        targetBranch: { type: "string", description: "Target branch for Pull Requests." },
+                        commitMessage: { type: "string", description: "Message detailing the commit." },
+                        fileContent: { type: "string", description: "Raw text content of the file to commit/push." },
+                        pullRequestTitle: { type: "string", description: "Title of the Pull Request." },
+                        pullRequestBody: { type: "string", description: "Description body of the Pull Request." },
+                        pullRequestNumber: { type: "number", description: "PR number to merge." }
+                    }, 
+                    required: ["action", "owner", "repo"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "gitlab_developer_agent",
+            description: "Software developer agent for GitLab. Integrates with GitLab Projects and Commits API to review repositories, read files, commit code, and manage merge requests.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["GET_PROJECT", "GET_FILE", "COMMIT_FILE", "CREATE_MERGE_REQUEST", "ACCEPT_MERGE_REQUEST"] }, 
+                        projectId: { type: "string", description: "Numeric project ID or URL-encoded namespace/project path." }, 
+                        filePath: { type: "string", description: "File path in the repository." },
+                        branch: { type: "string", description: "Target branch name." },
+                        sourceBranch: { type: "string", description: "Source branch for Merge Requests." },
+                        targetBranch: { type: "string", description: "Target branch for Merge Requests." },
+                        commitMessage: { type: "string", description: "Message detailing the commit." },
+                        fileContent: { type: "string", description: "Raw text content of the file to commit/push." },
+                        fileAction: { type: "string", enum: ["create", "update", "delete"], description: "Action to take on the file during commit." },
+                        mergeRequestTitle: { type: "string", description: "Title of the Merge Request." },
+                        mergeRequestBody: { type: "string", description: "Description body of the Merge Request." },
+                        mergeRequestIid: { type: "number", description: "Internal ID (IID) of the MR to accept." }
+                    }, 
+                    required: ["action", "projectId"] 
+                } 
+            }
+        }
+    },
+    // --- Enterprise Site Reliability Engineering (SRE) ---
+    {
+        toolSpec: {
+            name: "grafana_sre_agent",
+            description: "SRE agent for Grafana Cloud. Inspects data sources, queries Prometheus metrics and Loki logs, and automatically provisions monitoring dashboards.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["GET_DATA_SOURCES", "QUERY_METRICS", "QUERY_LOKI_LOGS", "CREATE_DASHBOARD"] }, 
+                        dataSourceUid: { type: "string", description: "UID of the target Prometheus or Loki data source." },
+                        query: { type: "string", description: "LogQL query for Loki or PromQL query for Prometheus." },
+                        dashboardJson: { type: "string", description: "JSON stringified Grafana dashboard definition payload." },
+                        timeRange: { type: "string", description: "Time range for queries (e.g., '1h', '6h', '24h'). Defaults to '1h'." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "datadog_sre_agent",
+            description: "SRE agent for Datadog. Retrieves raw telemetry (metrics, logs) for downstream warehousing, inspects metrics, and creates Datadog dashboards.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["QUERY_LOGS", "QUERY_METRICS", "CREATE_DASHBOARD", "SEARCH_DASHBOARDS"] }, 
+                        query: { type: "string", description: "Datadog log search query or metric query string." },
+                        from: { type: "number", description: "Start time POSIX timestamp (seconds)." },
+                        to: { type: "number", description: "End time POSIX timestamp (seconds)." },
+                        dashboardJson: { type: "string", description: "JSON stringified Datadog dashboard definition." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    // --- Enterprise Property Management ---
+    {
+        toolSpec: {
+            name: "butterflymx_access_agent",
+            description: "Property access management agent for ButterflyMX. Interfaces with Access Points, Logs, Devices, Tenants, and Virtual Keys.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["GET_BUILDINGS", "GET_TENANTS", "GET_ACCESS_LOGS", "OPEN_DOOR", "CREATE_VIRTUAL_KEY"] }, 
+                        buildingId: { type: "string", description: "ButterflyMX Building ID." },
+                        tenantId: { type: "string", description: "ButterflyMX Tenant ID." },
+                        deviceId: { type: "string", description: "Device or Access Point ID for door release." },
+                        virtualKeyData: { type: "string", description: "JSON stringified virtual key payload (start/end times, recipient)." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "yardi_rentcafe_agent",
+            description: "Property management agent for Yardi RentCafe (via Virtuoso MCP). Handles tenant interactions, abstracts leases, audits ledgers, and processes maintenance.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        mcpToolName: { 
+                            type: "string", 
+                            enum: ["audit_ledger", "process_maintenance_request", "abstract_lease", "make_rent_payment", "review_lease"],
+                            description: "The specific Yardi Virtuoso MCP tool to execute." 
+                        }, 
+                        mcpArguments: { 
+                            type: "string", 
+                            description: "JSON stringified arguments required for the specific Yardi tool." 
+                        }
+                    }, 
+                    required: ["mcpToolName", "mcpArguments"] 
+                } 
+            }
+        }
+    },
+    // --- Enterprise Core Business Operations ---
+    {
+        toolSpec: {
+            name: "salesforce_crm_agent",
+            description: "Salesforce CRM agent. Executes SOQL queries for forecasting, creates/updates records, and interacts with TaskRay for project management.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["SOQL_QUERY", "GET_RECORD", "CREATE_RECORD", "UPDATE_RECORD"] }, 
+                        query: { type: "string", description: "Valid SOQL query string." },
+                        objectName: { type: "string", description: "Salesforce SObject API name (e.g., Lead, Opportunity, TASKRAY__Project__c)." },
+                        recordId: { type: "string", description: "Salesforce Record ID." },
+                        recordData: { type: "string", description: "JSON stringified record payload." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "sap_erp_agent",
+            description: "SAP ERP OData agent. Queries lead time analysis, product lines, and business partners via SAP REST/OData API.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["ODATA_GET", "ODATA_POST"] }, 
+                        endpoint: { type: "string", description: "SAP OData endpoint path (e.g., /sap/opu/odata/sap/API_SALES_ORDER_SRV/A_SalesOrder)." },
+                        payload: { type: "string", description: "JSON stringified payload for POST requests." }
+                    }, 
+                    required: ["action", "endpoint"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "dynamics_365_agent",
+            description: "Microsoft Dynamics 365 agent. Tracks leads, production orchestration, and retrieves Web API records.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["RETRIEVE_RECORDS", "CREATE_RECORD", "UPDATE_RECORD"] }, 
+                        entityPluralName: { type: "string", description: "Entity set name (e.g., leads, opportunities)." },
+                        queryOptions: { type: "string", description: "OData query options (e.g., $select=name&$top=10)." },
+                        recordId: { type: "string", description: "Dynamics 365 Record GUID." },
+                        payload: { type: "string", description: "JSON stringified payload." }
+                    }, 
+                    required: ["action", "entityPluralName"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "hubspot_crm_agent",
+            description: "HubSpot CRM agent. securely retrieves and reviews Contacts, Deals, Custom Objects and Properties.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["SEARCH_OBJECTS", "GET_OBJECT", "CREATE_OBJECT", "UPDATE_OBJECT"] }, 
+                        objectType: { type: "string", description: "contacts, deals, companies, or custom object ID." },
+                        objectId: { type: "string", description: "HubSpot Object ID." },
+                        searchQuery: { type: "string", description: "JSON stringified search filter payload." },
+                        payload: { type: "string", description: "JSON stringified properties payload." }
+                    }, 
+                    required: ["action", "objectType"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "linkedin_sales_agent",
+            description: "LinkedIn Sales Navigator agent. Retrieves lead and account information to provide RAG-augmented insights.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["SEARCH_LEADS", "GET_ACCOUNT"] }, 
+                        query: { type: "string", description: "Search query for leads or companies." },
+                        accountId: { type: "string", description: "LinkedIn Account or Profile ID." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "uipath_rpa_agent",
+            description: "UiPath Orchestrator agent. Manages unattended jobs, views robot status, and kicks off event-driven automations via OData.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["GET_JOBS", "START_JOB", "STOP_JOB", "GET_QUEUE_ITEMS", "ADD_QUEUE_ITEM"] }, 
+                        releaseKey: { type: "string", description: "Process Release Key needed to start a job." },
+                        jobId: { type: "string", description: "Job ID." },
+                        queueName: { type: "string", description: "Target UiPath Queue Name." },
+                        payload: { type: "string", description: "JSON stringified input arguments or queue item data." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    // --- Enterprise Travel Booking & Reservation ---
+    {
+        toolSpec: {
+            name: "booking_com_travel_agent",
+            description: "Travel agent for Booking.com Demand API. Retrieves property/reservation details and guest feedback to contextualize inquiries and formulate personalized itineraries.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["SEARCH_PROPERTIES", "GET_PROPERTY_DETAILS", "GET_REVIEWS", "GET_ORDER_DETAILS"] }, 
+                        query: { type: "string", description: "Search query or destination for properties." },
+                        propertyId: { type: "string", description: "Booking.com Property ID." },
+                        orderId: { type: "string", description: "Booking.com Order/Reservation ID." },
+                        checkIn: { type: "string", description: "Check-in date (YYYY-MM-DD)." },
+                        checkOut: { type: "string", description: "Check-out date (YYYY-MM-DD)." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "priceline_travel_agent",
+            description: "Travel agent for Priceline Partner Solutions API. Retrieves property details, reviews, and reservations to address guest inquiries and personalize recommendations.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["SEARCH_HOTELS", "GET_HOTEL_DETAILS", "GET_REVIEWS", "GET_RESERVATION"] }, 
+                        destination: { type: "string", description: "Target destination for searches." },
+                        hotelId: { type: "string", description: "Priceline Hotel ID." },
+                        reservationId: { type: "string", description: "Priceline Reservation ID." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "vrbo_property_agent",
+            description: "Vrbo property management and booking agent. Manages listings, real-time rates, availability calendars, reservations, and guest feedback.",
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        action: { type: "string", enum: ["GET_LISTING", "UPDATE_RATES", "GET_AVAILABILITY", "GET_RESERVATION", "GET_REVIEWS"] }, 
+                        propertyId: { type: "string", description: "Vrbo Property ID." },
+                        reservationId: { type: "string", description: "Vrbo Reservation ID." },
+                        payload: { type: "string", description: "JSON stringified payload for rate updates." },
+                        startDate: { type: "string", description: "YYYY-MM-DD format." },
+                        endDate: { type: "string", description: "YYYY-MM-DD format." }
+                    }, 
+                    required: ["action"] 
+                } 
+            }
+        }
+    },
 ];

@@ -612,6 +612,179 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 </>
               )}
 
+              {/* GITHUB */}
+              {activeAuthPrompt === 'github' && (
+                <input 
+                  type="password" 
+                  placeholder="GitHub Personal Access Token (Fine-grained or Classic)" 
+                  onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, githubToken: e.target.value })} 
+                  required 
+                  style={inputStyle} 
+                />
+              )}
+
+              {/* GITLAB */}
+              {activeAuthPrompt === 'gitlab' && (
+                <>
+                  <input 
+                    type="text" 
+                    placeholder="GitLab Domain (Optional, defaults to gitlab.com)" 
+                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, gitlabDomain: e.target.value })} 
+                    style={inputStyle} 
+                  />
+                  <input 
+                    type="password" 
+                    placeholder="GitLab Personal Access Token" 
+                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, gitlabToken: e.target.value })} 
+                    required 
+                    style={inputStyle} 
+                  />
+                </>
+              )}
+
+              {/* GRAFANA */}
+              {activeAuthPrompt === 'grafana' && (
+                <>
+                  <input 
+                    type="url" 
+                    placeholder="Grafana Instance URL (e.g., https://myorg.grafana.net)" 
+                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, grafanaUrl: e.target.value })} 
+                    required 
+                    style={inputStyle} 
+                  />
+                  <input 
+                    type="password" 
+                    placeholder="Grafana Cloud API Token / Service Account Token" 
+                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, grafanaToken: e.target.value })} 
+                    required 
+                    style={inputStyle} 
+                  />
+                </>
+              )}
+
+              {/* DATADOG */}
+              {activeAuthPrompt === 'datadog' && (
+                <>
+                  <input 
+                    type="text" 
+                    placeholder="Datadog Site (Optional, defaults to datadoghq.com)" 
+                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, datadogSite: e.target.value })} 
+                    style={inputStyle} 
+                  />
+                  <input 
+                    type="password" 
+                    placeholder="Datadog API Key" 
+                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, datadogApiKey: e.target.value })} 
+                    required 
+                    style={inputStyle} 
+                  />
+                  <input 
+                    type="password" 
+                    placeholder="Datadog Application Key" 
+                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, datadogAppKey: e.target.value })} 
+                    required 
+                    style={inputStyle} 
+                  />
+                </>
+              )}
+
+              {/* BUTTERFLYMX */}
+              {activeAuthPrompt === 'butterflymx' && (
+                <input 
+                  type="password" 
+                  placeholder="ButterflyMX API Access Token" 
+                  onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, butterflyMxToken: e.target.value })} 
+                  required 
+                  style={inputStyle} 
+                />
+              )}
+
+              {/* YARDI VIRTUOSO MCP */}
+              {activeAuthPrompt === 'yardi' && (
+                <>
+                  <input 
+                    type="password" 
+                    placeholder="Yardi Virtuoso MCP Access Token" 
+                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, yardiToken: e.target.value })} 
+                    required 
+                    style={inputStyle} 
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="Yardi Property ID (Optional, for property-specific scoping)" 
+                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, yardiPropertyId: e.target.value })} 
+                    style={inputStyle} 
+                  />
+                </>
+              )}
+
+              {/* SALESFORCE */}
+              {activeAuthPrompt === 'salesforce' && (
+                <>
+                  <input type="url" placeholder="Salesforce Instance URL (e.g. https://your-domain.my.salesforce.com)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, salesforceInstanceUrl: e.target.value })} required style={inputStyle} />
+                  <input type="password" placeholder="Salesforce OAuth / Access Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, salesforceAccessToken: e.target.value })} required style={inputStyle} />
+                </>
+              )}
+
+              {/* SAP ERP */}
+              {activeAuthPrompt === 'sap' && (
+                <>
+                  <input type="url" placeholder="SAP S/4HANA Base URL" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, sapBaseUrl: e.target.value })} required style={inputStyle} />
+                  <input type="text" placeholder="SAP Username" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, sapUsername: e.target.value })} required style={inputStyle} />
+                  <input type="password" placeholder="SAP Password" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, sapPassword: e.target.value })} required style={inputStyle} />
+                </>
+              )}
+
+              {/* DYNAMICS 365 */}
+              {activeAuthPrompt === 'dynamics' && (
+                <>
+                  <input type="url" placeholder="Dynamics 365 Organization URL" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, dynamicsInstanceUrl: e.target.value })} required style={inputStyle} />
+                  <input type="password" placeholder="Dynamics 365 Web API Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, dynamicsAccessToken: e.target.value })} required style={inputStyle} />
+                </>
+              )}
+
+              {/* HUBSPOT */}
+              {activeAuthPrompt === 'hubspot' && (
+                <input type="password" placeholder="HubSpot Private App Access Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, hubspotAccessToken: e.target.value })} required style={inputStyle} />
+              )}
+
+              {/* LINKEDIN */}
+              {activeAuthPrompt === 'linkedin' && (
+                <input type="password" placeholder="LinkedIn Sales Navigator Access Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, linkedInAccessToken: e.target.value })} required style={inputStyle} />
+              )}
+
+              {/* UIPATH */}
+              {activeAuthPrompt === 'uipath' && (
+                <>
+                  <input type="url" placeholder="UiPath Cloud URL (e.g. https://cloud.uipath.com)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, uipathOrchestratorUrl: e.target.value })} required style={inputStyle} />
+                  <input type="text" placeholder="Organization Name" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, uipathOrganizationName: e.target.value })} required style={inputStyle} />
+                  <input type="text" placeholder="Tenant Name" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, uipathTenantName: e.target.value })} required style={inputStyle} />
+                  <input type="password" placeholder="UiPath OAuth / Bearer Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, uipathAccessToken: e.target.value })} required style={inputStyle} />
+                  <input type="text" placeholder="Orchestrator Folder ID (Optional, defaults to 1)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, uipathFolderId: e.target.value })} style={inputStyle} />
+                </>
+              )}
+
+              {/* BOOKING.COM */}
+              {activeAuthPrompt === 'booking' && (
+                <>
+                  <input type="text" placeholder="Booking.com Affiliate ID" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, bookingAffiliateId: e.target.value })} required style={inputStyle} />
+                  <input type="password" placeholder="Booking.com API Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, bookingToken: e.target.value })} required style={inputStyle} />
+                </>
+              )}
+
+              {/* PRICELINE */}
+              {activeAuthPrompt === 'priceline' && (
+                <input type="password" placeholder="Priceline Partner API Key" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, pricelineApiKey: e.target.value })} required style={inputStyle} />
+              )}
+
+              {/* VRBO */}
+              {activeAuthPrompt === 'vrbo' && (
+                <>
+                  <input type="text" placeholder="Expedia Group Partner ID" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, vrboPartnerId: e.target.value })} required style={inputStyle} />
+                  <input type="password" placeholder="Vrbo / Rapid API Key" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, vrboApiKey: e.target.value })} required style={inputStyle} />
+                </>
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
                 <button 
                   type="button" 
