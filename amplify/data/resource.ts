@@ -212,16 +212,35 @@ const schema = a.schema({
     })
     .authorization(iamRBAC),
 
+  UsageRecord: a.model({
+      id: a.id(),
+      userId: a.string().required(),
+      sessionId: a.string().required(),
+      sessionTitle: a.string(),
+      actionType: a.enum(['LLM_INFERENCE', 'TOOL_EXECUTION', 'TOP_UP']),
+      modelId: a.string(),      
+      toolName: a.string(),
+      creditsUsed: a.integer().required(),
+      inputTokens: a.integer(),
+      outputTokens: a.integer(),
+      createdAt: a.datetime().required()
+    })
+    .authorization(iamRBAC)
+    .secondaryIndexes(index => [
+      index("userId").sortKeys(["createdAt"]),
+      index("sessionId").sortKeys(["createdAt"])
+    ]),
+
   createCheckoutSession: a.mutation()
     .arguments({ planTier: a.enum(['VANGUARD', 'VANGUARD_ELITE', 'TOP_UP']) })
     .returns(a.string())
-    .authorization((allow) => [allow.authenticated()])
+    .authorization(iamRBAC)
     .handler(a.handler.function(createCheckoutSession)),
 
   grantPromoCredits: a.mutation()
     .arguments({ targetCognitoUserId: a.string().required(), creditAmount: a.integer().required() })
     .returns(a.boolean())
-    .authorization((allow) => [allow.groups(['superadmin', 'admin', 'root'])])
+    .authorization((allow) => [allow.groups(['superadmin', 'admin', 'root', 'heda'])])
     .handler(a.handler.function(grantPromoCredits)),
 
   

@@ -414,3 +414,9 @@ ragArtifactsTable.grantReadWriteData(mediaLambda);
 
 mediaLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 userProfilesTable.grantReadWriteData(mediaLambda);
+
+const usageRecordsTable = backend.data.resources.tables["UsageRecord"];
+chatLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
+usageRecordsTable.grantReadWriteData(chatLambda);
+mediaLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
+usageRecordsTable.grantReadWriteData(mediaLambda);

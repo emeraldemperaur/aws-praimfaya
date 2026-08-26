@@ -2,7 +2,7 @@ import { BedrockRuntimeClient, ConverseCommand, StartAsyncInvokeCommand, InvokeM
 import { BedrockAgentRuntimeClient, RetrieveCommand, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import axios from "axios";
@@ -26,6 +26,7 @@ const USER_PROFILES_TABLE = process.env.USER_PROFILES_TABLE_NAME!;
 const MEDIA_OUTPUT_BUCKET = process.env.MEDIA_OUTPUT_BUCKET_NAME || "praimfaya-media-outputs";
 const PYTHON_VALIDATOR_LAMBDA_ARN = process.env.PYTHON_VALIDATOR_LAMBDA_ARN!;
 const RAG_ARTIFACTS_TABLE = process.env.RAG_ARTIFACTS_TABLE_NAME!;
+const USAGE_RECORDS_TABLE = process.env.USAGE_RECORDS_TABLE_NAME!;
 
 const workflowEmbeddingCache: Record<string, number[]> = {};
 const nativeToolEmbeddingCache: Record<string, number[]> = {};
@@ -1476,7 +1477,14 @@ export const handler = async (event: any) => {
         const totalDeduction = Math.ceil((totalInboundTokens + totalOutboundTokens) * (MODEL_CREDIT_MULTIPLIERS[targetModelId] || 1)) + flatToolCredits;
 
         if (totalDeduction > 0) {
-            await dynamodb.send(new UpdateCommand({ TableName: USER_PROFILES_TABLE, Key: { cognitoUserId }, UpdateExpression: "SET computeCredits = computeCredits - :cost", ExpressionAttributeValues: { ":cost": totalDeduction } }));
+            await recordUsageTransaction(cognitoUserId, totalDeduction, {
+                sessionId: args.sessionId || 'unknown-session',
+                sessionTitle: profile.title,
+                actionType: 'LLM_INFERENCE', 
+                modelId: targetModelId,
+                inputTokens: totalInboundTokens,
+                outputTokens: totalOutboundTokens
+            });
         }
   
         return JSON.stringify({ 
@@ -1519,4 +1527,60 @@ async function recordRAGArtifact(profile: any, session: any, fileUrl: string, fi
             createdAt: new Date().toISOString()
         }
     }));
+}
+
+async function recordUsageTransaction(
+    userId: string, 
+    cost: number, 
+    telemetry: {
+        sessionId: string,
+        sessionTitle?: string,
+        actionType: 'LLM_INFERENCE' | 'TOOL_EXECUTION',
+        modelId?: string,
+        toolName?: string,
+        inputTokens?: number,
+        outputTokens?: number
+    }
+) {
+    if (cost <= 0) return;
+
+    const recordId = `usg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+
+    try {
+        await dynamodb.send(new TransactWriteCommand({
+            TransactItems: [
+                {
+                    // Deduct compute usage balance
+                    Update: {
+                        TableName: USER_PROFILES_TABLE!,
+                        Key: { cognitoUserId: userId },
+                        UpdateExpression: "SET computeCredits = computeCredits - :cost",
+                        ExpressionAttributeValues: { ":cost": cost }
+                    }
+                },
+                {
+                    // Mirror compute usage to UsageRecords table for telemetry
+                    Put: {
+                        TableName: USAGE_RECORDS_TABLE!, // Make sure this is in backend.ts!
+                        Item: {
+                            id: recordId,
+                            userId: userId,
+                            sessionId: telemetry.sessionId,
+                            sessionTitle: telemetry.sessionTitle || 'Terminal Session',
+                            actionType: telemetry.actionType,
+                            modelId: telemetry.modelId || 'N/A',
+                            toolName: telemetry.toolName || 'N/A',
+                            creditsUsed: cost,
+                            inputTokens: telemetry.inputTokens || 0,
+                            outputTokens: telemetry.outputTokens || 0,
+                            createdAt: now
+                        }
+                    }
+                }
+            ]
+        }));
+    } catch (err) {
+        console.error(`CRITICAL: Transaction failed for user ${userId}. Credits not deducted.`, err);
+    }
 }

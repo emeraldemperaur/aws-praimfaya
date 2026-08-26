@@ -2,7 +2,7 @@ import { BedrockRuntimeClient, InvokeModelCommand, StartAsyncInvokeCommand } fro
 import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 
 const bedrockRuntime = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const pollyClient = new PollyClient({ region: process.env.AWS_REGION });
@@ -10,10 +10,13 @@ const s3Client = new S3Client({ region: process.env.AWS_REGION });
 const rawDynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const dynamodb = DynamoDBDocumentClient.from(rawDynamoClient);
 
+// Standardized Environment Variables
 const MEDIA_BUCKET = process.env.MEDIA_OUTPUT_BUCKET_NAME!;
 const RAG_ARTIFACTS_TABLE = process.env.RAG_ARTIFACTS_TABLE_NAME!;
 const USER_PROFILES_TABLE = process.env.USER_PROFILES_TABLE_NAME!;
+const USAGE_RECORDS_TABLE = process.env.USAGE_RECORDS_TABLE_NAME!;
 
+// 100% Margin Flat Costs
 const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = { 
     "generate_luma_video": 150000, 
     "generate_image": 30000, 
@@ -144,24 +147,18 @@ export const handler = async (event: any) => {
 // ==========================================
 
 async function deductToolCredits(event: any, functionName: string) {
-    if (!USER_PROFILES_TABLE) return;
-    
-    // Extract the userId passed down from the chat-handler's sessionState
     const sessionAttrs = event.sessionAttributes || {};
     const userId = sessionAttrs.userId;
+    const sessionId = sessionAttrs.terminalId || event.sessionId || `session-${Date.now()}`;
     const cost = MULTIMODAL_TOOL_FLAT_COSTS[functionName];
 
     if (userId && cost) {
-        try {
-            await dynamodb.send(new UpdateCommand({ 
-                TableName: USER_PROFILES_TABLE, 
-                Key: { cognitoUserId: userId }, 
-                UpdateExpression: "SET computeCredits = computeCredits - :cost", 
-                ExpressionAttributeValues: { ":cost": cost } 
-            }));
-        } catch (err) {
-            console.error(`Failed to deduct ${cost} credits from user ${userId}`, err);
-        }
+        await recordUsageTransaction(userId, cost, {
+            sessionId: sessionId,
+            sessionTitle: sessionAttrs.terminalTitle,
+            actionType: 'TOOL_EXECUTION',
+            toolName: functionName,
+        });
     }
 }
 
@@ -206,5 +203,61 @@ async function recordRAGArtifact(event: any, fileUrl: string, fileType: string) 
         }));
     } catch (err) {
         console.error("Failed to record RAG Artifact from Managed Agent:", err);
+    }
+}
+
+async function recordUsageTransaction(
+    userId: string, 
+    cost: number, 
+    telemetry: {
+        sessionId: string,
+        sessionTitle?: string,
+        actionType: 'LLM_INFERENCE' | 'TOOL_EXECUTION',
+        modelId?: string,
+        toolName?: string,
+        inputTokens?: number,
+        outputTokens?: number
+    }
+) {
+    if (cost <= 0) return;
+
+    const recordId = `usg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+
+    try {
+        await dynamodb.send(new TransactWriteCommand({
+            TransactItems: [
+                {
+                    // Deduct compute usage balance
+                    Update: {
+                        TableName: USER_PROFILES_TABLE,
+                        Key: { cognitoUserId: userId },
+                        UpdateExpression: "SET computeCredits = computeCredits - :cost",
+                        ExpressionAttributeValues: { ":cost": cost }
+                    }
+                },
+                {
+                    // Mirror compute usage to UsageRecords table for telemetry
+                    Put: {
+                        TableName: USAGE_RECORDS_TABLE,
+                        Item: {
+                            id: recordId,
+                            userId: userId,
+                            sessionId: telemetry.sessionId,
+                            sessionTitle: telemetry.sessionTitle || 'Terminal Session',
+                            actionType: telemetry.actionType,
+                            modelId: telemetry.modelId || 'N/A',
+                            toolName: telemetry.toolName || 'N/A',
+                            creditsUsed: cost,
+                            inputTokens: telemetry.inputTokens || 0,
+                            outputTokens: telemetry.outputTokens || 0,
+                            createdAt: now
+                        }
+                    }
+                }
+            ]
+        }));
+    } catch (err) {
+        console.error(`CRITICAL: Transaction failed for user ${userId}. Credits not deducted.`, err);
     }
 }
