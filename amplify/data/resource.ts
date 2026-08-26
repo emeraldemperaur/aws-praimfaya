@@ -171,6 +171,22 @@ const schema = a.schema({
     })
     .authorization(headerRBAC),
 
+    RAGArtifact: a.model({
+      id: a.id(),
+      userId: a.string().required(),
+      terminalId: a.string().required(),
+      terminalTitle: a.string(),
+      modelName: a.string(),
+      contextProfileName: a.string(),
+      contextProfileId: a.string(),
+      fileName: a.string().required(),
+      fileUrl: a.string().required(),
+      fileType: a.enum(['IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT']),
+      createdAt: a.datetime().required()
+    })
+    .authorization(headerRBAC)
+    .secondaryIndexes(index => [index("userId").sortKeys(["createdAt"])]),
+
   FoundationModel: a
     .model({
       provider: a.enum(ModelProviders),

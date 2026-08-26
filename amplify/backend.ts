@@ -249,7 +249,7 @@ const reaperLambda = backend.agentReaper.resources.lambda as lambda.Function;
 const profilesTable = backend.data.resources.tables["ContextProfile"];
 const workflowsTable = backend.data.resources.tables["ContextWorkflow"];
 const profileWorkflowsTable = backend.data.resources.tables["ContextProfileWorkflow"];
-const userProfilesTable = backend.data.resources.tables["UserProfile"]; // <-- FIX: Mapped User Profiles table
+const userProfilesTable = backend.data.resources.tables["UserProfile"];
 
 provisionerLambda.addEventSource(new DynamoEventSource(profilesTable, {
   startingPosition: lambda.StartingPosition.LATEST,
@@ -404,3 +404,13 @@ mediaLambda.addPermission('AllowBedrockAgentInvoke', {
 });
 
 provisionerLambda.addEnvironment('MULTIMEDIA_EXECUTOR_LAMBDA_ARN', mediaLambda.functionArn);
+
+const ragArtifactsTable = backend.data.resources.tables["RAGArtifact"];
+chatLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
+ragArtifactsTable.grantReadWriteData(chatLambda);
+
+mediaLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
+ragArtifactsTable.grantReadWriteData(mediaLambda);
+
+mediaLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+userProfilesTable.grantReadWriteData(mediaLambda);

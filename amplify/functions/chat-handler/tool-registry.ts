@@ -640,6 +640,24 @@ export const NATIVE_TOOLS_REGISTRY = [
             }
         }
     },
+    // --- Document Generation ---
+    {
+        toolSpec: {
+            name: "generate_document",
+            description: "Generates a formatted text document, markdown file, or CSV data file and saves it as a downloadable RAG Artifact.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        content: { type: "string", description: "The full text content of the document." },
+                        fileName: { type: "string", description: "The desired file name (without extension)." },
+                        format: { type: "string", enum: ["md", "txt", "csv", "html"], description: "The file format." }
+                    },
+                    required: ["content", "fileName", "format"]
+                }
+            }
+        }
+    },
 ];
 
 export const isValidUrl = (urlString: string) => {

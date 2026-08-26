@@ -2,7 +2,7 @@ import { BedrockRuntimeClient, ConverseCommand, StartAsyncInvokeCommand, InvokeM
 import { BedrockAgentRuntimeClient, RetrieveCommand, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import axios from "axios";
@@ -25,15 +25,16 @@ const WEBHOOK_ROUTER_ARN = process.env.WEBHOOK_ROUTER_LAMBDA_ARN!;
 const USER_PROFILES_TABLE = process.env.USER_PROFILES_TABLE_NAME!;
 const MEDIA_OUTPUT_BUCKET = process.env.MEDIA_OUTPUT_BUCKET_NAME || "praimfaya-media-outputs";
 const PYTHON_VALIDATOR_LAMBDA_ARN = process.env.PYTHON_VALIDATOR_LAMBDA_ARN!;
+const RAG_ARTIFACTS_TABLE = process.env.RAG_ARTIFACTS_TABLE_NAME!;
 
 const workflowEmbeddingCache: Record<string, number[]> = {};
 const nativeToolEmbeddingCache: Record<string, number[]> = {};
 
-const MODEL_CREDIT_MULTIPLIERS: Record<string, number> = { "amazon.nova-micro-v1:0": 1, "anthropic.claude-3-5-sonnet-20241022-v2:0": 15 };
-const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = { "generate_luma_video": 150000, "generate_audio": 500, "generate_image": 25000, "generate_enterprise_image": 20000, "edit_image": 25000 };
+const MODEL_CREDIT_MULTIPLIERS: Record<string, number> = { "amazon.nova-micro-v1:0": 1, "anthropic.claude-3-5-sonnet-20241022-v2:0": 3, "amazon.nova-pro-v1:0": 2 };
+const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = { "generate_luma_video": 150000, "generate_audio": 500, "generate_image": 30000, "generate_enterprise_image": 4000, "edit_image": 15000 };
 
 const mcpToolCache: Record<string, { tools: any[]; expiresAt: number }> = {};
-const MCP_CACHE_TTL_MS = 1000 * 60 * 15; // 15 minutes in milliseconds
+const MCP_CACHE_TTL_MS = 1000 * 60 * 15; 
 
 export const handler = async (event: any) => {
     try {
@@ -72,21 +73,46 @@ export const handler = async (event: any) => {
                     agentAliasId: profile.awsAliasId,
                     sessionId: safeSessionId,
                     inputText: userMessage,
-                    enableTrace: false
+                    enableTrace: false,
+                    sessionState: {
+                        sessionAttributes: {
+                            userId: cognitoUserId,
+                            terminalId: args.sessionId || safeSessionId,
+                            terminalTitle: profile.title || 'Managed Agent Session',
+                            contextProfileName: profile.name || 'Supervisor Agent',
+                            contextProfileId: profile.id,
+                        }
+                    }
                 }));
 
                 let agentResponse = "";
-                for await (const chunk of invokeAgentRes.completion || []) {
-                    if (chunk.chunk?.bytes) {
-                        agentResponse += new TextDecoder("utf-8").decode(chunk.chunk.bytes);
+                for await (const streamEvent of invokeAgentRes.completion || []) {
+                    if (streamEvent.chunk?.bytes) {
+                        agentResponse += new TextDecoder("utf-8").decode(streamEvent.chunk.bytes);
                     }
+                }
+
+            
+                const inputTokens = Math.ceil(userMessage.length / 4) + 500;
+                const outputTokens = Math.ceil(agentResponse.length / 4);
+
+                const targetModelId = profile.llmModelId || "amazon.nova-pro-v1:0";
+                const llmCost = Math.ceil((inputTokens + outputTokens) * (MODEL_CREDIT_MULTIPLIERS[targetModelId] || 2));
+                
+                if (llmCost > 0) {
+                    await dynamodb.send(new UpdateCommand({ 
+                        TableName: USER_PROFILES_TABLE, 
+                        Key: { cognitoUserId }, 
+                        UpdateExpression: "SET computeCredits = computeCredits - :cost", 
+                        ExpressionAttributeValues: { ":cost": llmCost } 
+                    }));
                 }
 
                 return JSON.stringify({ 
                     answer: agentResponse, 
                     citations: [], 
                     requestedCredentials: [], 
-                    tokenUsage: { inputTokens: 0, outputTokens: 0 } 
+                    tokenUsage: { inputTokens, outputTokens } 
                 });
 
             } catch (err: any) {
@@ -224,6 +250,71 @@ export const handler = async (event: any) => {
                         executionResult = await processAndUploadImageOutput(invokeRes.body, toolUse.name);
                         if (executionResult.imageUrl) citations.push({ type: 'media', uri: executionResult.imageUrl });
                     } catch (err: any) { executionResult = { error: err.message }; }
+                }
+                else if (toolUse.name === 'generate_luma_video') {
+                    try {
+                        const { prompt, aspectRatio } = toolInput;
+                        const videoKeyPrefix = `video-renders/luma-${Date.now()}`;
+                        
+                        const asyncJob = await bedrockRuntime.send(new StartAsyncInvokeCommand({
+                            modelId: "luma.ray-v2:0",
+                            modelInput: { prompt: prompt, aspect_ratio: aspectRatio || '16:9' },
+                            outputDataConfig: {
+                                s3OutputDataConfig: { s3Uri: `s3://${MEDIA_OUTPUT_BUCKET}/${videoKeyPrefix}` }
+                            }
+                        }));
+
+                        const videoUrl = `https://${MEDIA_OUTPUT_BUCKET}.s3.amazonaws.com/${videoKeyPrefix}/output.mp4`;
+                        
+                        // Log to RAG Artifacts database
+                        await recordRAGArtifact(
+                            profile, 
+                            { userId: cognitoUserId, id: args.sessionId || `session-${Date.now()}`, title: profile.title }, 
+                            videoUrl, 
+                            'VIDEO'
+                        );
+
+                        citations.push({ type: 'media', uri: videoUrl });
+                        executionResult = { 
+                            status: "Success", 
+                            message: "Video generation job submitted successfully.", 
+                            videoUrl: videoUrl,
+                            jobArn: asyncJob.invocationArn
+                        };
+                    } catch (err: any) { 
+                        executionResult = { error: `Luma Video Error: ${err.message}` }; 
+                    }
+                }
+                // =========================================
+                // DOCUMENT GENERATION
+                // =========================================
+                else if (toolUse.name === 'generate_document') {
+                    const { content, fileName, format } = toolInput;
+                    const safeName = (fileName || 'document').replace(/[^a-zA-Z0-9-_]/g, '');
+                    const s3Key = `documents/${safeName}-${Date.now()}.${format}`;
+                    
+                    let mimeType = 'text/plain';
+                    if (format === 'html') mimeType = 'text/html';
+                    if (format === 'csv') mimeType = 'text/csv';
+                    if (format === 'md') mimeType = 'text/markdown';
+
+                    try {
+                        await s3Client.send(new PutObjectCommand({
+                            Bucket: process.env.MEDIA_OUTPUT_BUCKET_NAME!,
+                            Key: s3Key,
+                            Body: content,
+                            ContentType: mimeType
+                        }));
+
+                        const fileUrl = `https://${process.env.MEDIA_OUTPUT_BUCKET_NAME}.s3.amazonaws.com/${s3Key}`;
+                        
+                        // Log to RAG Artifacts database
+                        await recordRAGArtifact(profile, { id: args.sessionId, userId: cognitoUserId, title: profile.title }, fileUrl, 'DOCUMENT');
+
+                        executionResult = { status: "Success", fileUrl: fileUrl, message: `Document saved successfully as ${format.toUpperCase()}.` };
+                    } catch (err: any) {
+                        executionResult = { error: `Failed to save document: ${err.message}` };
+                    }
                 }
 
                 // =========================================
@@ -1411,3 +1502,21 @@ async function executeMcpTool(url: string, name: string, args: any) { try { cons
 function mapToBedrockType(t?: string): string { switch (t?.toLowerCase()) { case 'number': case 'float': return 'number'; case 'boolean': return 'boolean'; case 'array': return 'array'; case 'object': return 'object'; default: return 'string'; } }
 function buildJsonSchemaFromParams(params?: any[]) { if (!params || !params.length) return { type: "object", properties: {} }; const props: any = {}; const req: string[] = []; params.forEach(p => { props[p.variable] = { type: mapToBedrockType(p.type), description: p.variable }; if (p.isRequired) req.push(p.variable); }); return { type: "object", properties: props, required: req.length ? req : undefined }; }
 function sanitizeToolName(n: string): string { return n.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 64); }
+async function recordRAGArtifact(profile: any, session: any, fileUrl: string, fileType: string) {
+    const fileName = fileUrl.split('/').pop() || 'artifact';
+    await dynamodb.send(new PutCommand({
+        TableName: RAG_ARTIFACTS_TABLE,
+        Item: {
+            id: `art_${Date.now()}_${Math.random().toString(36).substring(2,7)}`,
+            userId: session.userId,
+            terminalId: session.id,
+            terminalTitle: session.title || 'Untitled Session',
+            modelName: profile.llmModelId || 'amazon.nova-pro-v1:0',
+            contextProfileName: profile.name || 'Vanguard AI',
+            fileUrl: fileUrl,
+            fileName: fileName,
+            fileType: fileType,
+            createdAt: new Date().toISOString()
+        }
+    }));
+}

@@ -439,20 +439,48 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                     <div style={{ 
                       marginTop: '1rem', paddingTop: '0.75rem', 
                       borderTop: `1px solid ${isUser ? 'rgba(255,255,255,0.2)' : (darkMode ? '#374151' : '#e5e7eb')}`, 
-                      fontSize: '0.75rem', color: isUser ? '#fecaca' : (darkMode ? '#9ca3af' : '#6b7280') 
+                      fontSize: '0.75rem' 
                     }}>
-                      <div style={{ fontWeight: 600, marginBottom: '0.5rem', fontFamily: 'Bodoni Moda Variable' }}>Retrieved Artifacts:</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div style={{ fontWeight: 600, marginBottom: '0.75rem', fontFamily: 'Bodoni Moda Variable', color: isUser ? '#fecaca' : (darkMode ? '#9ca3af' : '#6b7280') }}>Generated Artifacts:</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                         {msg.contextSources.map((source: string, idx: number) => {
-                          const isMedia = source.toLowerCase().includes('media') || source.toLowerCase().includes('asset');
+                          const urlMatch = source.match(/https:\/\/[^\s]+/);
+                          const url = urlMatch ? urlMatch[0] : null;
+                          const cleanName = url ? url.split('/').pop() : source.replace(/[📸🎥📄]/g, '').trim();
+
+                          if (!url) {
+                            return (
+                              <span key={idx} style={{ padding: '0.35rem 0.6rem', backgroundColor: isUser ? 'rgba(0,0,0,0.2)' : (darkMode ? '#1f2937' : '#f3f4f6'), borderRadius: '4px', border: isUser ? 'none' : `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontFamily: 'Google Sans Code, monospace', width: 'fit-content' }}>
+                                📄 {cleanName}
+                              </span>
+                            );
+                          }
+
+                          const isAudio = url.endsWith('.mp3') || url.endsWith('.wav');
+                          const isVideo = url.endsWith('.mp4');
+                          const isImage = url.endsWith('.jpeg') || url.endsWith('.jpg') || url.endsWith('.png');
+                          const isDocument = url.endsWith('.md') || url.endsWith('.csv') || url.endsWith('.txt') || url.endsWith('.html') || url.endsWith('.pdf');
+
                           return (
-                            <span key={idx} style={{ 
-                              padding: '0.25rem 0.5rem', backgroundColor: isUser ? 'rgba(0,0,0,0.2)' : (darkMode ? '#111827' : '#f3f4f6'), 
-                              borderRadius: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem',
-                              border: isUser ? 'none' : `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontFamily: 'Google Sans Code, monospace'
+                            <div key={idx} style={{ 
+                                padding: '0.5rem', backgroundColor: isUser ? 'rgba(0,0,0,0.2)' : (darkMode ? '#111827' : '#f9fafb'), 
+                                border: isUser ? 'none' : `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
+                                borderRadius: '8px', maxWidth: '400px' 
                             }}>
-                              {isMedia ? '📸' : '📄'} {source}
-                            </span>
+                              {isImage && <img src={url} alt="Generated" style={{ width: '100%', borderRadius: '4px', marginBottom: '0.5rem', objectFit: 'contain' }} loading="lazy" />}
+                              {isVideo && <video controls src={url} style={{ width: '100%', borderRadius: '4px', marginBottom: '0.5rem' }} />}
+                              {isAudio && <audio controls src={url} style={{ width: '100%', height: '32px', marginBottom: '0.5rem' }} />}
+                              {isDocument && (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80px', backgroundColor: darkMode ? '#1f2937' : '#e5e7eb', borderRadius: '4px', marginBottom: '0.5rem' }}>
+                                    <i className="fa-solid fa-file-lines" style={{ fontSize: '2.5rem', color: darkMode ? '#9ca3af' : '#6b7280' }}></i>
+                                </div>
+                              )}
+                              
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'Google Sans Code, monospace', fontSize: '0.7rem', color: isUser ? '#fca5a5' : (darkMode ? '#9ca3af' : '#6b7280') }}>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cleanName}</span>
+                                <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: isUser ? '#ffffff' : '#2563eb', textDecoration: 'none', fontWeight: 'bold' }}>View ↗</a>
+                              </div>
+                            </div>
                           );
                         })}
                       </div>
