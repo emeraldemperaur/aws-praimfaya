@@ -66,8 +66,8 @@ export const handler = async (event: any) => {
         // ==========================================
         if (profile.role === 'SUPERVISOR' && profile.awsAgentId && profile.awsAliasId) {
             try {
-                // Generate a valid Bedrock session ID (alphanumeric, max 100 chars)
                 const safeSessionId = cognitoUserId.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50) + "-session";
+                const dynamicPrompt = profile.systemPrompt || "You are an enterprise supervisor agent.";
                 
                 const invokeAgentRes = await bedrockAgentRuntime.send(new InvokeAgentCommand({
                     agentId: profile.awsAgentId,
@@ -82,6 +82,9 @@ export const handler = async (event: any) => {
                             terminalTitle: profile.title || 'Managed Agent Session',
                             contextProfileName: profile.name || 'Supervisor Agent',
                             contextProfileId: profile.id,
+                        },
+                        promptSessionAttributes: {
+                            "dynamicSystemPrompt": dynamicPrompt
                         }
                     }
                 }));
@@ -125,7 +128,8 @@ export const handler = async (event: any) => {
         // TRAFFIC COP: ROUTE TO STANDARD AGENT
         // ==========================================
         let systemPrompt = profile.systemPrompt || "You are a helpful AI assistant.";
-        systemPrompt += `\n\n[CRITICAL ROUTING DIRECTIVE]: You act as an intelligent workflow coordinator. Evaluate if an automation workflow (wf_) can fulfill the user's overarching intent first before cascading down to Native Tools.`;
+        systemPrompt += `\n\n[CRITICAL ROUTING DIRECTIVE]: You act as an intelligent workflow coordinator. Evaluate if an automation workflow (wf_) can fulfill the user's overarching intent first before cascading down to Native Tools. 
+        Note that workflow descriptions contain a [Priority: X/10] indicator; if multiple workflows are relevant, heavily favor the one with the highest user-specified priority.`;
 
         const targetModelId = profile.llmModelId || "global.amazon.nova-micro-v1:0";
 

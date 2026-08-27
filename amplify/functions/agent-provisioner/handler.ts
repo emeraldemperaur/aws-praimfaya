@@ -28,7 +28,16 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 
       try {
         const workflows = await getAssignedWorkflows(profileId);
-        let dynamicInstruction = newImage.systemPrompt?.S || '';
+        
+        // ==========================================
+        // CRITICAL FIX: Bake in the Session Attribute Placeholder
+        // ==========================================
+        let dynamicInstruction = `You are an elite Vanguard Agent.
+
+Here are your dynamically injected session instructions:
+$prompt_session_attributes$
+
+Follow these instructions strictly to fulfill the user's intent.`;
         
         if (workflows.length > 0) {
             dynamicInstruction += `\n\n### Available Automation Workflows ###\n`;
