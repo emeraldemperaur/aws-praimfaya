@@ -61,9 +61,9 @@ export const handler = async (event: any) => {
         const citations: any[] = []; 
         let requestedCredentials: string[] = [];
 
-        // ==========================================
-        // TRAFFIC COP: ROUTE TO MANAGED AGENT (SUPERVISOR)
-        // ==========================================
+        // ================================================
+        // Managed Agent (Supervisor & Collaborator Agents)
+        // ================================================
         if (profile.role === 'SUPERVISOR' && profile.awsAgentId && profile.awsAliasId) {
             try {
                 const safeSessionId = cognitoUserId.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50) + "-session";
@@ -124,9 +124,9 @@ export const handler = async (event: any) => {
             }
         }
 
-        // ==========================================
-        // TRAFFIC COP: ROUTE TO STANDARD AGENT
-        // ==========================================
+        // ================================================
+        // Standard Agent (Workflow Routing + Native Tools)
+        // ================================================
         let systemPrompt = profile.systemPrompt || "You are a helpful AI assistant.";
         systemPrompt += `\n\n[CRITICAL ROUTING DIRECTIVE]: You act as an intelligent workflow coordinator. Evaluate if an automation workflow (wf_) can fulfill the user's overarching intent first before cascading down to Native Tools. 
         Note that workflow descriptions contain a [Priority: X/10] indicator; if multiple workflows are relevant, heavily favor the one with the highest user-specified priority.`;
@@ -271,7 +271,6 @@ export const handler = async (event: any) => {
 
                         const videoUrl = `https://${MEDIA_OUTPUT_BUCKET}.s3.amazonaws.com/${videoKeyPrefix}/output.mp4`;
                         
-                        // Log to RAG Artifacts database
                         await recordRAGArtifact(
                             profile, 
                             { userId: cognitoUserId, id: args.sessionId || `session-${Date.now()}`, title: profile.title }, 
@@ -714,18 +713,15 @@ export const handler = async (event: any) => {
                             } else if (action === 'GET_FILE' && path) {
                                 const url = branch ? `${baseUrl}/contents/${path}?ref=${branch}` : `${baseUrl}/contents/${path}`;
                                 const res = await axios.get(url, { headers });
-                                // Automatically decode GitHub's base64 payload so the LLM can read the raw code
                                 const decodedContent = Buffer.from(res.data.content, 'base64').toString('utf-8');
                                 executionResult = { status: "Success", fileInfo: { sha: res.data.sha, size: res.data.size, name: res.data.name }, content: decodedContent };
                             } else if (action === 'CREATE_OR_UPDATE_FILE' && path && commitMessage && fileContent) {
-                                // 1. Check if file exists to fetch the target SHA (required by GitHub API for updates)
                                 let sha: string | undefined;
                                 try {
                                     const getRes = await axios.get(`${baseUrl}/contents/${path}${branch ? `?ref=${branch}` : ''}`, { headers });
                                     sha = getRes.data.sha;
                                 } catch (e: any) { if (e.response?.status !== 404) throw e; }
                                 
-                                // 2. Base64 encode the LLM's text output and commit
                                 const payload: any = {
                                     message: commitMessage,
                                     content: Buffer.from(fileContent, 'utf-8').toString('base64')
@@ -795,9 +791,9 @@ export const handler = async (event: any) => {
                     }
                 }
 
-                // =========================================
+                // =============================================
                 // ENTERPRISE SITE RELIABILITY ENGINEERING (SRE)
-                // =========================================
+                // =============================================
 
                 else if (toolUse.name === 'grafana_sre_agent') {
                     const GRAFANA_URL = ephemeralSecrets.grafanaUrl; // e.g. https://your-org.grafana.net

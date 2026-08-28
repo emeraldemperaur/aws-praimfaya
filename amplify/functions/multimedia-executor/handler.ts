@@ -10,13 +10,11 @@ const s3Client = new S3Client({ region: process.env.AWS_REGION });
 const rawDynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const dynamodb = DynamoDBDocumentClient.from(rawDynamoClient);
 
-// Standardized Environment Variables
 const MEDIA_BUCKET = process.env.MEDIA_OUTPUT_BUCKET_NAME!;
 const RAG_ARTIFACTS_TABLE = process.env.RAG_ARTIFACTS_TABLE_NAME!;
 const USER_PROFILES_TABLE = process.env.USER_PROFILES_TABLE_NAME!;
 const USAGE_RECORDS_TABLE = process.env.USAGE_RECORDS_TABLE_NAME!;
 
-// 100% Margin Flat Costs
 const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = { 
     "generate_luma_video": 150000, 
     "generate_image": 30000, 
@@ -80,7 +78,6 @@ export const handler = async (event: any) => {
             const imageUrl = await processAndUploadImage(invokeRes.body, 'titan');
             await recordRAGArtifact(event, imageUrl, 'IMAGE');
             
-            // DEDUCT CREDITS BEFORE SUCCESS
             await deductToolCredits(event, functionName);
             responseText = `Success. Enterprise Image generated and saved to S3: ${imageUrl}`;
 

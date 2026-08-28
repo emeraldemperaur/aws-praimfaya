@@ -51,6 +51,27 @@ const backend = defineBackend({
 
 const customStack = backend.createStack('BedrockAIStack');
 
+// DynamoDB Tables
+const profilesTable = backend.data.resources.tables["ContextProfile"];
+const workflowsTable = backend.data.resources.tables["ContextWorkflow"];
+const profileWorkflowsTable = backend.data.resources.tables["ContextProfileWorkflow"];
+const userProfilesTable = backend.data.resources.tables["UserProfile"];
+const ragArtifactsTable = backend.data.resources.tables["RAGArtifact"];
+const usageRecordsTable = backend.data.resources.tables["UsageRecord"];
+
+// Serverless Microservices
+const processVectorLambda = backend.processVector.resources.lambda as lambda.Function;
+const statusLambda = backend.updateVectorStatus.resources.lambda as lambda.Function;
+const provisionerLambda = backend.agentProvisioner.resources.lambda as lambda.Function;
+const routerLambda = backend.webhookRouter.resources.lambda as lambda.Function;
+const reaperLambda = backend.agentReaper.resources.lambda as lambda.Function;
+const chatLambda = backend.chatHandler.resources.lambda as lambda.Function;
+const mediaLambda = backend.multimediaExecutor.resources.lambda as lambda.Function;
+const checkoutLambda = backend.createCheckoutSession.resources.lambda as lambda.Function;
+const webhookLambda = backend.stripeWebhook.resources.lambda as lambda.Function;
+const promoLambda = backend.grantPromoCredits.resources.lambda as lambda.Function;
+
+
 // ===========================================
 // BEDROCK KNOWLEDGE BASE & S3 VECTOR DATABASE
 // ===========================================
@@ -114,6 +135,7 @@ const bedrockKbPolicy = new iam.Policy(customStack, 'BedrockKBPolicy', {
 });
 bedrockKbRole.attachInlinePolicy(bedrockKbPolicy);
 
+// TITAN TEXT KNOWLEDGE BASE
 const titanKb = new bedrock.CfnKnowledgeBase(customStack, 'TitanTextKB', {
   name: 'TitanTextKB',
   roleArn: bedrockKbRole.roleArn,
@@ -154,6 +176,7 @@ new bedrock.CfnDataSource(customStack, 'TitanTextDataSource', {
   }
 });
 
+// NOVA MULTIMODAL KNOWLEDGE BASE
 const novaKbCr = new cr.AwsCustomResource(customStack, 'NovaMediaKBCR', {
   onCreate: {
     service: 'BedrockAgent',
@@ -207,10 +230,8 @@ new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
   }
 });
 
-const processVectorLambda = backend.processVector.resources.lambda as lambda.Function;
-
+// PROCESS VECTOR EMBEDDING LAMBDA
 backend.vectorCollectionsS3.resources.bucket.grantReadWrite(processVectorLambda);
-
 processVectorLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: [
     'bedrock:ListKnowledgeBases',
@@ -226,30 +247,18 @@ backend.vectorCollectionsS3.resources.bucket.addEventNotification(
   { prefix: 'vector-collections/' }
 );
 
-const statusLambda = backend.updateVectorStatus.resources.lambda as lambda.Function;
-
 const bedrockEventRule = new events.Rule(customStack, 'BedrockIngestionStatusRule', {
   eventPattern: {
     source: ['aws.bedrock'],
     detailType: ['Bedrock Knowledge Base Ingestion Job State Change'],
   },
 });
-
 bedrockEventRule.addTarget(new targets.LambdaFunction(statusLambda));
 
 
 // ===========================================
 // MULTI-AGENT PROVISIONING & WEBHOOK ROUTING
 // ===========================================
-
-const provisionerLambda = backend.agentProvisioner.resources.lambda as lambda.Function;
-const routerLambda = backend.webhookRouter.resources.lambda as lambda.Function;
-const reaperLambda = backend.agentReaper.resources.lambda as lambda.Function;
-
-const profilesTable = backend.data.resources.tables["ContextProfile"];
-const workflowsTable = backend.data.resources.tables["ContextWorkflow"];
-const profileWorkflowsTable = backend.data.resources.tables["ContextProfileWorkflow"];
-const userProfilesTable = backend.data.resources.tables["UserProfile"];
 
 provisionerLambda.addEventSource(new DynamoEventSource(profilesTable, {
   startingPosition: lambda.StartingPosition.LATEST,
@@ -261,6 +270,7 @@ provisionerLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName)
 provisionerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 provisionerLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
 provisionerLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn);
+provisionerLambda.addEnvironment('MULTIMEDIA_EXECUTOR_LAMBDA_ARN', mediaLambda.functionArn);
 provisionerLambda.addEnvironment('ACCOUNT_ID', customStack.account);
 
 routerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
@@ -304,11 +314,9 @@ routerLambda.addPermission('AllowBedrockInvoke', {
 });
 
 
-// ====================================
-// CHAT HANDLER & PYTHON DAG VALIDATOR
-// ====================================
-
-const chatLambda = backend.chatHandler.resources.lambda as lambda.Function;
+// =====================
+// AGENTIC CHAT HANDLER
+// =====================
 
 chatLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 chatLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
@@ -317,34 +325,19 @@ chatLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn)
 chatLambda.addEnvironment('YARDI_MCP_URL', process.env.YARDI_MCP_URL || 'https://virtuoso.yardi.com/mcp');
 chatLambda.addEnvironment('MITO_MCP_URL', process.env.MITO_MCP_URL || 'http://mito-ui.com/mcp');
 chatLambda.addEnvironment('APOTHEOSIS_MCP_URL', process.env.APOTHEOSIS_MCP_URL || 'https://apotheosis-ux.com/mcp');
+chatLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+chatLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
+chatLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
+chatLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
 
 profilesTable.grantReadData(chatLambda);
 workflowsTable.grantReadData(chatLambda);
 profileWorkflowsTable.grantReadData(chatLambda);
-routerLambda.grantInvoke(chatLambda);
-
-
-chatLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 userProfilesTable.grantReadWriteData(chatLambda);
-
-
-// Multimodal S3 Storage Link for RAG Artifacts (Images, Audio, Video, etc.)
-chatLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
+ragArtifactsTable.grantReadWriteData(chatLambda);
+usageRecordsTable.grantReadWriteData(chatLambda);
 multimodalBucket.grantReadWrite(chatLambda);
-
-
-// Python DAG Validator Service Deployment & Permissions
-const dagValidatorLambda = new lambda.Function(customStack, 'DagValidatorFunction', {
-  runtime: lambda.Runtime.PYTHON_3_12,
-  handler: 'handler.lambda_handler',
-  code: lambda.Code.fromAsset(join(__dirname, 'functions', 'dag-validator')),
-  timeout: Duration.seconds(10),
-  memorySize: 128,
-});
-
-chatLambda.addEnvironment('PYTHON_VALIDATOR_LAMBDA_ARN', dagValidatorLambda.functionArn);
-dagValidatorLambda.grantInvoke(chatLambda);
-
+routerLambda.grantInvoke(chatLambda);
 
 chatLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: [
@@ -357,37 +350,31 @@ chatLambda.addToRolePolicy(new iam.PolicyStatement({
   resources: ['*']
 }));
 
-// ============================
-// STRIPE BILLING & PROMO CODE
-// ============================
-
-// Stripe Webhook Public URL Configuration
-const webhookLambda = backend.stripeWebhook.resources.lambda as lambda.Function;
-
-// `UserProfiles subscription status permissions 
-webhookLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
-userProfilesTable.grantReadWriteData(webhookLambda);
-
-// Stripe Webhook POST Public Function URL
-const webhookUrl = webhookLambda.addFunctionUrl({
-  authType: lambda.FunctionUrlAuthType.NONE,
+const dagValidatorLambda = new lambda.Function(customStack, 'DagValidatorFunction', {
+  runtime: lambda.Runtime.PYTHON_3_12,
+  handler: 'handler.lambda_handler',
+  code: lambda.Code.fromAsset(join(__dirname, 'functions', 'dag-validator')),
+  timeout: Duration.seconds(10),
+  memorySize: 128,
 });
 
-// Stripe Webhook Public Function URL Output
-new cdk.CfnOutput(customStack, 'StripeWebhookUrl', {
-  value: webhookUrl.url,
-  description: 'Copy this URL and paste it into the Stripe Webhook Dashboard',
-});
-
-// Admin Promo Credits Lambda
-const promoLambda = backend.grantPromoCredits.resources.lambda as lambda.Function;
-promoLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
-userProfilesTable.grantReadWriteData(promoLambda);
+chatLambda.addEnvironment('PYTHON_VALIDATOR_LAMBDA_ARN', dagValidatorLambda.functionArn);
+dagValidatorLambda.grantInvoke(chatLambda);
 
 
-const mediaLambda = backend.multimediaExecutor.resources.lambda as lambda.Function;
+// ====================================
+// MULTIMEDIA EXECUTOR
+// ====================================
+
 mediaLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
+mediaLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
+mediaLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+mediaLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
+
 multimodalBucket.grantReadWrite(mediaLambda);
+ragArtifactsTable.grantReadWriteData(mediaLambda);
+userProfilesTable.grantReadWriteData(mediaLambda);
+usageRecordsTable.grantReadWriteData(mediaLambda);
 
 mediaLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: [
@@ -403,20 +390,40 @@ mediaLambda.addPermission('AllowBedrockAgentInvoke', {
   action: 'lambda:InvokeFunction',
 });
 
-provisionerLambda.addEnvironment('MULTIMEDIA_EXECUTOR_LAMBDA_ARN', mediaLambda.functionArn);
 
-const ragArtifactsTable = backend.data.resources.tables["RAGArtifact"];
-chatLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
-ragArtifactsTable.grantReadWriteData(chatLambda);
+// ============================
+// STRIPE BILLING & PROMO CODE
+// ============================
 
-mediaLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
-ragArtifactsTable.grantReadWriteData(mediaLambda);
+const vanguardPriceId = process.env.VANGUARD_PRICE_ID || 'price_1_TEST_VANGUARD';
+const elitePriceId = process.env.VANGUARD_ELITE_PRICE_ID || 'price_1_TEST_ELITE';
+const topUpPriceId = process.env.TOP_UP_PRICE_ID || 'price_1_TEST_TOPUP';
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-mediaLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
-userProfilesTable.grantReadWriteData(mediaLambda);
+checkoutLambda.addEnvironment('VANGUARD_PRICE_ID', vanguardPriceId);
+checkoutLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', elitePriceId);
+checkoutLambda.addEnvironment('TOP_UP_PRICE_ID', topUpPriceId);
+checkoutLambda.addEnvironment('FRONTEND_URL', frontendUrl);
+webhookLambda.addEnvironment('VANGUARD_PRICE_ID', vanguardPriceId);
+webhookLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', elitePriceId);
+webhookLambda.addEnvironment('TOP_UP_PRICE_ID', topUpPriceId);
+webhookLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+webhookLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
 
-const usageRecordsTable = backend.data.resources.tables["UsageRecord"];
-chatLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
-usageRecordsTable.grantReadWriteData(chatLambda);
-mediaLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
-usageRecordsTable.grantReadWriteData(mediaLambda);
+userProfilesTable.grantReadWriteData(webhookLambda);
+usageRecordsTable.grantReadWriteData(webhookLambda);
+
+const webhookUrl = webhookLambda.addFunctionUrl({
+  authType: lambda.FunctionUrlAuthType.NONE,
+});
+
+new cdk.CfnOutput(customStack, 'StripeWebhookUrl', {
+  value: webhookUrl.url,
+  description: 'Copy this URL and paste it into the Stripe Webhook Dashboard',
+});
+
+promoLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+promoLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
+
+userProfilesTable.grantReadWriteData(promoLambda);
+usageRecordsTable.grantReadWriteData(promoLambda);
