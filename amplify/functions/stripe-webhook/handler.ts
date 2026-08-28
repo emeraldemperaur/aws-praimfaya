@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import Stripe from 'stripe';
 
 const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION }));
@@ -36,19 +36,15 @@ export const handler = async (event: any) => {
         if (mode === 'subscription') {
           const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
           priceId = subscription.items.data[0].price.id;
-          
-          // FIX #1: Access current_period_end on the item level, not the subscription level
           periodEnd = new Date(subscription.items.data[0].current_period_end * 1000).toISOString();
         } else {
           priceId = process.env.TOP_UP_PRICE_ID!;
         }
       } else if (stripeEvent.type === 'invoice.paid') {
         const invoice = stripeEvent.data.object as Stripe.Invoice;
-        
         if (invoice.billing_reason === 'subscription_create') {
             return { statusCode: 200, body: JSON.stringify({ received: true }) };
         }
-        
         customerId = invoice.customer as string;
         mode = 'subscription';
         
@@ -60,20 +56,19 @@ export const handler = async (event: any) => {
             : invoice.customer_email || 'UNKNOWN';
       }
 
-      let planName = "VANGUARD"; 
+      let planName = "VANGUARD";
       let allocatedCredits = 16400000;
 
       if (priceId === process.env.VANGUARD_ELITE_PRICE_ID) {
-        planName = "VANGUARD_ELITE"; 
+        planName = "VANGUARD_ELITE";
         allocatedCredits = 40000000;
       } else if (priceId === process.env.VANGUARD_PRICE_ID) {
-        planName = "VANGUARD";       
-        allocatedCredits = 16400000; 
+        planName = "VANGUARD";
+        allocatedCredits = 16400000;
       } else if (mode === 'payment') {
-        planName = "TOP_UP";      
-        allocatedCredits = 5000000;  
+        planName = "TOP_UP";
+        allocatedCredits = 5000000;
       } else {
-        console.warn(`Unrecognized price ID: ${priceId}`);
         return { statusCode: 200, body: "Ignored unrecognized price." };
       }
 
@@ -113,10 +108,7 @@ export const handler = async (event: any) => {
                         TableName: USER_PROFILES_TABLE,
                         Key: { cognitoUserId },
                         UpdateExpression: "SET computeCredits = if_not_exists(computeCredits, :zero) + :topup, maxCredits = if_not_exists(maxCredits, :zero) + :topup",
-                        ExpressionAttributeValues: { 
-                            ":topup": allocatedCredits,
-                            ":zero": 0
-                        }
+                        ExpressionAttributeValues: { ":topup": allocatedCredits, ":zero": 0 }
                     }
                 },
                 {
@@ -128,7 +120,41 @@ export const handler = async (event: any) => {
             ]
         }));
       }
+    } 
+   
+    else if (stripeEvent.type === 'invoice.payment_failed') {
+      const invoice = stripeEvent.data.object as Stripe.Invoice;
+      
+      const cognitoUserId = invoice.parent?.type === 'subscription_details' 
+          ? invoice.parent.subscription_details?.metadata?.cognitoUserId as string
+          : undefined;
+
+      if (cognitoUserId) {
+          await dynamodb.send(new UpdateCommand({
+              TableName: USER_PROFILES_TABLE,
+              Key: { cognitoUserId },
+              UpdateExpression: "SET subscriptionStatus = :status",
+              ExpressionAttributeValues: { ":status": "PAST_DUE" }
+          }));
+      }
+    } 
+    else if (stripeEvent.type === 'customer.subscription.deleted') {
+      const subscription = stripeEvent.data.object as Stripe.Subscription;
+      const cognitoUserId = subscription.metadata?.cognitoUserId;
+
+      if (cognitoUserId) {
+          await dynamodb.send(new UpdateCommand({
+              TableName: USER_PROFILES_TABLE,
+              Key: { cognitoUserId },
+              UpdateExpression: "SET subscriptionStatus = :status, planName = :plan",
+              ExpressionAttributeValues: { 
+                  ":status": "CANCELED",
+                  ":plan": "NONE" 
+              }
+          }));
+      }
     }
+
     return { statusCode: 200, body: JSON.stringify({ received: true }) };
   } catch (error: any) {
     console.error("Webhook processing error:", error);
