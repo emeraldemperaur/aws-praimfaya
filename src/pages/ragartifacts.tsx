@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { generateClient } from 'aws-amplify/api';
+import { getUrl } from 'aws-amplify/storage';
 
 const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const client = generateClient() as any;
   const [artifacts, setArtifacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Filtering state
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
 
@@ -14,14 +14,33 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     const fetchArtifacts = async () => {
       try {
         const { data } = await client.models.RAGArtifact.list();
-        // Sort newest first
-        setArtifacts(data.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        
+        const artifactsWithSecureUrls = await Promise.all(
+          data.map(async (art: any) => {
+            try {
+              const signedUrlResponse = await getUrl({ 
+                path: art.s3Key 
+              });
+              
+              return { 
+                ...art, 
+                freshUrl: signedUrlResponse.url.toString() 
+              };
+            } catch (urlErr) {
+              console.error(`Failed to generate secure link for ${art.s3Key}:`, urlErr);
+              return { ...art, freshUrl: '' };
+            }
+          })
+        );
+
+        setArtifacts(artifactsWithSecureUrls.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
       } catch (err) {
         console.error("Failed to fetch RAG artifacts:", err);
       } finally {
         setLoading(false);
       }
     };
+    
     fetchArtifacts();
   }, []);
 
@@ -50,7 +69,6 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       fontFamily: 'Google Sans Code, monospace'
     }}>
       
-      {/* Header & Controls */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingBottom: '1rem' }}>
         <div>
           <h1 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '2rem' }}>RAG Artifacts</h1>
@@ -89,7 +107,6 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         </div>
       </div>
 
-      {/* Artifacts Grid */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '4rem', opacity: 0.5 }}>Loading artifacts...</div>
       ) : filteredArtifacts.length === 0 ? (
@@ -107,19 +124,17 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
             onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}
             >
               
-              {/* Media Preview Area */}
               <div style={{ height: '180px', backgroundColor: darkMode ? '#111827' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, position: 'relative' }}>
                 <span style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', backgroundColor: 'rgba(0,0,0,0.6)', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 'bold' }}>
                   <i className={`fa-solid ${getIconForType(art.fileType)}`}></i> {art.fileType}
                 </span>
 
-                {art.fileType === 'IMAGE' && <img src={art.fileUrl} alt={art.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />}
-                {art.fileType === 'VIDEO' && <video src={art.fileUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls />}
-                {art.fileType === 'AUDIO' && <div style={{ width: '80%' }}><audio src={art.fileUrl} controls style={{ width: '100%' }} /></div>}
+                {art.fileType === 'IMAGE' && <img src={art.freshUrl} alt={art.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />}
+                {art.fileType === 'VIDEO' && <video src={art.freshUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls />}
+                {art.fileType === 'AUDIO' && <div style={{ width: '80%' }}><audio src={art.freshUrl} controls style={{ width: '100%' }} /></div>}
                 {art.fileType === 'DOCUMENT' && <i className="fa-solid fa-file-pdf" style={{ fontSize: '3rem', color: darkMode ? '#4b5563' : '#9ca3af' }}></i>}
               </div>
 
-              {/* Metadata Card Footer */}
               <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={art.fileName}>
                   {art.fileName}
@@ -132,7 +147,7 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 </div>
 
                 <a 
-                  href={art.fileUrl} 
+                  href={art.freshUrl} 
                   target="_blank" 
                   rel="noopener noreferrer"
                   style={{ 

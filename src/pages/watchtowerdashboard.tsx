@@ -30,7 +30,6 @@ const WatchtowerDashboard = ({ darkMode = false, isAdmin = false, currentUserId 
     return matchesAction && matchesSession;
   });
 
-  // Calculate Compute Aggregates
   const totalCreditsBurned = filteredRecords.reduce((sum, rec) => sum + (rec.creditsUsed || 0), 0);
   const totalTokens = filteredRecords.reduce((sum, rec) => sum + (rec.inputTokens || 0) + (rec.outputTokens || 0), 0);
 
@@ -46,7 +45,6 @@ const WatchtowerDashboard = ({ darkMode = false, isAdmin = false, currentUserId 
         </div>
       </div>
 
-      {/* High-Level Stats Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         <div style={{ padding: '1.5rem', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px' }}>
           <div style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Credits Burned (Filtered)</div>
@@ -58,7 +56,6 @@ const WatchtowerDashboard = ({ darkMode = false, isAdmin = false, currentUserId 
         </div>
       </div>
 
-      {/* Filters */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
         <input 
           type="text" 
@@ -78,7 +75,6 @@ const WatchtowerDashboard = ({ darkMode = false, isAdmin = false, currentUserId 
         </select>
       </div>
 
-      {/* Telemetry Data Table */}
       <div style={{ backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
           <thead>

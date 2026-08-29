@@ -89,4 +89,23 @@ export interface EphemeralSecrets {
   homeAssistantUrl?: string;
   homeAssistantToken?: string;
   alexaToken?: string;
+  arduinoClientId?: string;
+  arduinoClientSecret?: string;
+  raspberryPiToken?: string;
+  balenaToken?: string;
+  amadeusApiKey?: string;
+  amadeusApiSecret?: string;
+  atlassianDomain?: string;
+  atlassianEmail?: string;
+  atlassianToken?: string;
+  notionToken?: string;
+  asanaToken?: string;
+  googleAccessToken?: string;
+  slackToken?: string;
+  contentfulSpaceId?: string;
+  contentfulEnvironment?: string;
+  contentfulToken?: string;
+  sanityProjectId?: string;
+  sanityDataset?: string;
+  sanityToken?: string;
 }

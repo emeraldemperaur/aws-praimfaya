@@ -4,6 +4,7 @@ import { generateClient } from 'aws-amplify/api';
 import { getInitials, getModelIcon } from '../utils/voltaire';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import EphemeralCredentialsModal from '../components/ephemeralcredentialsmodal';
 import type { EphemeralSecrets } from '../data/consoleterminal';
 
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
@@ -69,7 +70,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     hydrateTerminalSession();
   }, [sessionId, navigate]);
 
-  const handleExecutePrompt = async (e?: React.FormEvent, overridePrompt?: string) => {
+  const handleExecutePrompt = async (e?: React.SyntheticEvent, overridePrompt?: string) => {
     if (e) e.preventDefault();
     
     const queryText = (overridePrompt || inputMessage).trim();
@@ -79,7 +80,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     setIsAiTyping(true);
 
     try {
-      // Save new user message to DynamoDB
       const { data: committedUserMsg } = await client.models.TerminalMessage.create({
         role: 'USER',
         content: queryText,
@@ -90,13 +90,11 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       const activeProfile = session.contextProfile;
       const targetModelIdentifier = activeProfile?.foundationModel?.apiIdentifier || "us.amazon.nova-pro-v1:0";
 
-      // Format historic messages from DynamoDB for Bedrock Agent Context
       const bedrockHistory = messages.map((m: any) => ({
         role: m.role === 'USER' ? 'user' : 'assistant',
         content: [{ text: m.content }]
       }));
 
-      // Invoke Bedrock Agent via Backend with request schema arguments
       const response = await client.queries.askAssistant({
         prompt: queryText,
         systemPrompt: activeProfile?.systemPrompt || "Act as a factual system console.",
@@ -109,14 +107,12 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
       const transactionPayload = JSON.parse(response.data);
 
-      // Determine if Backend LLM requested external credentials
       if (transactionPayload.requestedCredentials && transactionPayload.requestedCredentials.length > 0) {
         setActiveAuthPrompt(transactionPayload.requestedCredentials[0]);
       } else {
         setActiveAuthPrompt(null);
       }
 
-      // Save AI response to DynamoDB
       const outputText = transactionPayload.answer || transactionPayload.error || "No response generated.";
       
       const generatedChips = transactionPayload.citations?.map((source: any) => {
@@ -133,7 +129,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       });
       setMessages(prev => [...prev, committedAiMsg]);
 
-      // Calculate token billing
       const inboundTokens = transactionPayload.tokenUsage?.inputTokens || 0;
       const outboundTokens = transactionPayload.tokenUsage?.outputTokens || 0;
       const aggregatedCost = inboundTokens + outboundTokens;
@@ -160,10 +155,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     }
   };
 
-  const handleSecretSubmit = (e: React.FormEvent) => {
+  const handleSecretSubmit = (e: React.SyntheticEvent) => {
     e.preventDefault();
     setActiveAuthPrompt(null);
-    // Auto-resume workflow
     handleExecutePrompt(undefined, "Credentials securely injected into ephemeral memory. Please resume and complete the requested operation.");
   };
 
@@ -227,20 +221,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
   const visibleMessages = messages.slice(-visibleCount);
   const hasMoreMessages = messages.length > visibleCount;
-
-  // Reusable inline style for modal inputs
-  const inputStyle = {
-    width: '100%',
-    backgroundColor: darkMode ? '#1f2937' : '#f3f4f6',
-    border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
-    borderRadius: '4px',
-    padding: '0.65rem',
-    fontSize: '0.85rem',
-    color: darkMode ? '#f9fafb' : '#111827',
-    marginBottom: '0.75rem',
-    boxSizing: 'border-box' as const,
-    fontFamily: 'Google Sans Code, monospace'
-  };
 
   return (
     <>
@@ -549,332 +529,15 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         </form>
       </div>
 
-      {/* ========================================================================= */}
-      {/* SECURE SIDE-CHANNEL CREDENTIAL MODAL                                      */}
-      {/* ========================================================================= */}
       {activeAuthPrompt && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
-          padding: '1rem'
-        }}>
-          <div style={{
-            backgroundColor: darkMode ? '#111827' : '#ffffff',
-            border: `1px solid ${darkMode ? '#0891b2' : '#06b6d4'}`,
-            borderRadius: '0.75rem', padding: '2rem', maxWidth: '32rem', width: '100%',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-            color: darkMode ? '#f9fafb' : '#111827',
-            fontFamily: 'Google Sans Code, monospace'
-          }}>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', color: darkMode ? '#22d3ee' : '#0891b2' }}>
-              <i className="fa-solid fa-lock" style={{ fontSize: '1.25rem' }}></i>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Authentication Required
-              </h3>
-            </div>
-            
-            <p style={{ fontSize: '0.8rem', color: darkMode ? '#9ca3af' : '#6b7280', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-              Action requires dynamic credentials for <strong style={{ color: darkMode ? '#67e8f9' : '#0891b2', textTransform: 'uppercase' }}>{activeAuthPrompt}</strong>. 
-              Credentials are stored securely in ephemeral browser memory and clear upon refresh.
-            </p>
-
-            <form onSubmit={handleSecretSubmit}>
-              
-              {/* AIRTABLE */}
-              {activeAuthPrompt === 'airtable' && (
-                <input type="password" placeholder="Airtable API Key / PAT" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, airtableApiKey: e.target.value })} required style={inputStyle} />
-              )}
-
-              {/* SNOWFLAKE */}
-              {activeAuthPrompt === 'snowflake' && (
-                <>
-                  <input type="text" placeholder="Account Identifier (e.g. xy12345.us-east-1)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, snowflakeAccount: e.target.value })} required style={inputStyle} />
-                  <input type="text" placeholder="Username" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, snowflakeUser: e.target.value })} required style={inputStyle} />
-                  <textarea placeholder="RSA Private Key (PEM format)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, snowflakePrivateKey: e.target.value })} required style={{...inputStyle, height: '100px', resize: 'none'}} />
-                </>
-              )}
-
-              {/* AIRFLOW */}
-              {activeAuthPrompt === 'airflow' && (
-                <input type="url" placeholder="Airflow Webserver Base URL" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, airflowBaseUrl: e.target.value })} required style={inputStyle} />
-              )}
-
-              {/* RIPPLING */}
-              {activeAuthPrompt === 'rippling' && (
-                <input type="password" placeholder="Rippling Platform Access Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, ripplingApiKey: e.target.value })} required style={inputStyle} />
-              )}
-
-              {/* BAMBOOHR */}
-              {activeAuthPrompt === 'bamboohr' && (
-                <>
-                  <input type="text" placeholder="Subdomain (e.g. mycompany)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, bambooSubdomain: e.target.value })} required style={inputStyle} />
-                  <input type="password" placeholder="API Key" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, bambooApiKey: e.target.value })} required style={inputStyle} />
-                </>
-              )}
-
-              {/* ZENDESK */}
-              {activeAuthPrompt === 'zendesk' && (
-                <>
-                  <input type="text" placeholder="Subdomain" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, zendeskSubdomain: e.target.value })} required style={inputStyle} />
-                  <input type="email" placeholder="Admin Email" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, zendeskEmail: e.target.value })} required style={inputStyle} />
-                  <input type="password" placeholder="API Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, zendeskToken: e.target.value })} required style={inputStyle} />
-                </>
-              )}
-
-              {/* SERVICENOW */}
-              {activeAuthPrompt === 'servicenow' && (
-                <>
-                  <input type="text" placeholder="Instance Name (e.g. dev12345)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, serviceNowInstance: e.target.value })} required style={inputStyle} />
-                  <input type="text" placeholder="Username" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, serviceNowUser: e.target.value })} required style={inputStyle} />
-                  <input type="password" placeholder="Password" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, serviceNowPassword: e.target.value })} required style={inputStyle} />
-                </>
-              )}
-
-              {/* PAGERDUTY */}
-              {activeAuthPrompt === 'pagerduty' && (
-                <>
-                  <input type="password" placeholder="API Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, pagerDutyApiKey: e.target.value })} required style={inputStyle} />
-                  <input type="email" placeholder="User Email (Required for incident updates)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, pagerDutyUserEmail: e.target.value })} required style={inputStyle} />
-                </>
-              )}
-
-              {/* GITHUB */}
-              {activeAuthPrompt === 'github' && (
-                <input 
-                  type="password" 
-                  placeholder="GitHub Personal Access Token (Fine-grained or Classic)" 
-                  onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, githubToken: e.target.value })} 
-                  required 
-                  style={inputStyle} 
-                />
-              )}
-
-              {/* GITLAB */}
-              {activeAuthPrompt === 'gitlab' && (
-                <>
-                  <input 
-                    type="text" 
-                    placeholder="GitLab Domain (Optional, defaults to gitlab.com)" 
-                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, gitlabDomain: e.target.value })} 
-                    style={inputStyle} 
-                  />
-                  <input 
-                    type="password" 
-                    placeholder="GitLab Personal Access Token" 
-                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, gitlabToken: e.target.value })} 
-                    required 
-                    style={inputStyle} 
-                  />
-                </>
-              )}
-
-              {/* GRAFANA */}
-              {activeAuthPrompt === 'grafana' && (
-                <>
-                  <input 
-                    type="url" 
-                    placeholder="Grafana Instance URL (e.g., https://myorg.grafana.net)" 
-                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, grafanaUrl: e.target.value })} 
-                    required 
-                    style={inputStyle} 
-                  />
-                  <input 
-                    type="password" 
-                    placeholder="Grafana Cloud API Token / Service Account Token" 
-                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, grafanaToken: e.target.value })} 
-                    required 
-                    style={inputStyle} 
-                  />
-                </>
-              )}
-
-              {/* DATADOG */}
-              {activeAuthPrompt === 'datadog' && (
-                <>
-                  <input 
-                    type="text" 
-                    placeholder="Datadog Site (Optional, defaults to datadoghq.com)" 
-                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, datadogSite: e.target.value })} 
-                    style={inputStyle} 
-                  />
-                  <input 
-                    type="password" 
-                    placeholder="Datadog API Key" 
-                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, datadogApiKey: e.target.value })} 
-                    required 
-                    style={inputStyle} 
-                  />
-                  <input 
-                    type="password" 
-                    placeholder="Datadog Application Key" 
-                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, datadogAppKey: e.target.value })} 
-                    required 
-                    style={inputStyle} 
-                  />
-                </>
-              )}
-
-              {/* BUTTERFLYMX */}
-              {activeAuthPrompt === 'butterflymx' && (
-                <input 
-                  type="password" 
-                  placeholder="ButterflyMX API Access Token" 
-                  onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, butterflyMxToken: e.target.value })} 
-                  required 
-                  style={inputStyle} 
-                />
-              )}
-
-              {/* YARDI VIRTUOSO MCP */}
-              {activeAuthPrompt === 'yardi' && (
-                <>
-                  <input 
-                    type="password" 
-                    placeholder="Yardi Virtuoso MCP Access Token" 
-                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, yardiToken: e.target.value })} 
-                    required 
-                    style={inputStyle} 
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="Yardi Property ID (Optional, for property-specific scoping)" 
-                    onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, yardiPropertyId: e.target.value })} 
-                    style={inputStyle} 
-                  />
-                </>
-              )}
-
-              {/* SALESFORCE */}
-              {activeAuthPrompt === 'salesforce' && (
-                <>
-                  <input type="url" placeholder="Salesforce Instance URL (e.g. https://your-domain.my.salesforce.com)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, salesforceInstanceUrl: e.target.value })} required style={inputStyle} />
-                  <input type="password" placeholder="Salesforce OAuth / Access Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, salesforceAccessToken: e.target.value })} required style={inputStyle} />
-                </>
-              )}
-
-              {/* SAP ERP */}
-              {activeAuthPrompt === 'sap' && (
-                <>
-                  <input type="url" placeholder="SAP S/4HANA Base URL" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, sapBaseUrl: e.target.value })} required style={inputStyle} />
-                  <input type="text" placeholder="SAP Username" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, sapUsername: e.target.value })} required style={inputStyle} />
-                  <input type="password" placeholder="SAP Password" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, sapPassword: e.target.value })} required style={inputStyle} />
-                </>
-              )}
-
-              {/* DYNAMICS 365 */}
-              {activeAuthPrompt === 'dynamics' && (
-                <>
-                  <input type="url" placeholder="Dynamics 365 Organization URL" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, dynamicsInstanceUrl: e.target.value })} required style={inputStyle} />
-                  <input type="password" placeholder="Dynamics 365 Web API Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, dynamicsAccessToken: e.target.value })} required style={inputStyle} />
-                </>
-              )}
-
-              {/* HUBSPOT */}
-              {activeAuthPrompt === 'hubspot' && (
-                <input type="password" placeholder="HubSpot Private App Access Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, hubspotAccessToken: e.target.value })} required style={inputStyle} />
-              )}
-
-              {/* LINKEDIN */}
-              {activeAuthPrompt === 'linkedin' && (
-                <input type="password" placeholder="LinkedIn Sales Navigator Access Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, linkedInAccessToken: e.target.value })} required style={inputStyle} />
-              )}
-
-              {/* UIPATH */}
-              {activeAuthPrompt === 'uipath' && (
-                <>
-                  <input type="url" placeholder="UiPath Cloud URL (e.g. https://cloud.uipath.com)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, uipathOrchestratorUrl: e.target.value })} required style={inputStyle} />
-                  <input type="text" placeholder="Organization Name" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, uipathOrganizationName: e.target.value })} required style={inputStyle} />
-                  <input type="text" placeholder="Tenant Name" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, uipathTenantName: e.target.value })} required style={inputStyle} />
-                  <input type="password" placeholder="UiPath OAuth / Bearer Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, uipathAccessToken: e.target.value })} required style={inputStyle} />
-                  <input type="text" placeholder="Orchestrator Folder ID (Optional, defaults to 1)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, uipathFolderId: e.target.value })} style={inputStyle} />
-                </>
-              )}
-
-              {/* BOOKING.COM */}
-              {activeAuthPrompt === 'booking' && (
-                <>
-                  <input type="text" placeholder="Booking.com Affiliate ID" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, bookingAffiliateId: e.target.value })} required style={inputStyle} />
-                  <input type="password" placeholder="Booking.com API Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, bookingToken: e.target.value })} required style={inputStyle} />
-                </>
-              )}
-
-              {/* PRICELINE */}
-              {activeAuthPrompt === 'priceline' && (
-                <input type="password" placeholder="Priceline Partner API Key" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, pricelineApiKey: e.target.value })} required style={inputStyle} />
-              )}
-
-              {/* VRBO */}
-              {activeAuthPrompt === 'vrbo' && (
-                <>
-                  <input type="text" placeholder="Expedia Group Partner ID" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, vrboPartnerId: e.target.value })} required style={inputStyle} />
-                  <input type="password" placeholder="Vrbo / Rapid API Key" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, vrboApiKey: e.target.value })} required style={inputStyle} />
-                </>
-              )}
-
-              {/* MITO MCP */}
-              {activeAuthPrompt === 'mito' && (
-                <input 
-                  type="password" 
-                  placeholder="Mito UI MCP API Key" 
-                  onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, mitoToken: e.target.value })} 
-                  required 
-                  style={inputStyle} 
-                />
-              )}
-
-              {/* APOTHEOSIS MCP */}
-              {activeAuthPrompt === 'apotheosis' && (
-                <input 
-                  type="password" 
-                  placeholder="Apotheosis UX MCP API Key" 
-                  onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, apotheosisToken: e.target.value })} 
-                  required 
-                  style={inputStyle} 
-                />
-              )}
-
-              {/* GOOGLE HOME */}
-              {activeAuthPrompt === 'google_home' && (
-                <>
-                  <input type="text" placeholder="Google Cloud Project ID (SDM)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, googleHomeProjectId: e.target.value })} required style={inputStyle} />
-                  <input type="password" placeholder="Google Home API / SDM Bearer Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, googleHomeToken: e.target.value })} required style={inputStyle} />
-                </>
-              )}
-
-              {/* APPLE HOMEKIT / HOME ASSISTANT */}
-              {activeAuthPrompt === 'homekit' && (
-                <>
-                  <input type="url" placeholder="Home Assistant URL (e.g. http://homeassistant.local:8123)" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, homeAssistantUrl: e.target.value })} required style={inputStyle} />
-                  <input type="password" placeholder="Long-Lived Access Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, homeAssistantToken: e.target.value })} required style={inputStyle} />
-                </>
-              )}
-
-              {/* AMAZON ALEXA */}
-              {activeAuthPrompt === 'alexa' && (
-                <input type="password" placeholder="Alexa Smart Home API Bearer Token" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, alexaToken: e.target.value })} required style={inputStyle} />
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
-                <button 
-                  type="button" 
-                  onClick={() => setActiveAuthPrompt(null)}
-                  style={{ padding: '0.65rem 1rem', background: 'transparent', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontWeight: 'bold' }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  style={{ padding: '0.65rem 1.25rem', backgroundColor: '#0891b2', color: '#ffffff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}
-                >
-                  Inject Credentials
-                </button>
-              </div>
-
-            </form>
-          </div>
-        </div>
+        <EphemeralCredentialsModal
+          darkMode={darkMode}
+          activeAuthPrompt={activeAuthPrompt}
+          ephemeralSecrets={ephemeralSecrets}
+          setEphemeralSecrets={setEphemeralSecrets}
+          onSubmit={handleSecretSubmit}
+          onCancel={() => setActiveAuthPrompt(null)}
+        />
       )}
     </>
   );

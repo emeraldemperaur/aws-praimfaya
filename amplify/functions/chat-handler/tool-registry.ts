@@ -53,323 +53,608 @@ export const NATIVE_TOOLS_REGISTRY = [
     },
 
     // --- Data & Pipeline Engineering ---
-    { 
-        toolSpec: { 
-            name: "airtable_data_agent", 
-            description: "Parses Airtable schema and ingests spreadsheets.", 
-            inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["INSPECT_SCHEMA", "INGEST_SPREADSHEET", "ANALYZE_RELATIONS"] }, baseId: { type: "string" }, fileUrl: { type: "string" } }, required: ["action", "baseId"] } } 
-        } 
+    {
+    toolSpec: {
+        name: 'airtable_data_agent',
+        description: "Interacts with Airtable to inspect schemas, query records, write new data, and ingest parsed Excel files directly into tables.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["INSPECT_SCHEMA", "QUERY_RECORDS", "CREATE_RECORDS", "INGEST_SPREADSHEET"],
+                        description: "The Airtable action to execute."
+                    },
+                    baseId: { type: "string", description: "The Airtable Base ID (starts with 'app')." },
+                    tableIdOrName: { type: "string", description: "The Table ID or exact Table Name." },
+                    queryParams: { type: "string", description: "URL-encoded query parameters for QUERY_RECORDS (e.g., 'maxRecords=10&view=Grid%20view')." },
+                    recordsData: { type: "string", description: "Stringified JSON array of record objects for CREATE_RECORDS (e.g., '[{\"fields\": {\"Name\": \"John\"}}]')." },
+                    fileUrl: { type: "string", description: "A valid URL to an Excel (.xlsx) file to parse and ingest." }
+                },
+                required: ["action", "baseId"]
+            }
+                    }
+            }
     },
-    { 
-        toolSpec: { 
-            name: "snowflake_data_agent", 
-            description: "Executes analytical SQL queries against Snowflake Data Warehouses.", 
-            inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["INSPECT_SCHEMA", "EXECUTE_ANALYTICAL_SQL"] }, database: { type: "string" }, schemaName: { type: "string" }, sqlQuery: { type: "string" } }, required: ["action", "database", "schemaName"] } } 
-        } 
+    {
+    toolSpec: {
+        name: 'snowflake_data_agent',
+        description: "Executes SQL queries against a Snowflake data warehouse using JWT Keypair authentication. Supports reading tables, describing schemas, and manipulating data.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    sqlQuery: { type: "string", description: "The raw SQL statement to execute." },
+                    database: { type: "string", description: "The Snowflake database name." },
+                    schemaName: { type: "string", description: "The target schema name." },
+                    warehouse: { type: "string", description: "The target compute warehouse (e.g., 'DATA_SCIENCE_WH'). If omitted, defaults to user's default warehouse." },
+                    role: { type: "string", description: "The IAM role to assume for the query (e.g., 'SYSADMIN')." }
+                },
+                required: ["sqlQuery", "database", "schemaName"]
+            }
+                    }
+            }
     },
-    { 
-        toolSpec: { 
-            name: "airflow_pipeline_agent", 
-            description: "Triggers DAG runs or validates and deploys Airflow DAG Python scripts.", 
-            inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["TRIGGER_DAG_RUN", "GENERATE_AND_DEPLOY_DAG"] }, dagId: { type: "string" }, executionPayloadJson: { type: "string" }, dagPythonCode: { type: "string" } }, required: ["action"] } } 
-        } 
+    {
+    toolSpec: {
+        name: 'airflow_pipeline_agent',
+        description: "Manages Apache Airflow data pipelines. Validates and deploys new Python DAG scripts to a designated S3 bucket, triggers pipeline runs, and fetches execution logs.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["GENERATE_AND_DEPLOY_DAG", "TRIGGER_DAG", "GET_DAG_RUNS", "GET_FAILED_TASKS"],
+                        description: "The Airflow action to execute."
+                    },
+                    dagId: { type: "string", description: "The ID of the DAG (Required for triggers and logs)." },
+                    dagRunId: { type: "string", description: "The specific DAG Run ID (Required to fetch failed tasks)." },
+                    logicalDate: { type: "string", description: "Optional ISO-8601 logical execution date for TRIGGER_DAG." },
+                    dagPythonCode: { type: "string", description: "Raw Python source code of the DAG. Required for GENERATE_AND_DEPLOY_DAG." },
+                    dagFilename: { type: "string", description: "The desired filename for the deployed DAG (e.g., 'sales_etl.py')." },
+                },
+                required: ["action"]
+            }
+                        }
+                }
     },
 
     // --- Enterprise HR & Operations Command Center ---
     {
-        toolSpec: {
-            name: "rippling_hr_agent",
-            description: "Interfaces with Rippling to automate employee onboarding, device provisioning, and identity graph lookup.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["ONBOARD_EMPLOYEE", "GET_EMPLOYEE"] }, 
-                        employeeId: { type: "string", description: "Rippling worker ID." }, 
-                        employeeData: { type: "string", description: "JSON stringified worker payload containing hire details and laptop options." } 
-                    }, 
-                    required: ["action"] 
-                } 
+    toolSpec: {
+        name: 'rippling_hr_agent',
+        description: "Manages employee records in Rippling, including fetching employee details, onboarding new hires, updating roles/compensation, and processing terminations.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["GET_EMPLOYEE", "ONBOARD_EMPLOYEE", "UPDATE_EMPLOYEE", "TERMINATE_EMPLOYEE"],
+                        description: "The employee lifecycle action to perform."
+                    },
+                    employeeId: { 
+                        type: "string", 
+                        description: "The unique ID of the target employee in Rippling. Required for GET_EMPLOYEE, UPDATE_EMPLOYEE, and TERMINATE_EMPLOYEE." 
+                    },
+                    employeeData: { 
+                        type: "string", 
+                        description: "A stringified JSON string containing employee attribute updates or payload (e.g., job title, salary, manager, work email, or termination reason/effective date). Required for ONBOARD_EMPLOYEE, UPDATE_EMPLOYEE, and TERMINATE_EMPLOYEE." 
+                    }
+                },
+                required: ["action"]
+                }
+                    }
             }
-        }
     },
     {
-        toolSpec: {
-            name: "bamboohr_agent",
-            description: "Interfaces with BambooHR via API to read employee directories and time-off requests.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["GET_DIRECTORY", "GET_TIME_OFF"] } 
-                    }, 
-                    required: ["action"] 
-                } 
+    toolSpec: {
+        name: 'bamboohr_agent',
+        description: "Manages employee directory, organizational structure, and time-off/PTO requests.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["GET_DIRECTORY", "GET_TIME_OFF", "APPROVE_TIME_OFF"],
+                        description: "The HR action to perform."
+                    },
+                    searchName: { type: "string", description: "Use with GET_DIRECTORY. Name to search for to prevent massive data dumps." },
+                    startDate: { type: "string", description: "Use with GET_TIME_OFF. Format YYYY-MM-DD." },
+                    endDate: { type: "string", description: "Use with GET_TIME_OFF. Format YYYY-MM-DD." },
+                    requestId: { type: "string", description: "Use with APPROVE_TIME_OFF. The ID of the PTO request." },
+                    status: { type: "string", enum: ["approved", "denied"], description: "Use with APPROVE_TIME_OFF." }
+                },
+                required: ["action"]
             }
-        }
-    },
-    {
-        toolSpec: {
-            name: "zendesk_support_agent",
-            description: "Conducts multi-intent triage on Zendesk support tickets, searches Zendesk Knowledge Base, and updates ticket status.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["TRIAGE_TICKETS", "SEARCH_KB", "UPDATE_TICKET"] }, 
-                        ticketId: { type: "string", description: "Zendesk ticket ID." }, 
-                        query: { type: "string", description: "Search query for tickets or KB articles." },
-                        ticketData: { type: "string", description: "JSON stringified ticket update object (e.g. status, comments)." }
-                    }, 
-                    required: ["action"] 
-                } 
+                }
             }
-        }
     },
     {
-        toolSpec: {
-            name: "servicenow_itsm_agent",
-            description: "IT Service Management agent for ServiceNow to conduct incident triage and resolution.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["GET_INCIDENT", "RESOLVE_INCIDENT"] }, 
-                        sysId: { type: "string", description: "ServiceNow incident sys_id." }, 
-                        resolutionNotes: { type: "string", description: "Close notes when resolving an incident." }
-                    }, 
-                    required: ["action"] 
-                } 
+    toolSpec: {
+        name: 'zendesk_support_agent',
+        description: "Manages Zendesk support tickets and Knowledge Base articles. Supports triaging, ticket creation, updating status/fields, and adding public or internal comments.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["TRIAGE_TICKETS", "SEARCH_KB", "CREATE_TICKET", "UPDATE_TICKET", "ADD_COMMENT"],
+                        description: "The Zendesk action to execute."
+                    },
+                    query: { type: "string", description: "Search query string for TRIAGE_TICKETS or SEARCH_KB." },
+                    ticketId: { type: "string", description: "The Zendesk Ticket ID. Required for UPDATE_TICKET and ADD_COMMENT." },
+                    commentText: { type: "string", description: "Body of the comment to add to the ticket. Required for ADD_COMMENT." },
+                    isPublic: { type: "boolean", description: "Used with ADD_COMMENT. Set to false for private internal notes, true for customer-facing comments. Default: false." },
+                    ticketData: { type: "string", description: "Stringified JSON of ticket fields to create or update (e.g. '{\"subject\": \"Issue\", \"status\": \"open\"}'). Required for CREATE_TICKET and UPDATE_TICKET." }
+                },
+                required: ["action"]
             }
-        }
-    },
-    {
-        toolSpec: {
-            name: "pagerduty_sre_agent",
-            description: "Virtual SRE integrated with PagerDuty to list alerts, run diagnostics, acknowledge, or resolve incidents.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["LIST_ALERTS", "RUN_DIAGNOSTICS", "ACKNOWLEDGE_INCIDENT", "RESOLVE_INCIDENT"] }, 
-                        incidentId: { type: "string", description: "PagerDuty incident ID." }
-                    }, 
-                    required: ["action"] 
-                } 
+                    }
             }
-        }
-    },
-    // --- Enterprise Productivity & Agile Operations ---
-    {
-        toolSpec: {
-            name: "jira_agile_agent",
-            description: "Agile product operations tool for Jira. Reads, searches, and mutates tasks, stories, and epics to track agile development and determine user sentiment.",
-            inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["SEARCH_ISSUES", "GET_ISSUE", "CREATE_ISSUE", "UPDATE_ISSUE"] }, jqlQuery: { type: "string" }, issueKey: { type: "string" }, issueData: { type: "string", description: "JSON stringified Jira issue payload." } }, required: ["action"] } }
-        }
     },
     {
-        toolSpec: {
-            name: "confluence_wiki_agent",
-            description: "Knowledge management agent for Confluence. Reads SOPs and deep-linked pages to discern holistic meaning, relationships, and organizational context.",
-            inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["SEARCH_PAGES", "GET_PAGE", "CREATE_PAGE", "UPDATE_PAGE"] }, cqlQuery: { type: "string" }, pageId: { type: "string" }, pageData: { type: "string" } }, required: ["action"] } }
-        }
+    toolSpec: {
+        name: 'servicenow_itsm_agent',
+        description: "Interacts with ServiceNow ITSM. Fetches incidents by Number (INC0010001) or sys_id, searches active incident lists, creates new incidents, and resolves incidents.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["GET_INCIDENT", "QUERY_INCIDENTS", "CREATE_INCIDENT", "RESOLVE_INCIDENT"],
+                        description: "The ServiceNow ITSM action to execute."
+                    },
+                    incidentId: { type: "string", description: "Incident Number (e.g. INC0010001) or 32-character sys_id. Required for GET_INCIDENT and RESOLVE_INCIDENT." },
+                    query: { type: "string", description: "ServiceNow encoded query string for QUERY_INCIDENTS (e.g. 'active=true^priority=1')." },
+                    shortDescription: { type: "string", description: "Brief summary of the incident. Required for CREATE_INCIDENT." },
+                    urgency: { type: "string", enum: ["1", "2", "3"], description: "Urgency: 1 (High), 2 (Medium), 3 (Low). Used for CREATE_INCIDENT." },
+                    impact: { type: "string", enum: ["1", "2", "3"], description: "Impact: 1 (High), 2 (Medium), 3 (Low). Used for CREATE_INCIDENT." },
+                    assignmentGroup: { type: "string", description: "Target ServiceNow assignment group name or sys_id." },
+                    resolutionNotes: { type: "string", description: "Required for RESOLVE_INCIDENT. Detailed explanation of how the issue was resolved." },
+                    closeCode: { type: "string", description: "Resolution close code for RESOLVE_INCIDENT (e.g., 'Solved (Permanently)', 'Workaround Provided')." }
+                },
+                required: ["action"]
+            }
+                        }
+            }
     },
     {
-        toolSpec: {
-            name: "asana_pm_agent",
-            description: "Product management agent for Asana. Manages tasks and user stories, tracks progress, and analyzes task structures.",
-            inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["SEARCH_TASKS", "GET_TASK", "CREATE_TASK", "UPDATE_TASK"] }, workspaceId: { type: "string" }, taskId: { type: "string" }, taskData: { type: "string" } }, required: ["action"] } }
-        }
+    toolSpec: {
+        name: 'pagerduty_sre_agent',
+        description: "Manages PagerDuty incidents and SRE operations. Lists open incidents, checks who is on-call, triggers new incidents, acknowledges/resolves alerts, and adds notes to incidents.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["LIST_ALERTS", "RUN_DIAGNOSTICS", "GET_ON_CALL", "TRIGGER_INCIDENT", "ACKNOWLEDGE_INCIDENT", "RESOLVE_INCIDENT", "ADD_NOTE"],
+                        description: "The SRE operational action to execute."
+                    },
+                    incidentId: { type: "string", description: "The PagerDuty Incident ID (e.g. P123456). Required for ACKNOWLEDGE_INCIDENT, RESOLVE_INCIDENT, and ADD_NOTE." },
+                    serviceId: { type: "string", description: "PagerDuty Service ID (e.g. P12345). Required for TRIGGER_INCIDENT." },
+                    title: { type: "string", description: "Incident title/summary. Required for TRIGGER_INCIDENT." },
+                    urgency: { type: "string", enum: ["high", "low"], description: "Urgency level for TRIGGER_INCIDENT." },
+                    noteText: { type: "string", description: "Content of the note to attach to the incident. Required for ADD_NOTE." }
+                },
+                required: ["action"]
+            }
+                    }
+            }
     },
     {
-        toolSpec: {
-            name: "notion_workspace_agent",
-            description: "Integrates with Notion to review tasks, issues, and pages. Discerns holistic meaning from deep-linked team databases.",
-            inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["SEARCH_PAGES", "GET_PAGE", "CREATE_PAGE", "UPDATE_PAGE"] }, query: { type: "string" }, pageId: { type: "string" }, pageData: { type: "string" } }, required: ["action"] } }
-        }
+    toolSpec: {
+        name: 'jira_agile_agent',
+        description: "Manages Jira issues and agile boards. Can search tickets via JQL, create/update issues, transition states, and add comments.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["SEARCH_ISSUES", "CREATE_ISSUE", "GET_ISSUE", "UPDATE_ISSUE", "TRANSITION_ISSUE", "ADD_COMMENT"],
+                        description: "The Jira action to execute."
+                    },
+                    issueKey: { type: "string", description: "The Jira Issue Key (e.g., 'PROJ-123'). Required for GET, UPDATE, TRANSITION, and ADD_COMMENT." },
+                    jqlQuery: { type: "string", description: "JQL (Jira Query Language) string for SEARCH_ISSUES." },
+                    issueData: { type: "string", description: "Stringified JSON object for CREATE_ISSUE or UPDATE_ISSUE payloads." },
+                    transitionId: { type: "string", description: "The ID of the transition state to move the ticket to. Required for TRANSITION_ISSUE." },
+                    commentBody: { type: "string", description: "The text of the comment to post. Required for ADD_COMMENT." }
+                },
+                required: ["action"]
+            }
+                    }
+            }
     },
     {
-        toolSpec: {
-            name: "contentful_cms_agent",
-            description: "Headless CMS agent for Contentful. Reviews pages and models to discern relevance and content structure.",
-            inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["GET_ENTRIES", "GET_ENTRY", "CREATE_ENTRY", "UPDATE_ENTRY"] }, entryId: { type: "string" }, entryData: { type: "string" }, contentType: { type: "string" } }, required: ["action"] } }
-        }
+    toolSpec: {
+        name: 'confluence_wiki_agent',
+        description: "Manages Confluence wiki pages. Can search via CQL, read page content, and create/update pages.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["SEARCH_PAGES", "GET_PAGE", "CREATE_PAGE", "UPDATE_PAGE"],
+                        description: "The Confluence action to execute."
+                    },
+                    pageId: { type: "string", description: "The Confluence Page ID. Required for GET_PAGE and UPDATE_PAGE." },
+                    cqlQuery: { type: "string", description: "CQL (Confluence Query Language) string for SEARCH_PAGES." },
+                    pageData: { type: "string", description: "Stringified JSON object payload for CREATE_PAGE or UPDATE_PAGE." }
+                },
+                required: ["action"]
+            }
+                    }
+            }
     },
     {
-        toolSpec: {
-            name: "sanity_cms_agent",
-            description: "Structured content agent for Sanity.io. Queries GROQ to analyze organizational content relationships.",
-            inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["QUERY_DOCUMENTS", "MUTATE_DOCUMENT"] }, groqQuery: { type: "string" }, mutations: { type: "string", description: "JSON stringified Sanity mutation array." } }, required: ["action"] } }
-        }
+    toolSpec: {
+        name: 'asana_pm_agent',
+        description: "Manages Asana tasks and projects. Can search tasks, fetch task details, and create/update tasks.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["SEARCH_TASKS", "GET_TASK", "CREATE_TASK", "UPDATE_TASK"],
+                        description: "The Asana action to execute."
+                    },
+                    workspaceId: { type: "string", description: "The Asana Workspace ID. Required for SEARCH_TASKS." },
+                    taskId: { type: "string", description: "The Asana Task ID. Required for GET_TASK and UPDATE_TASK." },
+                    query: { type: "string", description: "Text query for SEARCH_TASKS." },
+                    taskData: { type: "string", description: "Stringified JSON object for CREATE_TASK or UPDATE_TASK payloads." }
+                },
+                required: ["action"]
+            }
+                    }
+            }
     },
     {
-        toolSpec: {
-            name: "google_workspace_agent",
-            description: "Secure Google Workspace agent. Interacts with Gmail, Docs, and Sheets for enterprise productivity and correspondence.",
-            inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["READ_GMAIL", "SEND_GMAIL", "READ_DOC", "READ_SHEET"] }, documentId: { type: "string" }, query: { type: "string" }, payload: { type: "string" } }, required: ["action"] } }
-        }
+    toolSpec: {
+        name: 'notion_workspace_agent',
+        description: "Manages Notion workspace pages and databases. Can search workspaces, retrieve page metadata, read actual page content blocks, and create/update pages.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["SEARCH_PAGES", "GET_PAGE", "GET_PAGE_CONTENT", "CREATE_PAGE", "UPDATE_PAGE"],
+                        description: "The Notion action to execute."
+                    },
+                    pageId: { type: "string", description: "The Notion Page ID. Required for GET_PAGE, GET_PAGE_CONTENT, and UPDATE_PAGE." },
+                    query: { type: "string", description: "Search string for SEARCH_PAGES." },
+                    pageData: { type: "string", description: "Stringified JSON object for CREATE_PAGE or UPDATE_PAGE payloads." }
+                },
+                required: ["action"]
+            }
+                    }
+            }
     },
     {
-        toolSpec: {
-            name: "slack_collaboration_agent",
-            description: "Collaboration agent for Slack. Dispatches messages to channels, reads channel history for summaries, objectives, and next steps.",
-            inputSchema: { json: { type: "object", properties: { action: { type: "string", enum: ["READ_CHANNEL_HISTORY", "POST_MESSAGE"] }, channelId: { type: "string" }, message: { type: "string" } }, required: ["action", "channelId"] } }
-        }
+    toolSpec: {
+        name: 'contentful_cms_agent',
+        description: "Manages Contentful headless CMS data. Can retrieve or create/update content entries.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["GET_ENTRIES", "GET_ENTRY", "CREATE_ENTRY", "UPDATE_ENTRY"],
+                        description: "The Contentful action to execute."
+                    },
+                    contentType: { type: "string", description: "The Contentful Content Type ID. Required for GET_ENTRIES, CREATE_ENTRY, and UPDATE_ENTRY." },
+                    entryId: { type: "string", description: "The unique Entry ID. Required for GET_ENTRY and UPDATE_ENTRY." },
+                    entryData: { type: "string", description: "Stringified JSON payload representing entry fields for CREATE_ENTRY or UPDATE_ENTRY." }
+                },
+                required: ["action"]
+            }
+                    }
+            }
+    },
+    {
+    toolSpec: {
+        name: 'sanity_cms_agent',
+        description: "Manages Sanity.io CMS data. Can run GROQ queries and execute document mutations.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["QUERY_DOCUMENTS", "MUTATE_DOCUMENT"],
+                        description: "The Sanity action to execute."
+                    },
+                    groqQuery: { type: "string", description: "GROQ query string. Required for QUERY_DOCUMENTS." },
+                    mutations: { type: "string", description: "Stringified JSON array of Sanity mutation objects. Required for MUTATE_DOCUMENT." }
+                },
+                required: ["action"]
+            }
+                    }
+            }
+    },
+    // ==========================================
+// GOOGLE WORKSPACE AGENT SCHEMA
+// ==========================================
+    {
+    toolSpec: {
+        name: 'google_workspace_agent',
+        description: "Manages Google Workspace apps including Gmail, Drive, Docs, Sheets, Slides, and Google Calendar. Performs search across Drive, handles file/document reads, creates docs, and manages calendar events/free-busy lookups.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: [
+                            "SEARCH_DRIVE", 
+                            "READ_GMAIL", 
+                            "SEND_GMAIL", 
+                            "READ_DOC", 
+                            "CREATE_DOC", 
+                            "READ_SHEET", 
+                            "READ_SLIDES",
+                            "LIST_CALENDAR_EVENTS",
+                            "CREATE_CALENDAR_EVENT",
+                            "GET_FREE_BUSY"
+                        ],
+                        description: "The Google Workspace action to execute. Use SEARCH_DRIVE if a file/doc ID is missing, or Google Calendar actions for scheduling."
+                    },
+                    query: { type: "string", description: "Search query for SEARCH_DRIVE, READ_GMAIL, or LIST_CALENDAR_EVENTS filtering." },
+                    documentId: { type: "string", description: "Google Drive File ID. Required for READ_DOC, READ_SHEET, and READ_SLIDES." },
+                    title: { type: "string", description: "Title for creating a new Google Doc." },
+                    payload: { type: "string", description: "Stringified JSON payload. For SEND_GMAIL: {\"to\":\"...\",\"subject\":\"...\",\"body\":\"...\"}. For CREATE_CALENDAR_EVENT: {\"summary\":\"...\",\"startTime\":\"ISO8601\",\"endTime\":\"ISO8601\",\"attendees\":[\"email@co.com\"]}" },
+                    calendarId: { type: "string", description: "Target Calendar ID. Default is 'primary'." },
+                    startTime: { type: "string", description: "ISO-8601 string for start time (e.g. '2026-09-01T10:00:00Z'). Used for calendar events, event listing, or free/busy queries." },
+                    endTime: { type: "string", description: "ISO-8601 string for end time (e.g. '2026-09-01T11:00:00Z'). Used for calendar events, event listing, or free/busy queries." },
+                    summary: { type: "string", description: "Title or summary of the meeting event for CREATE_CALENDAR_EVENT." },
+                    description: { type: "string", description: "Description or agenda notes for CREATE_CALENDAR_EVENT." },
+                    attendees: { type: "string", description: "JSON string array of attendee emails (e.g., '[\"person1@co.com\", \"person2@co.com\"]') for CREATE_CALENDAR_EVENT." }
+                },
+                required: ["action"]
+            }
+                    }
+            }
+    },
+    {
+    toolSpec: {
+        name: 'slack_collaboration_agent',
+        description: "Interacts with Slack. Can read channel history and post messages.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["READ_CHANNEL_HISTORY", "POST_MESSAGE"],
+                        description: "The Slack action to execute."
+                    },
+                    channelId: { type: "string", description: "The Slack Channel ID. Required for all actions." },
+                    message: { type: "string", description: "The message text to post. Required for POST_MESSAGE." }
+                },
+                required: ["action", "channelId"]
+            }
+                    }
+            }
     },
     // --- Enterprise Software Development ---
     {
-        toolSpec: {
-            name: "github_developer_agent",
-            description: "Software developer agent for GitHub. Integrates with the GitHub REST API to securely review repositories, read files, commit code, and manage pull requests.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["GET_REPO", "GET_FILE", "CREATE_OR_UPDATE_FILE", "CREATE_PULL_REQUEST", "MERGE_PULL_REQUEST"] }, 
-                        owner: { type: "string", description: "Repository owner (user or organization)." }, 
-                        repo: { type: "string", description: "Repository name." },
-                        path: { type: "string", description: "File path in the repository." },
-                        branch: { type: "string", description: "Target branch name." },
-                        sourceBranch: { type: "string", description: "Source branch for Pull Requests." },
-                        targetBranch: { type: "string", description: "Target branch for Pull Requests." },
-                        commitMessage: { type: "string", description: "Message detailing the commit." },
-                        fileContent: { type: "string", description: "Raw text content of the file to commit/push." },
-                        pullRequestTitle: { type: "string", description: "Title of the Pull Request." },
-                        pullRequestBody: { type: "string", description: "Description body of the Pull Request." },
-                        pullRequestNumber: { type: "number", description: "PR number to merge." }
-                    }, 
-                    required: ["action", "owner", "repo"] 
-                } 
+    toolSpec: {
+        name: 'github_developer_agent',
+        description: "Interacts with GitHub repositories. Inspects repository structures, searches code, reads/writes files, creates branches, manages Pull Requests, fetches PR diffs for code reviews, and manages Issues.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: [
+                            "GET_REPO", "GET_TREE", "SEARCH_CODE", "GET_FILE", 
+                            "CREATE_BRANCH", "CREATE_OR_UPDATE_FILE", "CREATE_PULL_REQUEST", 
+                            "GET_PR_FILES", "MERGE_PULL_REQUEST", "CREATE_ISSUE"
+                        ],
+                        description: "The GitHub action to perform."
+                    },
+                    owner: { type: "string", description: "Repository owner or organization name (e.g., 'octocat')." },
+                    repo: { type: "string", description: "Repository name (e.g., 'Hello-World')." },
+                    path: { type: "string", description: "File or directory path in the repository (e.g., 'src/index.ts'). Required for GET_FILE and CREATE_OR_UPDATE_FILE." },
+                    branch: { type: "string", description: "Target branch name for file operations or tree fetching." },
+                    sourceBranch: { type: "string", description: "Source branch for creating a branch or opening/merging PRs." },
+                    targetBranch: { type: "string", description: "Target base branch for Pull Requests (e.g., 'main')." },
+                    commitMessage: { type: "string", description: "Commit message for file updates or PR merges." },
+                    fileContent: { type: "string", description: "Raw file string content to commit." },
+                    pullRequestTitle: { type: "string", description: "Title of the Pull Request." },
+                    pullRequestBody: { type: "string", description: "Description or markdown body of the Pull Request." },
+                    pullRequestNumber: { type: "number", description: "Pull Request ID number. Required for GET_PR_FILES and MERGE_PULL_REQUEST." },
+                    query: { type: "string", description: "Code search query string for SEARCH_CODE." },
+                    issueTitle: { type: "string", description: "Title for creating an Issue." },
+                    issueBody: { type: "string", description: "Body text or markdown description for an Issue." }
+                },
+                required: ["action", "owner", "repo"]
             }
-        }
+                    }
+                            }
     },
     {
-        toolSpec: {
-            name: "gitlab_developer_agent",
-            description: "Software developer agent for GitLab. Integrates with GitLab Projects and Commits API to review repositories, read files, commit code, and manage merge requests.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["GET_PROJECT", "GET_FILE", "COMMIT_FILE", "CREATE_MERGE_REQUEST", "ACCEPT_MERGE_REQUEST"] }, 
-                        projectId: { type: "string", description: "Numeric project ID or URL-encoded namespace/project path." }, 
-                        filePath: { type: "string", description: "File path in the repository." },
-                        branch: { type: "string", description: "Target branch name." },
-                        sourceBranch: { type: "string", description: "Source branch for Merge Requests." },
-                        targetBranch: { type: "string", description: "Target branch for Merge Requests." },
-                        commitMessage: { type: "string", description: "Message detailing the commit." },
-                        fileContent: { type: "string", description: "Raw text content of the file to commit/push." },
-                        fileAction: { type: "string", enum: ["create", "update", "delete"], description: "Action to take on the file during commit." },
-                        mergeRequestTitle: { type: "string", description: "Title of the Merge Request." },
-                        mergeRequestBody: { type: "string", description: "Description body of the Merge Request." },
-                        mergeRequestIid: { type: "number", description: "Internal ID (IID) of the MR to accept." }
-                    }, 
-                    required: ["action", "projectId"] 
-                } 
+    toolSpec: {
+        name: 'gitlab_developer_agent',
+        description: "Interacts with GitLab projects. Fetches repository trees, reads/commits files, manages branches, opens Merge Requests, fetches MR diffs for automated code review, and creates Issues.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: [
+                            "GET_PROJECT", "GET_TREE", "GET_FILE", "CREATE_BRANCH", 
+                            "COMMIT_FILE", "CREATE_MERGE_REQUEST", "GET_MR_CHANGES", 
+                            "ACCEPT_MERGE_REQUEST", "CREATE_ISSUE"
+                        ],
+                        description: "The GitLab action to perform."
+                    },
+                    projectId: { type: "string", description: "GitLab Project ID or URL-encoded path (e.g., '12345' or 'group/project')." },
+                    filePath: { type: "string", description: "File path in repository. Required for GET_FILE and COMMIT_FILE." },
+                    branch: { type: "string", description: "Target branch for file reads or commits." },
+                    sourceBranch: { type: "string", description: "Source branch for branch creation or Merge Requests." },
+                    targetBranch: { type: "string", description: "Target branch for Merge Requests." },
+                    commitMessage: { type: "string", description: "Commit message." },
+                    fileContent: { type: "string", description: "Raw content for file commit." },
+                    fileAction: { type: "string", enum: ["create", "update", "delete"], description: "Action type for COMMIT_FILE." },
+                    mergeRequestTitle: { type: "string", description: "Title of the Merge Request." },
+                    mergeRequestBody: { type: "string", description: "Description of the Merge Request." },
+                    mergeRequestIid: { type: "number", description: "Merge Request IID. Required for GET_MR_CHANGES and ACCEPT_MERGE_REQUEST." },
+                    issueTitle: { type: "string", description: "Title for creating a GitLab Issue." },
+                    issueDescription: { type: "string", description: "Description text for a GitLab Issue." }
+                },
+                required: ["action", "projectId"]
             }
-        }
+                        }
+                }
     },
     // --- Enterprise Site Reliability Engineering (SRE) ---
     {
-        toolSpec: {
-            name: "grafana_sre_agent",
-            description: "SRE agent for Grafana Cloud. Inspects data sources, queries Prometheus metrics and Loki logs, and automatically provisions monitoring dashboards.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["GET_DATA_SOURCES", "QUERY_METRICS", "QUERY_LOKI_LOGS", "CREATE_DASHBOARD"] }, 
-                        dataSourceUid: { type: "string", description: "UID of the target Prometheus or Loki data source." },
-                        query: { type: "string", description: "LogQL query for Loki or PromQL query for Prometheus." },
-                        dashboardJson: { type: "string", description: "JSON stringified Grafana dashboard definition payload." },
-                        timeRange: { type: "string", description: "Time range for queries (e.g., '1h', '6h', '24h'). Defaults to '1h'." }
-                    }, 
-                    required: ["action"] 
-                } 
+    toolSpec: {
+        name: 'grafana_observability_agent',
+        description: "Manages Grafana dashboards, data sources, alert rules, and performs PromQL metric queries and LogQL log searches.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: [
+                            "GET_DATA_SOURCES", "SEARCH_DASHBOARDS", "GET_DASHBOARD", 
+                            "QUERY_METRICS", "QUERY_METRICS_RANGE", "QUERY_LOKI_LOGS", 
+                            "CREATE_DASHBOARD", "GET_ALERT_RULES"
+                        ],
+                        description: "The Grafana action to execute."
+                    },
+                    dataSourceUid: { type: "string", description: "The Grafana Data Source UID. Required for metric and log queries." },
+                    dashboardUid: { type: "string", description: "The UID of the dashboard. Required for GET_DASHBOARD." },
+                    query: { type: "string", description: "PromQL query string (for metrics) or LogQL query string (for Loki logs), or dashboard search string." },
+                    start: { type: "string", description: "Start time for range queries (Unix timestamp in seconds or ISO string)." },
+                    end: { type: "string", description: "End time for range queries (Unix timestamp in seconds or ISO string)." },
+                    step: { type: "string", description: "Resolution step for PromQL range queries (e.g., '15s', '1m'). Default: '15s'." },
+                    limit: { type: "number", description: "Maximum number of Loki log lines to retrieve. Default: 50." },
+                    dashboardJson: { type: "string", description: "Stringified JSON object representing the full Grafana dashboard model." }
+                },
+                required: ["action"]
             }
-        }
+                    }
+            }
     },
     {
-        toolSpec: {
-            name: "datadog_sre_agent",
-            description: "SRE agent for Datadog. Retrieves raw telemetry (metrics, logs) for downstream warehousing, inspects metrics, and creates Datadog dashboards.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["QUERY_LOGS", "QUERY_METRICS", "CREATE_DASHBOARD", "SEARCH_DASHBOARDS"] }, 
-                        query: { type: "string", description: "Datadog log search query or metric query string." },
-                        from: { type: "number", description: "Start time POSIX timestamp (seconds)." },
-                        to: { type: "number", description: "End time POSIX timestamp (seconds)." },
-                        dashboardJson: { type: "string", description: "JSON stringified Datadog dashboard definition." }
-                    }, 
-                    required: ["action"] 
-                } 
+    toolSpec: {
+        name: 'datadog_monitoring_agent',
+        description: "Interacts with Datadog. Queries logs and metric series, manages dashboards, checks active alerting monitors, mutes monitors, retrieves open incidents, and inspects SLOs.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: [
+                            "QUERY_LOGS", "QUERY_METRICS", "SEARCH_DASHBOARDS", 
+                            "CREATE_DASHBOARD", "GET_MONITORS", "MUTE_MONITOR", 
+                            "LIST_INCIDENTS", "GET_SLOS"
+                        ],
+                        description: "The Datadog action to execute."
+                    },
+                    query: { type: "string", description: "Metric query string (e.g. 'avg:system.cpu.user{*}') or log search query (e.g. 'service:web-app status:error')." },
+                    from: { type: "string", description: "Start time (Unix timestamp in seconds or ISO string)." },
+                    to: { type: "string", description: "End time (Unix timestamp in seconds or ISO string)." },
+                    monitorId: { type: "string", description: "The Datadog Monitor ID. Required for MUTE_MONITOR." },
+                    muteScope: { type: "string", description: "Optional scope string to mute specific environment/host tags (e.g. 'env:prod,host:web-01')." },
+                    dashboardJson: { type: "string", description: "Stringified JSON object of the Datadog dashboard payload." }
+                },
+                required: ["action"]
             }
-        }
+                    }
+             }
     },
     // --- Enterprise Property Management ---
     {
-        toolSpec: {
-            name: "butterflymx_access_agent",
-            description: "Property access management agent for ButterflyMX. Interfaces with Access Points, Logs, Devices, Tenants, and Virtual Keys.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["GET_BUILDINGS", "GET_TENANTS", "GET_ACCESS_LOGS", "OPEN_DOOR", "CREATE_VIRTUAL_KEY"] }, 
-                        buildingId: { type: "string", description: "ButterflyMX Building ID." },
-                        tenantId: { type: "string", description: "ButterflyMX Tenant ID." },
-                        deviceId: { type: "string", description: "Device or Access Point ID for door release." },
-                        virtualKeyData: { type: "string", description: "JSON stringified virtual key payload (start/end times, recipient)." }
-                    }, 
-                    required: ["action"] 
-                } 
+    toolSpec: {
+        name: 'butterflymx_access_agent',
+        description: "Manages ButterflyMX building access control for both Property Managers and Tenants. Can manage virtual keys for guests/deliveries, open doors, update tenant PINs/privacy, and check access logs.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: [
+                            "GET_BUILDINGS", "GET_TENANTS", "GET_DEVICES", 
+                            "GET_ACCESS_LOGS", "GET_MY_ACCESS_LOGS", "OPEN_DOOR", 
+                            "CREATE_VIRTUAL_KEY", "REVOKE_VIRTUAL_KEY", "UPDATE_TENANT"
+                        ],
+                        description: "The ButterflyMX action to execute. Use GET_MY_ACCESS_LOGS for tenant-scoped history."
+                    },
+                    buildingId: { type: "string", description: "The ButterflyMX Building ID." },
+                    tenantId: { type: "string", description: "The ButterflyMX Tenant ID. Required for GET_MY_ACCESS_LOGS and UPDATE_TENANT." },
+                    deviceId: { type: "string", description: "The ButterflyMX Device/Door ID. Required for OPEN_DOOR." },
+                    virtualKeyId: { type: "string", description: "The Virtual Key ID. Required for REVOKE_VIRTUAL_KEY." },
+                    virtualKeyData: { type: "string", description: "Stringified JSON representing virtual key attributes (e.g. name, start_time, end_time)." },
+                    tenantData: { type: "string", description: "Stringified JSON representing tenant updates. For PIN changes: {\"pin\":\"1234\"}. For privacy: {\"directory_hidden\": true}." }
+                },
+                required: ["action"]
             }
-        }
+                    }
+                }
     },
     {
-        toolSpec: {
-            name: "yardi_rentcafe_agent",
-            description: "Property management agent for Yardi RentCafe (via Virtuoso MCP). Handles tenant interactions, abstracts leases, audits ledgers, and processes maintenance.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        mcpToolName: { 
-                            type: "string", 
-                            enum: ["audit_ledger", "process_maintenance_request", "abstract_lease", "make_rent_payment", "review_lease"],
-                            description: "The specific Yardi Virtuoso MCP tool to execute." 
-                        }, 
-                        mcpArguments: { 
-                            type: "string", 
-                            description: "JSON stringified arguments required for the specific Yardi tool." 
-                        }
-                    }, 
-                    required: ["mcpToolName", "mcpArguments"] 
-                } 
+    toolSpec: {
+        name: 'yardi_virtuoso_agent',
+        description: "Interacts with Yardi Virtuoso Property Management system via a Model Context Protocol (MCP) server. If you do not know the exact tool name required for a task (e.g. resident ledgers, work orders), run LIST_YARDI_TOOLS first to discover them.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["LIST_YARDI_TOOLS", "CALL_YARDI_TOOL"],
+                        description: "The action to execute. Use LIST_YARDI_TOOLS to discover capabilities, and CALL_YARDI_TOOL to execute one."
+                    },
+                    mcpToolName: { type: "string", description: "The specific Yardi MCP tool name to call (e.g., 'create_work_order'). Required for CALL_YARDI_TOOL." },
+                    mcpArguments: { type: "string", description: "Stringified JSON arguments required by the specific Yardi MCP tool." }
+                },
+                required: ["action"]
             }
-        }
+                    }
+             }
     },
     // --- Enterprise Core Business Operations ---
     {
-        toolSpec: {
-            name: "salesforce_crm_agent",
-            description: "Salesforce CRM agent. Executes SOQL queries for forecasting, creates/updates records, and interacts with TaskRay for project management.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["SOQL_QUERY", "GET_RECORD", "CREATE_RECORD", "UPDATE_RECORD"] }, 
-                        query: { type: "string", description: "Valid SOQL query string." },
-                        objectName: { type: "string", description: "Salesforce SObject API name (e.g., Lead, Opportunity, TASKRAY__Project__c)." },
-                        recordId: { type: "string", description: "Salesforce Record ID." },
-                        recordData: { type: "string", description: "JSON stringified record payload." }
-                    }, 
-                    required: ["action"] 
-                } 
+    toolSpec: {
+        name: 'salesforce_crm_agent',
+        description: "Manages Salesforce CRM records. Can run SOQL queries, execute CRUD operations on standard/custom objects (Accounts, Contacts, Opportunities, Cases), and log activities.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["SOQL_QUERY", "GET_RECORD", "CREATE_RECORD", "UPDATE_RECORD", "LOG_ACTIVITY"],
+                        description: "The Salesforce action to execute."
+                    },
+                    query: { type: "string", description: "SOQL query string. Required for SOQL_QUERY." },
+                    objectName: { type: "string", description: "The API name of the Salesforce object (e.g., 'Account', 'Contact', 'Case'). Required for GET, CREATE, UPDATE." },
+                    recordId: { type: "string", description: "The 18-character Salesforce Record ID. Required for GET, UPDATE, and LOG_ACTIVITY." },
+                    recordData: { type: "string", description: "Stringified JSON object of field values. For LOG_ACTIVITY, provide {'Subject':'...', 'Description':'...', 'Status':'Completed'}." }
+                },
+                required: ["action"]
             }
-        }
+                    }
+            }
     },
     {
         toolSpec: {
@@ -408,23 +693,27 @@ export const NATIVE_TOOLS_REGISTRY = [
         }
     },
     {
-        toolSpec: {
-            name: "hubspot_crm_agent",
-            description: "HubSpot CRM agent. securely retrieves and reviews Contacts, Deals, Custom Objects and Properties.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["SEARCH_OBJECTS", "GET_OBJECT", "CREATE_OBJECT", "UPDATE_OBJECT"] }, 
-                        objectType: { type: "string", description: "contacts, deals, companies, or custom object ID." },
-                        objectId: { type: "string", description: "HubSpot Object ID." },
-                        searchQuery: { type: "string", description: "JSON stringified search filter payload." },
-                        payload: { type: "string", description: "JSON stringified properties payload." }
-                    }, 
-                    required: ["action", "objectType"] 
-                } 
+    toolSpec: {
+        name: 'hubspot_crm_agent',
+        description: "Manages HubSpot CRM objects (Contacts, Companies, Deals, Tickets). Can search, execute CRUD operations, and log engagements/notes to records.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["SEARCH_OBJECTS", "GET_OBJECT", "CREATE_OBJECT", "UPDATE_OBJECT", "LOG_ENGAGEMENT"],
+                        description: "The HubSpot action to execute."
+                    },
+                    objectType: { type: "string", description: "The plural type of the object (e.g., 'contacts', 'companies', 'deals', 'tickets'). Required for all actions." },
+                    objectId: { type: "string", description: "The specific Object ID. Required for GET, UPDATE, and LOG_ENGAGEMENT." },
+                    searchQuery: { type: "string", description: "Stringified JSON of the HubSpot search payload (filterGroups). Required for SEARCH_OBJECTS." },
+                    payload: { type: "string", description: "Stringified JSON of properties to create/update. For LOG_ENGAGEMENT, provide {'hs_note_body':'...'}." }
+                },
+                required: ["action"]
             }
-        }
+                    }
+            }
     },
     {
         toolSpec: {
@@ -444,60 +733,100 @@ export const NATIVE_TOOLS_REGISTRY = [
         }
     },
     {
-        toolSpec: {
-            name: "uipath_rpa_agent",
-            description: "UiPath Orchestrator agent. Manages unattended jobs, views robot status, and kicks off event-driven automations via OData.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["GET_JOBS", "START_JOB", "STOP_JOB", "GET_QUEUE_ITEMS", "ADD_QUEUE_ITEM"] }, 
-                        releaseKey: { type: "string", description: "Process Release Key needed to start a job." },
-                        jobId: { type: "string", description: "Job ID." },
-                        queueName: { type: "string", description: "Target UiPath Queue Name." },
-                        payload: { type: "string", description: "JSON stringified input arguments or queue item data." }
-                    }, 
-                    required: ["action"] 
-                } 
+    toolSpec: {
+        name: 'uipath_orchestrator_agent',
+        description: "Manages UiPath RPA processes, jobs, and queues. Use GET_RELEASES to find process UUIDs. Use GET_JOB_LOGS to diagnose failed bots.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: [
+                            "GET_RELEASES", "GET_JOBS", "GET_JOB_LOGS", 
+                            "START_JOB", "STOP_JOB", 
+                            "GET_QUEUE_ITEMS", "ADD_QUEUE_ITEM"
+                        ],
+                        description: "The UiPath Orchestrator action to execute."
+                    },
+                    releaseKey: { type: "string", description: "The UUID of the deployed process. Required for START_JOB. Find this using GET_RELEASES." },
+                    jobId: { type: "number", description: "The numeric Job ID. Required for GET_JOB_LOGS and STOP_JOB." },
+                    queueName: { type: "string", description: "The exact name of the Orchestrator Queue. Required for GET_QUEUE_ITEMS and ADD_QUEUE_ITEM." },
+                    statusFilter: { type: "string", enum: ["New", "In Progress", "Failed", "Successful", "Abandoned"], description: "Optional filter for GET_QUEUE_ITEMS to only return items with a specific status." },
+                    payload: { type: "string", description: "Stringified JSON object. For START_JOB, represents Input Arguments. For ADD_QUEUE_ITEM, represents Specific Content payload." }
+                },
+                required: ["action"]
             }
-        }
-    },
-    // --- Enterprise Travel Booking & Reservation ---
-    {
-        toolSpec: {
-            name: "booking_com_travel_agent",
-            description: "Travel agent for Booking.com Demand API. Retrieves property/reservation details and guest feedback to contextualize inquiries and formulate personalized itineraries.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["SEARCH_PROPERTIES", "GET_PROPERTY_DETAILS", "GET_REVIEWS", "GET_ORDER_DETAILS"] }, 
-                        query: { type: "string", description: "Search query or destination for properties." },
-                        propertyId: { type: "string", description: "Booking.com Property ID." },
-                        orderId: { type: "string", description: "Booking.com Order/Reservation ID." },
-                        checkIn: { type: "string", description: "Check-in date (YYYY-MM-DD)." },
-                        checkOut: { type: "string", description: "Check-out date (YYYY-MM-DD)." }
-                    }, 
-                    required: ["action"] 
-                } 
-            }
-        }
+                    }
+                }
     },
     {
         toolSpec: {
-            name: "priceline_travel_agent",
-            description: "Travel agent for Priceline Partner Solutions API. Retrieves property details, reviews, and reservations to address guest inquiries and personalize recommendations.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["SEARCH_HOTELS", "GET_HOTEL_DETAILS", "GET_REVIEWS", "GET_RESERVATION"] }, 
-                        destination: { type: "string", description: "Target destination for searches." },
-                        hotelId: { type: "string", description: "Priceline Hotel ID." },
-                        reservationId: { type: "string", description: "Priceline Reservation ID." }
-                    }, 
-                    required: ["action"] 
-                } 
+            name: 'booking_com_agent',
+            description: "Manages Booking.com accommodations. Can search properties, fetch details, read reviews, and check order statuses.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["SEARCH_PROPERTIES", "GET_PROPERTY_DETAILS", "GET_REVIEWS", "GET_ORDER_DETAILS"]
+                        },
+                        query: { type: "string", description: "Search term (e.g., 'London', 'Hilton Paris')." },
+                        checkIn: { type: "string", description: "YYYY-MM-DD" },
+                        checkOut: { type: "string", description: "YYYY-MM-DD" },
+                        adults: { type: "number", description: "Number of adults (default 1)." },
+                        currency: { type: "string", description: "3-letter currency code (e.g., 'USD', 'EUR')." },
+                        propertyId: { type: "string", description: "The Booking.com Property ID." },
+                        orderId: { type: "string", description: "The Booking.com Order/Reservation ID." }
+                    },
+                    required: ["action"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: 'priceline_partner_agent',
+            description: "Manages Priceline hotel bookings. Can search hotels, fetch details, and retrieve or cancel reservations.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["SEARCH_HOTELS", "GET_HOTEL_DETAILS", "GET_REVIEWS", "GET_RESERVATION", "CANCEL_RESERVATION"]
+                        },
+                        destination: { type: "string", description: "City or location name." },
+                        hotelId: { type: "string", description: "The Priceline Hotel ID." },
+                        reservationId: { type: "string", description: "The Priceline Reservation ID." }
+                    },
+                    required: ["action"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: 'amadeus_gds_agent',
+            description: "Global Distribution System (GDS) tool for Travel Agents. Searches live flight offers, seat availability, and manages flight orders.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["SEARCH_FLIGHTS", "GET_FLIGHT_ORDER"]
+                        },
+                        origin: { type: "string", description: "3-letter IATA Airport Code (e.g., 'JFK')." },
+                        destination: { type: "string", description: "3-letter IATA Airport Code (e.g., 'LHR')." },
+                        departureDate: { type: "string", description: "YYYY-MM-DD" },
+                        returnDate: { type: "string", description: "YYYY-MM-DD (Optional for round trips)." },
+                        adults: { type: "number", description: "Number of adult passengers." },
+                        flightOrderId: { type: "string", description: "The Amadeus Flight Order ID." }
+                    },
+                    required: ["action"]
+                }
             }
         }
     },
@@ -524,136 +853,204 @@ export const NATIVE_TOOLS_REGISTRY = [
     // --- Enterprise Full Stack Developer (MCP Wrappers) ---
     {
         toolSpec: {
-            name: "mito_mcp_agent",
-            description: "Full Stack Developer agent for Mito MCP Server. Generates full-stack components, uses frontend components based on a variant UI design system. Call action='LIST_TOOLS' to discover capabilities, then 'CALL_TOOL' to execute them.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["LIST_TOOLS", "CALL_TOOL"] }, 
-                        mcpToolName: { type: "string", description: "The specific Mito MCP tool to execute (required for CALL_TOOL)." },
-                        mcpArguments: { type: "string", description: "JSON stringified arguments required for the specific Mito tool." }
-                    }, 
-                    required: ["action"] 
-                } 
+            name: 'mito_mcp_agent',
+            description: "Interacts with the Mito enterprise MCP server. If you do not know the exact tool name required for a task, run LIST_TOOLS first to discover them.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["LIST_TOOLS", "CALL_TOOL"],
+                            description: "The action to execute. Use LIST_TOOLS to discover capabilities."
+                        },
+                        mcpToolName: { type: "string", description: "The specific MCP tool name to call. Required for CALL_TOOL." },
+                        mcpArguments: { type: "string", description: "Stringified JSON arguments required by the specific MCP tool." }
+                    },
+                    required: ["action"]
+                }
             }
         }
     },
     {
         toolSpec: {
-            name: "apotheosis_mcp_agent",
-            description: "Full Stack Developer agent for Apotheosis MCP Server. Generates full-stack components, uses frontend components based on a strictly neumorphic UI design system. Call action='LIST_TOOLS' to discover capabilities, then 'CALL_TOOL' to execute them.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["LIST_TOOLS", "CALL_TOOL"] }, 
-                        mcpToolName: { type: "string", description: "The specific Apotheosis MCP tool to execute (required for CALL_TOOL)." },
-                        mcpArguments: { type: "string", description: "JSON stringified arguments required for the specific Apotheosis tool." }
-                    }, 
-                    required: ["action"] 
-                } 
+            name: 'apotheosis_mcp_agent',
+            description: "Interacts with the Apotheosis creative/UX MCP server. If you do not know the exact tool name required for a task, run LIST_TOOLS first to discover them.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["LIST_TOOLS", "CALL_TOOL"],
+                            description: "The action to execute. Use LIST_TOOLS to discover capabilities."
+                        },
+                        mcpToolName: { type: "string", description: "The specific MCP tool name to call. Required for CALL_TOOL." },
+                        mcpArguments: { type: "string", description: "Stringified JSON arguments required by the specific MCP tool." }
+                    },
+                    required: ["action"]
+                }
             }
         }
     },
-    // --- Enterprise Bring Your Own MCP (BYOMCP) ---
     {
         toolSpec: {
-            name: "custom_mcp_agent",
-            description: "Agent for the user's custom Bring Your Own MCP (BYOMCP) server. Connects to their proprietary infrastructure. Call action='LIST_TOOLS' to discover capabilities, then 'CALL_TOOL' to execute them.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["LIST_TOOLS", "CALL_TOOL"] }, 
-                        mcpToolName: { type: "string", description: "The specific custom MCP tool to execute (required for CALL_TOOL)." },
-                        mcpArguments: { type: "string", description: "JSON stringified arguments required for the specific tool." }
-                    }, 
-                    required: ["action"] 
-                } 
+            name: 'byo_mcp_agent',
+            description: "Interacts with the user's custom 'Bring Your Own' MCP server (e.g. local file readers, custom Figma bridges). If you do not know the exact tool name required for a task, run LIST_TOOLS first to discover them.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["LIST_TOOLS", "CALL_TOOL"],
+                            description: "The action to execute. Use LIST_TOOLS to discover capabilities."
+                        },
+                        mcpToolName: { type: "string", description: "The specific MCP tool name to call. Required for CALL_TOOL." },
+                        mcpArguments: { type: "string", description: "Stringified JSON arguments required by the specific MCP tool." }
+                    },
+                    required: ["action"]
+                }
             }
         }
     },
     // --- Enterprise Smart Home Management ---
     {
-        toolSpec: {
-            name: "google_home_agent",
-            description: "Google Home Smart Home agent. EXPLICIT TRIGGER REQUIRED: Only use this tool if the user explicitly mentions 'Google Home' or 'Google Assistant'. Do not use for generic automation requests. Manages devices, states, and Structure/Room APIs.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["GET_DEVICES", "CONTROL_DEVICE", "UPDATE_DEVICE", "GET_ROOMS", "MANAGE_ROOM"] }, 
-                        deviceId: { type: "string", description: "Google Home Device ID." },
-                        roomId: { type: "string", description: "Google Home Room/Structure ID." },
-                        command: { type: "string", description: "Command payload (e.g., action.devices.commands.OnOff)." },
-                        params: { type: "string", description: "JSON stringified command parameters (e.g., {\"on\": true})." },
-                        roomAction: { type: "string", enum: ["add", "delete", "rename", "assign_device"] },
-                        roomName: { type: "string" }
-                    }, 
-                    required: ["action"] 
-                } 
+    toolSpec: {
+        name: 'google_home_agent',
+        description: "Manages Google Home / Nest devices via the Smart Device Management (SDM) API. Can list structures/devices and execute commands.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["GET_DEVICES", "GET_ROOMS", "CONTROL_DEVICE", "MANAGE_ROOM"],
+                        description: "The Google Home action to execute."
+                    },
+                    deviceId: { type: "string", description: "The Google Device ID. Required for CONTROL_DEVICE." },
+                    command: { type: "string", description: "The SDM API Command (e.g., 'sdm.devices.commands.ThermostatTemperatureSetpoint.SetHeat'). Required for CONTROL_DEVICE." },
+                    params: { type: "string", description: "Stringified JSON object of command parameters (e.g., '{\"heatCelsius\": 22}')." }
+                },
+                required: ["action"]
             }
-        }
+                        }
+                }
+    },
+    {
+    toolSpec: {
+        name: 'home_assistant_agent',
+        description: "Manages a Home Assistant smart home instance. Can view entities, call services (control devices), troubleshoot using entity history or error logs, and render Jinja2 templates.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["GET_DEVICES", "CONTROL_DEVICE", "GET_HISTORY", "GET_ERROR_LOGS", "RENDER_TEMPLATE"],
+                        description: "The Home Assistant action to execute."
+                    },
+                    domain: { type: "string", description: "The service domain (e.g., 'light', 'climate', 'script'). Required for CONTROL_DEVICE." },
+                    service: { type: "string", description: "The service name (e.g., 'turn_on', 'set_temperature'). Required for CONTROL_DEVICE." },
+                    entityId: { type: "string", description: "The specific entity ID (e.g., 'light.living_room'). Required for GET_HISTORY and optional for CONTROL_DEVICE." },
+                    serviceData: { type: "string", description: "Stringified JSON of service payload attributes (e.g., '{\"brightness\": 255}')." },
+                    startTime: { type: "string", description: "ISO-8601 timestamp to start historical data fetch (e.g., '2026-08-27T00:00:00Z'). Used in GET_HISTORY." },
+                    templateString: { type: "string", description: "Jinja2 template string to render and test on the live instance. Required for RENDER_TEMPLATE." }
+                },
+                required: ["action"]
+            }
+                            }
+                }
+    },
+    {
+    toolSpec: {
+        name: 'amazon_alexa_agent',
+        description: "Controls Amazon Alexa devices via the Smart Home Event Gateway. Note: Device discovery is unsupported; user must provide exact Endpoint ID.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["GET_DEVICES", "CONTROL_DEVICE", "GET_ROOMS", "MANAGE_ROOM"],
+                        description: "The Alexa action to execute."
+                    },
+                    endpointId: { type: "string", description: "The target Alexa Endpoint ID. Required for CONTROL_DEVICE." },
+                    namespace: { type: "string", description: "The Alexa capability namespace (e.g., 'Alexa.PowerController')." },
+                    name: { type: "string", description: "The Alexa directive name (e.g., 'TurnOn')." },
+                    payload: { type: "string", description: "Stringified JSON object representing the event payload." }
+                },
+                required: ["action"]
+            }
+                    }
+            }
     },
     {
         toolSpec: {
-            name: "apple_homekit_agent",
-            description: "Apple HomeKit agent (via Home Assistant REST API). EXPLICIT TRIGGER REQUIRED: Only use this tool if the user explicitly mentions 'Apple HomeKit', 'HomeKit', or 'Siri'. Manages entities, states, areas, and services.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["GET_DEVICES", "CONTROL_DEVICE", "GET_ROOMS", "MANAGE_ROOM"] }, 
-                        entityId: { type: "string", description: "HomeKit/HA Entity ID (e.g., light.living_room)." },
-                        domain: { type: "string", description: "Device domain (e.g., light, switch)." },
-                        service: { type: "string", description: "Service to call (e.g., turn_on, turn_off)." },
-                        serviceData: { type: "string", description: "JSON stringified service data payload." },
-                        areaId: { type: "string", description: "HomeKit Area/Room ID." },
-                        roomAction: { type: "string", enum: ["add", "delete", "rename", "assign_device"] },
-                        roomName: { type: "string" }
-                    }, 
-                    required: ["action"] 
-                } 
-            }
-        }
-    },
-    {
-        toolSpec: {
-            name: "amazon_alexa_smarthome_agent",
-            description: "Amazon Alexa Smart Home agent. EXPLICIT TRIGGER REQUIRED: Only use this tool if the user explicitly mentions 'Alexa' or 'Echo'. Do not use for generic automation requests. Manages devices, state subscriptions, and groups/rooms.",
-            inputSchema: { 
-                json: { 
-                    type: "object", 
-                    properties: { 
-                        action: { type: "string", enum: ["GET_DEVICES", "CONTROL_DEVICE", "GET_ROOMS", "MANAGE_ROOM"] }, 
-                        endpointId: { type: "string", description: "Alexa Endpoint/Device ID." },
-                        namespace: { type: "string", description: "Alexa interface namespace (e.g., Alexa.PowerController)." },
-                        name: { type: "string", description: "Command name (e.g., TurnOn, TurnOff)." },
-                        payload: { type: "string", description: "JSON stringified command payload." },
-                        groupId: { type: "string", description: "Alexa Group/Room ID." },
-                        roomAction: { type: "string", enum: ["add", "delete", "rename", "assign_device"] },
-                        roomName: { type: "string" }
-                    }, 
-                    required: ["action"] 
-                } 
-            }
-        }
-    },
-    // --- Document Generation ---
-    {
-        toolSpec: {
-            name: "generate_document",
-            description: "Generates a formatted text document, markdown file, or CSV data file and saves it as a downloadable RAG Artifact.",
+            name: 'generate_document_agent',
+            description: "Generates downloadable files (HTML reports, CSV datasets, Markdown notes) and saves them securely to AWS S3. Use this when the user asks for a file, report, spreadsheet, or standalone document.",
             inputSchema: {
                 json: {
                     type: "object",
                     properties: {
-                        content: { type: "string", description: "The full text content of the document." },
-                        fileName: { type: "string", description: "The desired file name (without extension)." },
-                        format: { type: "string", enum: ["md", "txt", "csv", "html"], description: "The file format." }
+                        format: { 
+                            type: "string", 
+                            enum: ["html", "csv", "md"],
+                            description: "The file format. Use 'html' for professional reports, letters, and invoices. Use 'csv' for spreadsheets and data tables. Use 'md' for raw text/code."
+                        },
+                        fileName: { 
+                            type: "string", 
+                            description: "A short, descriptive file name without the extension (e.g., 'Q3-Financial-Report' or 'Meeting-Notes')." 
+                        },
+                        content: { 
+                            type: "string", 
+                            description: "The complete content of the file. If 'html', provide well-structured HTML elements (<h1>, <table>, <p>). If 'csv', provide comma-separated values with a header row." 
+                        }
                     },
-                    required: ["content", "fileName", "format"]
+                    required: ["format", "fileName", "content"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: 'arduino_iot_agent',
+            description: "Manages Arduino IoT Cloud microcontrollers. Can list Things, discover sensor Properties (telemetry), and update Properties to actuate hardware (e.g. spin motors, toggle relays).",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["GET_THINGS", "GET_PROPERTIES", "UPDATE_PROPERTY", "CREATE_PROPERTY"],
+                            description: "The Arduino action to execute."
+                        },
+                        thingId: { type: "string", description: "The UUID of the Arduino Thing. Required for GET_PROPERTIES, UPDATE_PROPERTY, CREATE_PROPERTY." },
+                        propertyId: { type: "string", description: "The UUID of the specific Property (variable). Required for UPDATE_PROPERTY." },
+                        payload: { type: "string", description: "Stringified JSON object. For UPDATE_PROPERTY, provide {'value': <new_value>}." }
+                    },
+                    required: ["action"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: 'raspberry_pi_fleet_agent',
+            description: "Manages a fleet of Raspberry Pi edge devices (via balenaCloud). Can check online status, pull application logs for diagnostics, set environment variables, and trigger reboots.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["GET_FLEET_STATUS", "GET_DEVICE_LOGS", "REBOOT_DEVICE", "SET_DEVICE_ENV_VAR"],
+                            description: "The Edge Fleet action to execute."
+                        },
+                        deviceUuid: { type: "string", description: "The UUID of the specific Raspberry Pi device. Required for logs, reboots, and env vars." },
+                        envVars: { type: "string", description: "Stringified JSON for SET_DEVICE_ENV_VAR. Format: {'name': 'VAR_NAME', 'value': 'var_value'}." }
+                    },
+                    required: ["action"]
                 }
             }
         }

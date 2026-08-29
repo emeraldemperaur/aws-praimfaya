@@ -105,6 +105,13 @@ const multimodalBucket = new s3.Bucket(customStack, 'MultimodalStorageBucket', {
   autoDeleteObjects: true,
 });
 
+const airflowDagsBucket = new s3.Bucket(customStack, 'AirflowDagsBucket', {
+  encryption: s3.BucketEncryption.S3_MANAGED,
+  blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+  versioned: true, 
+  removalPolicy: RemovalPolicy.RETAIN,
+});
+
 const bedrockKbRole = new iam.Role(customStack, 'BedrockKBRole', {
   assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
 });
@@ -360,7 +367,8 @@ const dagValidatorLambda = new lambda.Function(customStack, 'DagValidatorFunctio
 
 chatLambda.addEnvironment('PYTHON_VALIDATOR_LAMBDA_ARN', dagValidatorLambda.functionArn);
 dagValidatorLambda.grantInvoke(chatLambda);
-
+chatLambda.addEnvironment('AIRFLOW_DAGS_BUCKET', airflowDagsBucket.bucketName);
+airflowDagsBucket.grantWrite(chatLambda);
 
 // ====================================
 // MULTIMEDIA EXECUTOR
