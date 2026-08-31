@@ -55,17 +55,21 @@ export const executeGenerateDocument = async ({ toolInput, profile, sessionId, c
             Key: s3Key
         });
         const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+        const permanentUrl = `https://${env.MEDIA_OUTPUT_BUCKET_NAME}.s3.amazonaws.com/${s3Key}`;
+        
         
         await clients.dynamodb.send(new PutCommand({
             TableName: env.RAG_ARTIFACTS_TABLE_NAME,
             Item: {
-                id: `art-${Date.now()}`,
+                id: `art_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
                 userId: cognitoUserId,
-                sessionId: sessionId,
-                type: 'DOCUMENT',
-                title: `${safeName}.${format}`,
-                format: format,
-                s3Key: s3Key, 
+                terminalId: sessionId || 'unknown-session',
+                terminalTitle: profile?.title || 'Terminal Session',
+                modelName: profile?.llmModelId || 'amazon.nova-pro-v1:0',
+                contextProfileName: profile?.name || 'Vanguard AI',
+                fileUrl: permanentUrl,
+                fileName: `${safeName}.${format}`,
+                fileType: 'DOCUMENT',
                 createdAt: new Date().toISOString()
             }
         }));
@@ -80,7 +84,6 @@ export const executeGenerateDocument = async ({ toolInput, profile, sessionId, c
         return { error: `Failed to save document: ${err.message}` };
     }
 };
-
 
 export const executeExtractPdf = async ({ toolInput, clients }: ToolExecutionContext) => {
     const { fileUrl, maxPages = 15 } = toolInput;
@@ -119,7 +122,6 @@ export const executeExtractPdf = async ({ toolInput, clients }: ToolExecutionCon
         const parseOptions = { max: maxPages };
         const parsedData = await pdfParse(pdfBuffer, parseOptions);
 
-        
         const cleanText = parsedData.text.replace(/\n\s*\n/g, '\n').trim();
 
         return {

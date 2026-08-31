@@ -61,8 +61,8 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
     {
         toolName: "edit_image",
         publicName: "Amazon Nova Canvas",
-        systemPrompt: "You are a precise image editing assistant. Formulate clear, localized instructions for Amazon Nova Canvas based on the user's requested {{taskType}} (e.g., background removal, outpainting, targeted inpainting).",
-        userPrompt: "Edit the image located at {{image_url}}. I need you to perform a {{task_type_e.g._background_removal}} and {{specific_editing_instruction}}.",
+        systemPrompt: "You are a precise image editing assistant. Formulate clear instructions for Amazon Nova Canvas based on the user's requested edit. You MUST extract the `s3Uri` from the [System Context] of the user's uploaded attachment and pass it into the tool.",
+        userPrompt: "Edit the attached image. Please use {{taskType_e.g._BACKGROUND_REMOVAL_or_INPAINTING}} to {{specific_editing_instruction}}.",
         modelAvailability: "ALL_AGENTS",
         costImpact: "HIGH_COMPUTE"
     },

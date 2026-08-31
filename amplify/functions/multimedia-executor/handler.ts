@@ -1,6 +1,6 @@
 import { BedrockRuntimeClient, InvokeModelCommand, StartAsyncInvokeCommand } from "@aws-sdk/client-bedrock-runtime";
 import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, TransactWriteCommand, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ConnectClient, StartOutboundVoiceContactCommand } from "@aws-sdk/client-connect";
@@ -81,6 +81,51 @@ export const handler = async (event: any) => {
             await recordRAGArtifact(event, imageUrl, 'IMAGE');
             await deductToolCredits(event, functionName);
             responseText = `Success. Enterprise Image generated and saved to S3: ${imageUrl}`;
+
+        } else if (functionName === 'edit_image') {
+            const s3Uri = getParam('s3Uri');
+            const taskType = getParam('taskType');
+            const prompt = getParam('prompt');
+            const maskPrompt = getParam('maskPrompt');
+
+            if (!s3Uri || !s3Uri.startsWith('s3://')) {
+                throw new Error("Missing or invalid s3Uri parameter.");
+            }
+
+            const uriParts = s3Uri.replace('s3://', '').split('/');
+            const bucket = uriParts.shift()!;
+            const key = uriParts.join('/');
+            
+            const s3Response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+            const byteArray = await s3Response.Body?.transformToByteArray();
+            if (!byteArray) throw new Error("Failed to read image from S3.");
+            
+            const base64Image = Buffer.from(byteArray).toString('base64');
+
+            // 2. Build Payload
+            const payload: any = { taskType };
+            if (taskType === "BACKGROUND_REMOVAL") {
+                payload.backgroundRemovalParams = { image: base64Image };
+            } else if (taskType === "INPAINTING") {
+                payload.inPaintingParams = { image: base64Image, text: prompt || "remove object", maskPrompt: maskPrompt || "main subject" };
+            } else if (taskType === "OUTPAINTING") {
+                payload.outPaintingParams = { image: base64Image, text: prompt || "extend background", outPaintingMode: "DEFAULT" };
+            } else if (taskType === "IMAGE_VARIATION") {
+                payload.imageVariationParams = { images: [base64Image], text: prompt || "create variation" };
+            }
+
+            const invokeRes = await bedrockRuntime.send(new InvokeModelCommand({
+                modelId: "amazon.nova-canvas-v1:0",
+                contentType: "application/json",
+                accept: "application/json",
+                body: JSON.stringify(payload)
+            }));
+
+            const imageUrl = await processAndUploadImage(invokeRes.body, 'nova-canvas');
+            await recordRAGArtifact(event, imageUrl, 'IMAGE');
+            await deductToolCredits(event, functionName);
+            
+            responseText = `Success. Image edited (${taskType}) and saved to S3: ${imageUrl}`;
 
         } else if (functionName === 'generate_luma_video') {
             const prompt = getParam('prompt');

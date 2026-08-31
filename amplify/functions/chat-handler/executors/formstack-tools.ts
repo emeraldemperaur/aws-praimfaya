@@ -13,8 +13,12 @@ export const executeFormstackAgent = async ({ toolInput, ephemeralSecrets }: Too
         };
     }
 
-    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+ 
+    let cleanEndpoint = endpoint.replace(/^https?:\/\/(www\.)?formstack\.com\/api\/v2/i, '');
+    cleanEndpoint = cleanEndpoint.replace(/{(\d+)}/g, '$1');
+    cleanEndpoint = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
     const finalEndpoint = cleanEndpoint.endsWith('.json') ? cleanEndpoint : `${cleanEndpoint}.json`;
+    
     const baseUrl = `https://www.formstack.com/api/v2${finalEndpoint}`;
 
     const executeRequest = async (url: string, params: any, retryCount = 0): Promise<any> => {
@@ -22,6 +26,7 @@ export const executeFormstackAgent = async ({ toolInput, ephemeralSecrets }: Too
             const config: any = {
                 method: method.toUpperCase(),
                 url,
+                timeout: 10000, 
                 headers: {
                     'Authorization': `Bearer ${apiToken}`,
                     'Content-Type': 'application/json',
@@ -50,29 +55,27 @@ export const executeFormstackAgent = async ({ toolInput, ephemeralSecrets }: Too
         const response = await executeRequest(baseUrl, queryParams);
         let data = response.data;
 
-       
         if (method.toUpperCase() === 'GET' && data.pages && data.pages > 1) {
             let allItems: any[] = [];
-            
             const arrayKey = Object.keys(data).find(key => Array.isArray(data[key]));
             
             if (arrayKey) {
                 allItems = [...data[arrayKey]];
-                
                 const maxPages = Math.min(data.pages, 5); 
-                const pageRequests = [];
                 
+              
                 for (let i = 2; i <= maxPages; i++) {
-                    pageRequests.push(executeRequest(baseUrl, { ...queryParams, page: i }));
+                    try {
+                        const pageRes = await executeRequest(baseUrl, { ...queryParams, page: i });
+                        if (pageRes.data[arrayKey]) {
+                            allItems = allItems.concat(pageRes.data[arrayKey]);
+                        }
+                    } catch (pageErr) {
+                        console.warn(`Formstack pagination failed on page ${i}. Halting pagination early.`);
+                        break; 
+                    }
                 }
                 
-                const pageResponses = await Promise.all(pageRequests);
-                pageResponses.forEach(res => {
-                    if (res.data[arrayKey]) {
-                        allItems = allItems.concat(res.data[arrayKey]);
-                    }
-                });
-
                 data[arrayKey] = allItems;
                 data.auto_paginated = true;
                 data.pages_fetched = maxPages;

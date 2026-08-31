@@ -47,8 +47,19 @@ export const NATIVE_TOOLS_REGISTRY = [
     { 
         toolSpec: { 
             name: "edit_image", 
-            description: "Edits existing image assets using Amazon Nova Canvas.", 
-            inputSchema: { json: { type: "object", properties: { prompt: { type: "string" }, taskType: { type: "string" } }, required: ["prompt"] } } 
+            description: "Edits an existing image asset using Amazon Nova Canvas. Supported taskTypes: BACKGROUND_REMOVAL, INPAINTING, OUTPAINTING, IMAGE_VARIATION.", 
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        s3Uri: { type: "string", description: "The exact s3:// URI of the source image provided in the System Context." },
+                        taskType: { type: "string", enum: ["BACKGROUND_REMOVAL", "INPAINTING", "OUTPAINTING", "IMAGE_VARIATION"] },
+                        prompt: { type: "string", description: "The visual instruction for the edit (e.g., 'Make it snow'). Not required for BACKGROUND_REMOVAL." }, 
+                        maskPrompt: { type: "string", description: "If INPAINTING, describe the object to replace/remove (e.g., 'the red car')." }
+                    }, 
+                    required: ["s3Uri", "taskType"] 
+                } 
+            } 
         } 
     },
 

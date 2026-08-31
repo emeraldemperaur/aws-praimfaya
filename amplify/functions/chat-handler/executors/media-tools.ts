@@ -4,12 +4,10 @@ import { InvokeModelCommand, StartAsyncInvokeCommand } from "@aws-sdk/client-bed
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ToolExecutionContext } from "./types";
 
-
 function getMediaBucketName(env: Record<string, string>): string {
     const bucket = env.MEDIA_OUTPUT_BUCKET_NAME || env.MEDIA_OUTPUT_BUCKET || "praimfaya-media-outputs";
     return bucket;
 }
-
 
 async function recordRAGArtifact(
     profile: any,
@@ -43,7 +41,6 @@ async function recordRAGArtifact(
     }
 }
 
-
 async function processAndUploadImageOutput(
     bytes: Uint8Array, 
     family: string, 
@@ -69,11 +66,13 @@ async function processAndUploadImageOutput(
     };
 }
 
-
 export const executeAudioGenerator = async ({
     toolInput,
     citations,
     clients,
+    profile,
+    cognitoUserId,
+    sessionId,
     env
 }: ToolExecutionContext) => {
     try {
@@ -101,6 +100,16 @@ export const executeAudioGenerator = async ({
         }));
 
         const audioUrl = `https://${bucketName}.s3.amazonaws.com/${fileName}`;
+        
+        await recordRAGArtifact(
+            profile,
+            { userId: cognitoUserId, id: sessionId, title: profile.title },
+            audioUrl,
+            'AUDIO',
+            clients.dynamodb,
+            env.RAG_ARTIFACTS_TABLE_NAME
+        );
+
         citations.push({ type: 'asset', uri: audioUrl });
 
         return { status: "Success", audioUrl };
@@ -110,11 +119,13 @@ export const executeAudioGenerator = async ({
     }
 };
 
-
 export const executeImageGenerator = async ({
     toolInput,
     citations,
     clients,
+    profile,
+    cognitoUserId,
+    sessionId,
     env,
     toolName 
 }: ToolExecutionContext & { toolName: string }) => {
@@ -154,6 +165,14 @@ export const executeImageGenerator = async ({
         const result = await processAndUploadImageOutput(invokeRes.body, toolName, clients.s3, bucketName);
         
         if (result.imageUrl) {
+            await recordRAGArtifact(
+                profile,
+                { userId: cognitoUserId, id: sessionId, title: profile.title },
+                result.imageUrl,
+                'IMAGE',
+                clients.dynamodb,
+                env.RAG_ARTIFACTS_TABLE_NAME
+            );
             citations.push({ type: 'media', uri: result.imageUrl });
         }
 
@@ -163,7 +182,6 @@ export const executeImageGenerator = async ({
         return { error: `Image Generation Failed: ${err.message}` };
     }
 };
-
 
 export const executeLumaVideo = async ({
     toolInput,
