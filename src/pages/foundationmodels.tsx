@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import TitleRibbon from "../components/titleribbon";
 import type { ColumnDef } from "../components/datatable";
 import DataTable from "../components/datatable";
@@ -8,7 +8,6 @@ import ExtraLargeModal from "../components/extralargemodal";
 import { getModelIcon, getUiModality } from "../utils/voltaire";
 import { generateClient } from "aws-amplify/api";
 import type { UIFoundationModel } from "../data/foundationmodel";
-import { SEED_MODELS } from "../data/seeddata";
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { getUserEmail } from "../utils/asimov";
 
@@ -24,7 +23,6 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
   const [foundationModels, setFoundationModels] = useState<UIFoundationModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const isBootstrapping = useRef(false);
 
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
@@ -51,27 +49,17 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
         'contextWindowTokens', 'isActive', 'createdAt', 'updatedAt', 'profiles.*'
       ]
     }).subscribe({
-      next: async (data: any) => {
+      next: (data: any) => {
         const items = data.items as UIFoundationModel[];
         setFoundationModels(items);
         setIsLoading(false);
-        if (items.length === 0 && !isBootstrapping.current) {
-          isBootstrapping.current = true;
-          console.log("Database is empty. Initiating Foundation Models bootstrap...");
-          for (const model of SEED_MODELS) {
-            try {
-              await foundationModelsClient.create(model);
-            } catch (error) {
-              console.error(`Failed to bootstrap model: ${model.name}`, error);
-            }
-          }
-        }
       },
       error: (err: any) => {
         console.error("Error fetching foundation models:", err);
         setIsLoading(false);
       }
-    });
+  });
+
     return () => sub.unsubscribe();
   }, []);
 

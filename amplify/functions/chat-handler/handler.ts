@@ -2,12 +2,13 @@ import { BedrockRuntimeClient, ConverseCommand, StartAsyncInvokeCommand, InvokeM
 import { BedrockAgentRuntimeClient, RetrieveCommand, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { PollyClient } from "@aws-sdk/client-polly";
 import { S3Client } from "@aws-sdk/client-s3";
 import axios from "axios";
 import { CORE_SYSTEM_TOOLS, isValidUrl, NATIVE_TOOLS_REGISTRY } from "./tool-registry";
 import { TOOL_EXECUTORS } from "./executors";
+import { MODEL_CREDIT_MULTIPLIERS } from "./model-credit-multipliers";
 
 const bedrockRuntime = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const bedrockAgentRuntime = new BedrockAgentRuntimeClient({ region: process.env.AWS_REGION });
@@ -27,8 +28,7 @@ const USAGE_RECORDS_TABLE = process.env.USAGE_RECORDS_TABLE_NAME!;
 const workflowEmbeddingCache: Record<string, number[]> = {};
 const nativeToolEmbeddingCache: Record<string, number[]> = {};
 
-const MODEL_CREDIT_MULTIPLIERS: Record<string, number> = { "amazon.nova-micro-v1:0": 1, "anthropic.claude-3-5-sonnet-20241022-v2:0": 3, "amazon.nova-pro-v1:0": 2 };
-const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = { "generate_luma_video": 150000, "generate_audio": 500, "generate_image": 30000, "generate_enterprise_image": 4000, "edit_image": 15000 };
+const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = { "generate_luma_video": 150000, "generate_audio": 500, "generate_image": 30000, "generate_enterprise_image": 4000, "edit_image": 15000, "enterprise_voice_agent": 2500 };
 
 
 export const handler = async (event: any) => {
@@ -51,6 +51,26 @@ export const handler = async (event: any) => {
         const profileRes = await dynamodb.send(new GetCommand({ TableName: PROFILES_TABLE, Key: { id: profileId } }));
         const profile = profileRes.Item;
         if (!profile) throw new Error(`Context Profile not found`);
+
+        const targetModelId = profile.llmModelId || "amazon.nova-pro-v1:0";
+        const multiplier = MODEL_CREDIT_MULTIPLIERS[targetModelId] || 2;
+        const computeCredits = userRes.Item.computeCredits ?? 0;
+        const historyString = JSON.stringify(history);
+        const systemPromptStr = profile.systemPrompt || "";
+        const estimatedInputTokens = Math.ceil((userMessage.length + historyString.length + systemPromptStr.length + 1000) / 4);
+        const minimumCreditsNeeded = estimatedInputTokens * multiplier;
+
+        if (computeCredits < minimumCreditsNeeded) {
+            return { 
+                statusCode: 402, 
+                body: JSON.stringify({ error: `INSUFFICIENT_CREDITS: Your prompt and chat history require at least ${minimumCreditsNeeded} credits to process. You only have ${computeCredits} available. Please top up or start a new session.` }) 
+            };
+        }
+
+        const maxAffordableOutputTokens = Math.floor((computeCredits - minimumCreditsNeeded) / multiplier);
+        if (maxAffordableOutputTokens <= 5) {
+            return { statusCode: 402, body: JSON.stringify({ error: "INSUFFICIENT_CREDITS: Balance too low to generate a response." }) };
+        }
 
         const citations: any[] = []; 
         let requestedCredentials: string[] = [];
@@ -84,33 +104,47 @@ export const handler = async (event: any) => {
                 }));
 
                 let agentResponse = "";
+                let streamCost = minimumCreditsNeeded;
                 for await (const streamEvent of invokeAgentRes.completion || []) {
                     if (streamEvent.chunk?.bytes) {
                         agentResponse += new TextDecoder("utf-8").decode(streamEvent.chunk.bytes);
+
+                        const currentOutputTokens = Math.ceil(agentResponse.length / 4);
+                        streamCost = (estimatedInputTokens + currentOutputTokens) * multiplier;
+                        if (streamCost >= computeCredits) {
+                            agentResponse += "\n\n[SYSTEM: EXECUTION HALTED - COMPUTE CREDITS EXHAUSTED. PLEASE TOP UP TO CONTINUE.]";
+                            break; 
+                        }
                     }
                 }
 
-            
-                const inputTokens = Math.ceil(userMessage.length / 4) + 500;
-                const outputTokens = Math.ceil(agentResponse.length / 4);
+                const authRegex = /<vanguard_auth_request>(.*?)<\/vanguard_auth_request>/g;
+                let match;
+                while ((match = authRegex.exec(agentResponse)) !== null) {
+                    requestedCredentials.push(match[1].toLowerCase().trim());
+                }
+                
+                const cleanResponse = agentResponse.replace(authRegex, '').trim();
 
-                const targetModelId = profile.llmModelId || "amazon.nova-pro-v1:0";
-                const llmCost = Math.ceil((inputTokens + outputTokens) * (MODEL_CREDIT_MULTIPLIERS[targetModelId] || 2));
+                const outputTokens = Math.ceil(cleanResponse.length / 4);
+                const llmCost = Math.ceil((estimatedInputTokens + outputTokens) * multiplier);
                 
                 if (llmCost > 0) {
-                    await dynamodb.send(new UpdateCommand({ 
-                        TableName: USER_PROFILES_TABLE, 
-                        Key: { cognitoUserId }, 
-                        UpdateExpression: "SET computeCredits = computeCredits - :cost", 
-                        ExpressionAttributeValues: { ":cost": llmCost } 
-                    }));
+                    await recordUsageTransaction(cognitoUserId, llmCost, {
+                        sessionId: args.sessionId || safeSessionId,
+                        sessionTitle: profile.title || 'Managed Agent Session',
+                        actionType: 'LLM_INFERENCE', 
+                        modelId: targetModelId,
+                        inputTokens: estimatedInputTokens,
+                        outputTokens: outputTokens
+                    });
                 }
 
                 return JSON.stringify({ 
-                    answer: agentResponse, 
+                    answer: cleanResponse, 
                     citations: [], 
-                    requestedCredentials: [], 
-                    tokenUsage: { inputTokens, outputTokens } 
+                    requestedCredentials: requestedCredentials, 
+                    tokenUsage: { inputTokens: estimatedInputTokens, outputTokens } 
                 });
 
             } catch (err: any) {
@@ -125,7 +159,7 @@ export const handler = async (event: any) => {
         systemPrompt += `\n\n[CRITICAL ROUTING DIRECTIVE]: You act as an intelligent workflow coordinator. Evaluate if an automation workflow (wf_) can fulfill the user's overarching intent first before cascading down to Native Tools. 
         Note that workflow descriptions contain a [Priority: X/10] indicator; if multiple workflows are relevant, heavily favor the one with the highest user-specified priority.`;
 
-        const targetModelId = profile.llmModelId || "global.amazon.nova-micro-v1:0";
+        const llmTemperature = profile.temperature !== undefined && profile.temperature !== null ? profile.temperature : 0.7;
 
         // RAG EXECUTION
         if (profile.vectorCollectionId) {
@@ -192,9 +226,17 @@ export const handler = async (event: any) => {
         const messages = [...history, { role: "user", content: [{ text: userMessage }] }];
 
         let totalInboundTokens = 0; let totalOutboundTokens = 0; let flatToolCredits = 0;
+        const safeMaxTokens = Math.max(1, Math.min(8192, Math.floor((computeCredits - (estimatedInputTokens * multiplier)) / multiplier)));
 
         let converseResponse = await bedrockRuntime.send(new ConverseCommand({
-            modelId: targetModelId, messages: messages, system: [{ text: systemPrompt }], toolConfig: toolConfig
+            modelId: targetModelId, 
+            messages: messages, 
+            system: [{ text: systemPrompt }], 
+            toolConfig: toolConfig,
+            inferenceConfig: { 
+                temperature: llmTemperature,
+                maxTokens: safeMaxTokens
+             }
         }));
 
         totalInboundTokens += converseResponse.usage?.inputTokens || 0;
@@ -259,13 +301,18 @@ export const handler = async (event: any) => {
 
             messages.push({ role: "user", content: toolResults });
             
-            converseResponse = await bedrockRuntime.send(new ConverseCommand({ modelId: targetModelId, messages: messages, system: [{ text: systemPrompt }] }));
+            converseResponse = await bedrockRuntime.send(new ConverseCommand({ 
+                modelId: targetModelId, 
+                messages: messages, 
+                system: [{ text: systemPrompt }],
+                inferenceConfig: { temperature: llmTemperature }
+             }));
             totalInboundTokens += converseResponse.usage?.inputTokens || 0;
             totalOutboundTokens += converseResponse.usage?.outputTokens || 0;
         }
 
         const responseText = converseResponse.output?.message?.content?.[0]?.text || "No response generated.";
-        const totalDeduction = Math.ceil((totalInboundTokens + totalOutboundTokens) * (MODEL_CREDIT_MULTIPLIERS[targetModelId] || 1)) + flatToolCredits;
+        const totalDeduction = Math.ceil((totalInboundTokens + totalOutboundTokens) * multiplier) + flatToolCredits;
 
         if (totalDeduction > 0) {
             await recordUsageTransaction(cognitoUserId, totalDeduction, {
@@ -321,7 +368,6 @@ async function recordUsageTransaction(
         await dynamodb.send(new TransactWriteCommand({
             TransactItems: [
                 {
-                    // Deduct compute usage balance
                     Update: {
                         TableName: USER_PROFILES_TABLE!,
                         Key: { cognitoUserId: userId },
@@ -330,7 +376,6 @@ async function recordUsageTransaction(
                     }
                 },
                 {
-                    // Mirror compute usage to UsageRecords table for telemetry
                     Put: {
                         TableName: USAGE_RECORDS_TABLE!, 
                         Item: {

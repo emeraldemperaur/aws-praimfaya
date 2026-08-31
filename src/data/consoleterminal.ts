@@ -108,4 +108,5 @@ export interface EphemeralSecrets {
   sanityProjectId?: string;
   sanityDataset?: string;
   sanityToken?: string;
+  formstackToken?: string;
 }

@@ -12,8 +12,10 @@ import { executeUiPathOrchestrator } from './rpa-tools';
 import { executeAmadeus, executeBooking, executePriceline, executeVrbo } from './travel-tools';
 import { executeAmazonAlexa, executeGoogleHome, executeHomeAssistant } from './home-tools';
 import { executeArduinoCloud, executeRaspberryPiFleet } from './iot-tools';
-import { executeGenerateDocument } from './document-tools';
+import { executeExtractPdf, executeGenerateDocument } from './document-tools';
 import { executeApotheosisMCP, executeBYOMCP, executeMitoMCP } from './mcp-tools';
+import { executeEnterpriseVoiceAgent } from './voice-tools';
+import { executeFormstackAgent } from './formstack-tools';
 
 
 export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
@@ -23,6 +25,9 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
     'edit_image': (ctx) => executeImageGenerator({ ...ctx, toolName: 'edit_image' }),
     'generate_luma_video': executeLumaVideo,
     'generate_document': executeGenerateDocument,
+    'extract_pdf': executeExtractPdf,
+    'enterprise_voice_agent': executeEnterpriseVoiceAgent,
+    'formstack_agile_agent': executeFormstackAgent,
     'rippling_hr_agent': executeRippling,
     'bamboohr_agent': executeBambooHR,
     'zendesk_support_agent': executeZendesk,

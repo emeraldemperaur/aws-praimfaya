@@ -339,6 +339,16 @@ const EphemeralCredentialsModal: React.FC<EphemeralCredentialsModalProps> = ({
             </>
           )}
 
+          {activeAuthPrompt === 'formstack' && (
+            <SecretInput 
+              placeholder="Formstack API Bearer Token" 
+              onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, formstackToken: e.target.value })} 
+              required 
+              style={inputStyle} 
+              darkMode={darkMode} 
+            />
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
             <button 
               type="button" 

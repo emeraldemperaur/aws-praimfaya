@@ -25,6 +25,8 @@ const ModelModality = ['TEXT', 'MULTIMODAL', 'EMBEDDING', 'IMAGE'] as const;
 const AutomationTools = ['N8N', 'ZAPIER', 'MAKE', 'PIPEDREAM'] as const;
 const AgentRoles = ['SUPERVISOR', 'COLLABORATOR', 'STANDARD'] as const;
 const ProvisioningStatus = ['READY', 'PROVISIONING', 'UNPROVISIONED', 'FAILED'] as const;
+const ModelCaliber = ['FAST', 'MODERATE', 'HIGH_PERFORMANCE', 'ULTRA_PERFORMANCE'] as const;
+const ModelRegion = ['DEFAULT', 'GLOBAL', 'US', 'EU', 'APAC'] as const;
 
 const schema = a.schema({
   Todo: a
@@ -47,7 +49,7 @@ const schema = a.schema({
       profileId: a.id(),
       cognitoUserId: a.string(),
       chatHistory: a.string(),
-      ephemeralSecretsJson: a.string(), // SECURE SIDE CHANNEL CREDENTIAL INJECTION
+      ephemeralSecretsJson: a.string(),
     })
     .returns(a.string())
     .handler(a.handler.function(chatHandler))
@@ -195,6 +197,9 @@ const schema = a.schema({
       modality: a.enum(ModelModality),
       contextWindowTokens: a.integer(),
       isActive: a.boolean(),
+      description: a.string(),
+      caliber: a.enum(ModelCaliber),
+      region: a.enum(ModelRegion),
       profiles: a.hasMany('ContextProfile', 'llmModelId'),
       updatedBy: a.string(),
     })

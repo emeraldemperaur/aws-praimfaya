@@ -19,7 +19,9 @@ export const handler: DynamoDBStreamHandler = async (event) => {
       const profileId = newImage.id.S!;
       const role = newImage.role?.S;
       const status = newImage.provisioningStatus?.S;
-      
+      const temperatureStr = newImage.temperature?.N;
+      const llmTemperature = temperatureStr !== undefined ? parseFloat(temperatureStr) : 0.7;
+
       if (!role || role === 'STANDARD') continue;
       if (status !== 'PROVISIONING') {
         console.log(`Ignoring profile ${profileId}. Status is ${status}`);
@@ -28,27 +30,24 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 
       try {
         const workflows = await getAssignedWorkflows(profileId);
-        
-        // ==========================================
-        // CRITICAL FIX: Bake in the Session Attribute Placeholder
-        // ==========================================
+
         let dynamicInstruction = `You are an elite Vanguard Agent.
 
 Here are your dynamically injected session instructions:
 $prompt_session_attributes$
 
 Follow these instructions strictly to fulfill the user's intent.`;
-        
+
         if (workflows.length > 0) {
             dynamicInstruction += `\n\n### Available Automation Workflows ###\n`;
             dynamicInstruction += `You have access to external automation tools. To trigger one, invoke the 'ExecuteWorkflow' function using the exact Workflow ID and a valid JSON string for 'payloadJson'.\n`;
-            
+
             for (const wf of workflows) {
                dynamicInstruction += `\n--- WORKFLOW: ${wf.name} ---\n`;
                dynamicInstruction += `ID: ${wf.id}\n`;
                dynamicInstruction += `Platform Tool: ${wf.tool || 'GENERIC'}\n`;
                dynamicInstruction += `Description: ${wf.description || 'No description provided'}\n`;
-               
+
                if (wf.inputParameters && wf.inputParameters.length > 0) {
                    const inputs = wf.inputParameters
                        .map((p: any) => `${p.variable} [Type: ${p.type || 'String'}]${p.isRequired ? ' (REQUIRED)' : ' (Optional)'}`)
@@ -73,9 +72,23 @@ Follow these instructions strictly to fulfill the user's intent.`;
           instruction: dynamicInstruction,
           foundationModel: newImage.llmModelId?.S!, 
           agentResourceRoleArn: process.env.BEDROCK_AGENT_ROLE_ARN!,
-          idleSessionTTLInSeconds: 3600
+          idleSessionTTLInSeconds: 3600,
+          promptOverrideConfiguration: {
+            promptConfigurations: [
+              {
+                promptType: "ORCHESTRATION",
+                promptState: "ENABLED",
+                promptCreationMode: "DEFAULT",
+                inferenceConfiguration: {
+                  temperature: llmTemperature,
+                  topP: 0.9,
+                  stopSequences: []
+                }
+              }
+            ]
+          }
         }));
-        
+
         const agentId = createAgentRes.agent!.agentId!;
 
         if (newImage.vectorCollectionId?.S) {
@@ -146,6 +159,44 @@ Follow these instructions strictly to fulfill the user's intent.`;
                     "prompt": { type: "string", description: "Detailed visual description of the video.", required: true },
                     "aspectRatio": { type: "string", description: "16:9, 9:16, or 1:1", required: false }
                   }
+                },
+                {
+                  name: "extract_pdf",
+                  description: "Extracts raw text from a PDF document URL.",
+                  parameters: {
+                    "fileUrl": { type: "string", description: "The HTTP/HTTPS or S3 URL of the PDF.", required: true },
+                    "maxPages": { type: "number", description: "Maximum number of pages to extract.", required: false }
+                  }
+                },
+                {
+                  name: "enterprise_voice_agent",
+                  description: "Dispatches an autonomous AI voice agent to dial a phone number and engage the recipient in a live conversation. Returns a call ID. Live calls take minutes to complete; you MUST use CHECK_CALL_RESULTS later to retrieve the conversation summary and extracted data.",
+                  parameters: {
+                    "action": { type: "string", description: "DISPATCH_CALL or CHECK_CALL_RESULTS", required: true },
+                    "destinationPhoneNumber": { type: "string", description: "The target phone number in E.164 format (e.g., +1234567890).", required: false },
+                    "objective": { type: "string", description: "Detailed system prompt instructions for the live voice agent.", required: false },
+                    "dataToCapture": { type: "array", description: "A list of specific variables to extract.", required: false },
+                    "voiceTone": { type: "string", description: "professional, casual, urgent, empathetic, friendly", required: false },
+                    "voiceGender": { type: "string", description: "FEMALE, MALE, or NEUTRAL", required: false },
+                    "callId": { type: "string", description: "The internal call ID returned from DISPATCH_CALL.", required: false }
+                  }
+                },
+                {
+                  name: "formstack_agile_agent",
+                  description: "Deeply integrates with the Formstack v2 API to build and manage forms, fields, submissions, and automation workflows. The executor will automatically append '.json' to the endpoint.",
+                  parameters: {
+                    "endpoint": { type: "string", description: "The API endpoint path (e.g., '/form', '/folder', '/form/12345/field'). Do not include the base URL.", required: true },
+                    "method": { type: "string", description: "GET, POST, PUT, DELETE", required: true },
+                    "payload": { type: "string", description: "A valid JSON string payload for POST or PUT requests.", required: false },
+                    "queryParams": { type: "string", description: "A valid JSON string of URL query parameters for GET requests.", required: false }
+                  }
+                },
+                {
+                  name: "request_secure_credentials",
+                  description: "Use this immediately if an executor tells you that API credentials or tokens are missing.",
+                  parameters: {
+                    "serviceName": { type: "string", description: "The name of the service (e.g., 'formstack', 'amazon_connect').", required: true }
+                  }
                 }
               ]
             }
@@ -170,7 +221,7 @@ Follow these instructions strictly to fulfill the user's intent.`;
         }
 
         await bedrock.send(new PrepareAgentCommand({ agentId }));
-        
+
         const aliasRes = await bedrock.send(new CreateAgentAliasCommand({
           agentId: agentId,
           agentAliasName: "v1-prod"
@@ -193,10 +244,10 @@ async function getAssignedWorkflows(profileId: string) {
         KeyConditionExpression: 'contextProfileId = :pid',
         ExpressionAttributeValues: { ':pid': profileId }
     }));
-    
+
     const workflowIds = mappingRes.Items?.map(item => item.contextWorkflowId) || [];
     const workflows = [];
-    
+
     for (const wId of workflowIds) {
         const wfRes = await dynamodb.send(new GetCommand({
             TableName: process.env.WORKFLOWS_TABLE_NAME!,

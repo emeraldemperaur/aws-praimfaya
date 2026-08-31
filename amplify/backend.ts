@@ -19,6 +19,7 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as lambda from 'aws-cdk-lib/aws-lambda'; 
 import * as cdk from 'aws-cdk-lib';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { RemovalPolicy, Duration } from 'aws-cdk-lib';
 import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 
@@ -28,6 +29,9 @@ import { createCheckoutSession } from './functions/stripe-checkout/resource';
 import { grantPromoCredits } from './functions/admin-promo/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { multimediaExecutor } from './functions/multimedia-executor/resource';
+import { lexFulfillment } from './functions/lex-fulfillment/resource';
+import { postCallAnalysis } from './functions/post-call-analysis/resource';
+import { foundationModelSeeder } from './functions/foundation-model-seeder/resource';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -46,7 +50,10 @@ const backend = defineBackend({
   createCheckoutSession,
   grantPromoCredits,
   stripeWebhook,
-  multimediaExecutor
+  multimediaExecutor,
+  lexFulfillment,
+  postCallAnalysis,
+  foundationModelSeeder
 });
 
 const customStack = backend.createStack('BedrockAIStack');
@@ -58,6 +65,7 @@ const profileWorkflowsTable = backend.data.resources.tables["ContextProfileWorkf
 const userProfilesTable = backend.data.resources.tables["UserProfile"];
 const ragArtifactsTable = backend.data.resources.tables["RAGArtifact"];
 const usageRecordsTable = backend.data.resources.tables["UsageRecord"];
+const foundationModelsTable = backend.data.resources.tables["FoundationModel"];
 
 // Serverless Microservices
 const processVectorLambda = backend.processVector.resources.lambda as lambda.Function;
@@ -70,6 +78,9 @@ const mediaLambda = backend.multimediaExecutor.resources.lambda as lambda.Functi
 const checkoutLambda = backend.createCheckoutSession.resources.lambda as lambda.Function;
 const webhookLambda = backend.stripeWebhook.resources.lambda as lambda.Function;
 const promoLambda = backend.grantPromoCredits.resources.lambda as lambda.Function;
+const lexFulfillmentLambda = backend.lexFulfillment.resources.lambda as lambda.Function;
+const postCallAnalysisLambda = backend.postCallAnalysis.resources.lambda as lambda.Function;
+const seederLambda = backend.foundationModelSeeder.resources.lambda as lambda.Function;
 
 
 // ===========================================
@@ -417,9 +428,11 @@ webhookLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', elitePriceId);
 webhookLambda.addEnvironment('TOP_UP_PRICE_ID', topUpPriceId);
 webhookLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 webhookLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
+seederLambda.addEnvironment('FOUNDATION_MODELS_TABLE_NAME', foundationModelsTable.tableName);
 
 userProfilesTable.grantReadWriteData(webhookLambda);
 usageRecordsTable.grantReadWriteData(webhookLambda);
+foundationModelsTable.grantReadWriteData(seederLambda);
 
 const webhookUrl = webhookLambda.addFunctionUrl({
   authType: lambda.FunctionUrlAuthType.NONE,
@@ -435,3 +448,100 @@ promoLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableNa
 
 userProfilesTable.grantReadWriteData(promoLambda);
 usageRecordsTable.grantReadWriteData(promoLambda);
+
+// ====================================
+// VOICE AGENT INFRASTRUCTURE & ROUTES
+// ====================================
+
+const voiceAgentTable = new dynamodb.Table(customStack, 'VoiceAgentCallLogs', {
+  partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  removalPolicy: RemovalPolicy.DESTROY,
+});
+
+lexFulfillmentLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
+postCallAnalysisLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
+chatLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
+
+// *IMPORTANT*: Update environment variables in Amplify Hosting environment 
+// after you creating Amazon Connect instance.
+chatLambda.addEnvironment('CONNECT_INSTANCE_ID', process.env.CONNECT_INSTANCE_ID || '');
+chatLambda.addEnvironment('CONNECT_CONTACT_FLOW_ID', process.env.CONNECT_CONTACT_FLOW_ID || '');
+chatLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', process.env.CONNECT_SOURCE_PHONE_NUMBER || '');
+postCallAnalysisLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+postCallAnalysisLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
+mediaLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
+mediaLambda.addEnvironment('CONNECT_INSTANCE_ID', process.env.CONNECT_INSTANCE_ID || '');
+mediaLambda.addEnvironment('CONNECT_CONTACT_FLOW_ID', process.env.CONNECT_CONTACT_FLOW_ID || '');
+mediaLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', process.env.CONNECT_SOURCE_PHONE_NUMBER || '');
+
+voiceAgentTable.grantReadWriteData(lexFulfillmentLambda);
+voiceAgentTable.grantReadWriteData(postCallAnalysisLambda);
+voiceAgentTable.grantReadWriteData(chatLambda);
+voiceAgentTable.grantReadWriteData(mediaLambda);
+userProfilesTable.grantReadWriteData(postCallAnalysisLambda);
+usageRecordsTable.grantReadWriteData(postCallAnalysisLambda);
+
+const voiceBedrockPolicy = new iam.PolicyStatement({
+  actions: ['bedrock:InvokeModel', 'bedrock:Converse'],
+  resources: ['*']
+});
+lexFulfillmentLambda.addToRolePolicy(voiceBedrockPolicy);
+postCallAnalysisLambda.addToRolePolicy(voiceBedrockPolicy);
+
+chatLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['connect:StartOutboundVoiceContact'],
+  resources: ['*'] 
+}));
+
+mediaLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['connect:StartOutboundVoiceContact'],
+  resources: ['*'] 
+}));
+
+lexFulfillmentLambda.addPermission('LexInvokePermission', {
+  principal: new iam.ServicePrincipal('lexv2.amazonaws.com'),
+  action: 'lambda:InvokeFunction',
+});
+
+const connectCtrRule = new events.Rule(customStack, 'ConnectCtrDisconnectRule', {
+  eventPattern: {
+    source: ['aws.connect'],
+    detailType: ['Amazon Connect Contact Event'],
+    detail: {
+      eventType: ['DISCONNECTED'],
+    },
+  },
+});
+connectCtrRule.addTarget(new targets.LambdaFunction(postCallAnalysisLambda));
+
+
+const modelSeederCustomResource = new cr.AwsCustomResource(customStack, 'FoundationModelSeederResource', {
+  onCreate: {
+    service: 'Lambda',
+    action: 'invoke',
+    parameters: {
+      FunctionName: seederLambda.functionName,
+      InvocationType: 'RequestResponse',
+    },
+    physicalResourceId: cr.PhysicalResourceId.of('FoundationModelSeederTrigger'),
+  },
+  onUpdate: {
+    service: 'Lambda',
+    action: 'invoke',
+    parameters: {
+      FunctionName: seederLambda.functionName,
+      InvocationType: 'RequestResponse',
+    },
+    physicalResourceId: cr.PhysicalResourceId.of(`FoundationModelSeederTrigger_${Date.now()}`),
+  },
+  policy: cr.AwsCustomResourcePolicy.fromStatements([
+    new iam.PolicyStatement({
+      actions: ['lambda:InvokeFunction'],
+      resources: [seederLambda.functionArn],
+    }),
+  ]),
+});
+
+modelSeederCustomResource.node.addDependency(foundationModelsTable);
+modelSeederCustomResource.node.addDependency(seederLambda);

@@ -372,21 +372,79 @@ export const availableProfiles: ContextProfile[] = [
   ];
 
 
-  export const SEED_MODELS = [
-    { name: 'Amazon Nova Pro', apiIdentifier: 'amazon.nova-pro-v1:0', provider: 'AMAZON', modality: 'MULTIMODAL', contextWindowTokens: 300000, isActive: true },
-    { name: 'Claude 3.5 Sonnet', apiIdentifier: 'anthropic.claude-3-5-sonnet-20240620-v1:0', provider: 'ANTHROPIC', modality: 'MULTIMODAL', contextWindowTokens: 200000, isActive: true },
-    { name: 'Meta Llama 3.1 70B', apiIdentifier: 'meta.llama3-1-70b-instruct-v1:0', provider: 'META', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
-    { name: 'Mistral Large', apiIdentifier: 'mistral.mistral-large-2402-v1:0', provider: 'MISTRAL', modality: 'TEXT', contextWindowTokens: 32000, isActive: true },
-    { name: 'OpenAI GPT-4o', apiIdentifier: 'gpt-4o', provider: 'OPENAI', modality: 'MULTIMODAL', contextWindowTokens: 128000, isActive: true },
-    { name: 'Google Gemma 3', apiIdentifier: 'google.gemma-3-27b-it', provider: 'GOOGLE', modality: 'TEXT', contextWindowTokens: 8192, isActive: true },
-    { name: 'Cohere Command R+', apiIdentifier: 'cohere.command-r-plus-v1:0', provider: 'COHERE', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
-    { name: 'Stable Image Ultra', apiIdentifier: 'stability.stable-image-ultra-v1:0', provider: 'STABILITY_AI', modality: 'IMAGE', contextWindowTokens: 0, isActive: true },
-    { name: 'Stability AI SDXL 1.0', apiIdentifier: 'stability.stable-diffusion-xl-v1:0', provider: 'STABILITY_AI', modality: 'IMAGE', contextWindowTokens: 77, isActive: false },
-    { name: 'DeepSeek Coder V2', apiIdentifier: 'deepseek-coder-v2', provider: 'DEEPSEEK', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
-    { name: 'Amazon Nova Reel (Text)', apiIdentifier: 'amazon.nova-reel-v1:0', provider: 'AMAZON', modality: 'TEXT_TO_VIDEO', contextWindowTokens: 0, isActive: true },
-    { name: 'Amazon Nova Reel (Image)', apiIdentifier: 'amazon.nova-reel-v1:0', provider: 'AMAZON', modality: 'IMAGE_TO_VIDEO', contextWindowTokens: 0, isActive: true },
-    { name: 'Luma AI Ray2 (Text)', apiIdentifier: 'luma.ray-v2:0', provider: 'LUMA', modality: 'TEXT_TO_VIDEO', contextWindowTokens: 0, isActive: true },
-    { name: 'Luma AI Ray2 (Image)', apiIdentifier: 'luma.ray-v2:0', provider: 'LUMA', modality: 'IMAGE_TO_VIDEO', contextWindowTokens: 0, isActive: true },
-    { name: 'TwelveLabs Pegasus 1.2', apiIdentifier: 'twelvelabs.pegasus-1-2-v1:0', provider: 'TWELVELABS', modality: 'MULTIMODAL', contextWindowTokens: 0, isActive: true },    
-    { name: 'Nvidia Nemotron Nano', apiIdentifier: 'nvidia.nemotron-nano', provider: 'NVIDIA', modality: 'TEXT', contextWindowTokens: 4096, isActive: true },
-  ];
+ export const SEED_MODELS = [
+    // Amazon Nova (Low/Fast to High)
+    { name: 'Amazon Nova Micro (Fast)', apiIdentifier: 'amazon.nova-micro-v1:0', provider: 'AMAZON', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'Amazon Nova Lite (Medium)', apiIdentifier: 'amazon.nova-lite-v1:0', provider: 'AMAZON', modality: 'MULTIMODAL', contextWindowTokens: 300000, isActive: true },
+    { name: 'Amazon Nova Pro (High)', apiIdentifier: 'amazon.nova-pro-v1:0', provider: 'AMAZON', modality: 'MULTIMODAL', contextWindowTokens: 300000, isActive: true },
+    { name: 'Amazon Nova Premier (Ultra)', apiIdentifier: 'amazon.nova-premier-v1:0', provider: 'AMAZON', modality: 'MULTIMODAL', contextWindowTokens: 300000, isActive: true },
+    
+    // Cross-Region Nova
+    { name: 'Amazon Nova Pro (US Region)', apiIdentifier: 'us.amazon.nova-pro-v1:0', provider: 'AMAZON', modality: 'MULTIMODAL', contextWindowTokens: 300000, isActive: true },
+    { name: 'Amazon Nova Pro (EU Region)', apiIdentifier: 'eu.amazon.nova-pro-v1:0', provider: 'AMAZON', modality: 'MULTIMODAL', contextWindowTokens: 300000, isActive: true },
+    { name: 'Amazon Nova Pro (APAC Region)', apiIdentifier: 'apac.amazon.nova-pro-v1:0', provider: 'AMAZON', modality: 'MULTIMODAL', contextWindowTokens: 300000, isActive: true },
+
+    // Anthropic Claude 5 (Low/Fast to High)
+    { name: 'Claude 5 Haiku (Fast)', apiIdentifier: 'anthropic.claude-5-haiku-20260415-v1:0', provider: 'ANTHROPIC', modality: 'MULTIMODAL', contextWindowTokens: 200000, isActive: true },
+    { name: 'Claude 5 Fable (Medium)', apiIdentifier: 'anthropic.claude-5-fable-20260415-v1:0', provider: 'ANTHROPIC', modality: 'MULTIMODAL', contextWindowTokens: 200000, isActive: true },
+    { name: 'Claude 5 Sonnet (High)', apiIdentifier: 'anthropic.claude-5-sonnet-20260415-v1:0', provider: 'ANTHROPIC', modality: 'MULTIMODAL', contextWindowTokens: 200000, isActive: true },
+    { name: 'Claude 5 Opus (Ultra)', apiIdentifier: 'anthropic.claude-5-opus-20260415-v1:0', provider: 'ANTHROPIC', modality: 'MULTIMODAL', contextWindowTokens: 200000, isActive: true },
+    
+    // Cross-Region Claude 5
+    { name: 'Claude 5 Sonnet (US Region)', apiIdentifier: 'us.anthropic.claude-5-sonnet-20260415-v1:0', provider: 'ANTHROPIC', modality: 'MULTIMODAL', contextWindowTokens: 200000, isActive: true },
+    { name: 'Claude 5 Sonnet (EU Region)', apiIdentifier: 'eu.anthropic.claude-5-sonnet-20260415-v1:0', provider: 'ANTHROPIC', modality: 'MULTIMODAL', contextWindowTokens: 200000, isActive: true },
+    { name: 'Claude 5 Sonnet (APAC Region)', apiIdentifier: 'apac.anthropic.claude-5-sonnet-20260415-v1:0', provider: 'ANTHROPIC', modality: 'MULTIMODAL', contextWindowTokens: 200000, isActive: true },
+
+    // Anthropic Claude 3.5 (Legacy/Fallback)
+    { name: 'Claude 3.5 Sonnet', apiIdentifier: 'anthropic.claude-3-5-sonnet-20241022-v2:0', provider: 'ANTHROPIC', modality: 'MULTIMODAL', contextWindowTokens: 200000, isActive: true },
+
+    // Meta Llama 4 (Low/Fast to High)
+    { name: 'Meta Llama 4 Scout 17B (Fast)', apiIdentifier: 'meta.llama4-scout-17b-instruct-v1:0', provider: 'META', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'Meta Llama 4 Maverick 17B (High)', apiIdentifier: 'meta.llama4-maverick-17b-instruct-v1:0', provider: 'META', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'Meta Llama 3.1 70B (Medium)', apiIdentifier: 'meta.llama3-1-70b-instruct-v1:0', provider: 'META', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'Meta Llama 3.1 405B (Ultra)', apiIdentifier: 'meta.llama3-1-405b-instruct-v1:0', provider: 'META', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    
+    // Cross-Region Llama 4
+    { name: 'Meta Llama 4 Scout 17B (US Region)', apiIdentifier: 'us.meta.llama4-scout-17b-instruct-v1:0', provider: 'META', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'Meta Llama 4 Scout 17B (EU Region)', apiIdentifier: 'eu.meta.llama4-scout-17b-instruct-v1:0', provider: 'META', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'Meta Llama 4 Scout 17B (APAC Region)', apiIdentifier: 'apac.meta.llama4-scout-17b-instruct-v1:0', provider: 'META', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+
+    // OpenAI GPT 5.6
+    { name: 'OpenAI GPT-5.6 Luna (Fast)', apiIdentifier: 'openai.gpt-5.6-luna', provider: 'OPENAI', modality: 'MULTIMODAL', contextWindowTokens: 128000, isActive: true },
+    { name: 'OpenAI GPT-5.6 Terra (Medium)', apiIdentifier: 'openai.gpt-5.6-terra', provider: 'OPENAI', modality: 'MULTIMODAL', contextWindowTokens: 128000, isActive: true },
+    { name: 'OpenAI GPT-5.6 Sol (Ultra)', apiIdentifier: 'openai.gpt-5.6-sol', provider: 'OPENAI', modality: 'MULTIMODAL', contextWindowTokens: 128000, isActive: true },
+    { name: 'OpenAI GPT-5.6 Sol (US Region)', apiIdentifier: 'us.openai.gpt-5.6-sol', provider: 'OPENAI', modality: 'MULTIMODAL', contextWindowTokens: 128000, isActive: true },
+    { name: 'OpenAI GPT-5.6 Sol (EU Region)', apiIdentifier: 'eu.openai.gpt-5.6-sol', provider: 'OPENAI', modality: 'MULTIMODAL', contextWindowTokens: 128000, isActive: true },
+
+    // DeepSeek
+    { name: 'DeepSeek R1 (Fast)', apiIdentifier: 'deepseek.deepseek-r1', provider: 'DEEPSEEK', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'DeepSeek V3.2 (High)', apiIdentifier: 'deepseek.deepseek-v3-2', provider: 'DEEPSEEK', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'DeepSeek V3.2 (US Region)', apiIdentifier: 'us.deepseek.deepseek-v3-2', provider: 'DEEPSEEK', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'DeepSeek V3.2 (EU Region)', apiIdentifier: 'eu.deepseek.deepseek-v3-2', provider: 'DEEPSEEK', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'DeepSeek V3.2 (APAC Region)', apiIdentifier: 'apac.deepseek.deepseek-v3-2', provider: 'DEEPSEEK', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+
+    // Google Gemma 4
+    { name: 'Google Gemma 4 E2B (Fast)', apiIdentifier: 'google.gemma-4-e2b', provider: 'GOOGLE', modality: 'TEXT', contextWindowTokens: 8192, isActive: true },
+    { name: 'Google Gemma 4 26B (Medium)', apiIdentifier: 'google.gemma-4-26b-a4b', provider: 'GOOGLE', modality: 'TEXT', contextWindowTokens: 32000, isActive: true },
+    { name: 'Google Gemma 4 31B (High)', apiIdentifier: 'google.gemma-4-31b', provider: 'GOOGLE', modality: 'TEXT', contextWindowTokens: 32000, isActive: true },
+
+    // Mistral
+    { name: 'Mistral Voxtral Mini 3B (Fast)', apiIdentifier: 'mistral.voxtral-mini-3b-2507', provider: 'MISTRAL', modality: 'TEXT', contextWindowTokens: 32000, isActive: true },
+    { name: 'Mistral Large 3 (High)', apiIdentifier: 'mistral.mistral-large-3-v1:0', provider: 'MISTRAL', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'Mistral Large 3 (EU Region)', apiIdentifier: 'eu.mistral.mistral-large-3-v1:0', provider: 'MISTRAL', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+
+    // Cohere
+    { name: 'Cohere Command R (Medium)', apiIdentifier: 'cohere.command-r-v1:0', provider: 'COHERE', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+    { name: 'Cohere Command R+ (High)', apiIdentifier: 'cohere.command-r-plus-v1:0', provider: 'COHERE', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+
+    // NVIDIA
+    { name: 'NVIDIA Nemotron Nano 12B (Fast)', apiIdentifier: 'nvidia.nemotron-nano-12b-v2-vl-bf16', provider: 'NVIDIA', modality: 'MULTIMODAL', contextWindowTokens: 32000, isActive: true },
+    { name: 'NVIDIA Nemotron 3 Super 120B (High)', apiIdentifier: 'nvidia.nemotron-3-super-120b', provider: 'NVIDIA', modality: 'TEXT', contextWindowTokens: 128000, isActive: true },
+
+    // TwelveLabs
+    { name: 'TwelveLabs Pegasus 1.2 (High)', apiIdentifier: 'twelvelabs.pegasus-1-2-v1:0', provider: 'TWELVELABS', modality: 'MULTIMODAL', contextWindowTokens: 8192, isActive: true },
+
+    // Amazon Titan
+    { name: 'Amazon Titan Text Express (Fast)', apiIdentifier: 'amazon.titan-text-express-v1', provider: 'AMAZON', modality: 'TEXT', contextWindowTokens: 8000, isActive: true },
+    { name: 'Amazon Titan Text Premier (High)', apiIdentifier: 'amazon.titan-text-premier-v1:0', provider: 'AMAZON', modality: 'TEXT', contextWindowTokens: 32000, isActive: true },
+];

@@ -1,9 +1,12 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
+import axios from 'axios';
+import * as pdfParseNamespace from 'pdf-parse';
 import { ToolExecutionContext } from './types';
 
 const s3Client = new S3Client({});
+const pdfParse = (pdfParseNamespace as any).default || pdfParseNamespace;
 
 const CORPORATE_CSS = `
     body { font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #1f2937; max-width: 850px; margin: 0 auto; padding: 40px; }
@@ -75,5 +78,61 @@ export const executeGenerateDocument = async ({ toolInput, profile, sessionId, c
 
     } catch (err: any) {
         return { error: `Failed to save document: ${err.message}` };
+    }
+};
+
+
+export const executeExtractPdf = async ({ toolInput, clients }: ToolExecutionContext) => {
+    const { fileUrl, maxPages = 15 } = toolInput;
+    
+    if (!fileUrl) {
+        return { error: "Missing required parameter: fileUrl" };
+    }
+
+    let pdfBuffer: Buffer;
+
+    try {
+        if (fileUrl.includes('.s3.') || fileUrl.startsWith('s3://')) {
+            const urlObj = new URL(fileUrl.replace('s3://', 'https://'));
+            const bucketName = fileUrl.startsWith('s3://') 
+                ? urlObj.hostname 
+                : urlObj.hostname.split('.')[0];
+            const key = decodeURIComponent(urlObj.pathname.substring(1));
+
+            const s3Res = await clients.s3.send(new GetObjectCommand({
+                Bucket: bucketName,
+                Key: key
+            }));
+            
+            const byteArr = await s3Res.Body?.transformToByteArray();
+            if (!byteArr) throw new Error("Empty S3 object received.");
+            pdfBuffer = Buffer.from(byteArr);
+        } else {
+            const res = await axios.get(fileUrl, { responseType: 'arraybuffer' });
+            pdfBuffer = Buffer.from(res.data);
+        }
+    } catch (downloadErr: any) {
+        return { error: `Failed to download PDF. Ensure the link is public or an internal system artifact. Details: ${downloadErr.message}` };
+    }
+
+    try {
+        const parseOptions = { max: maxPages };
+        const parsedData = await pdfParse(pdfBuffer, parseOptions);
+
+        
+        const cleanText = parsedData.text.replace(/\n\s*\n/g, '\n').trim();
+
+        return {
+            status: "Success",
+            documentMetadata: {
+                title: parsedData.info?.Title || "Unknown",
+                author: parsedData.info?.Author || "Unknown",
+                pagesExtracted: parsedData.numpages,
+            },
+            extractedText: cleanText.substring(0, 100000) 
+        };
+
+    } catch (parseErr: any) {
+        return { error: `Failed to parse PDF document structure: ${parseErr.message}` };
     }
 };

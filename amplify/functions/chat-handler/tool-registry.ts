@@ -1014,6 +1014,28 @@ export const NATIVE_TOOLS_REGISTRY = [
     },
     {
         toolSpec: {
+            name: 'extract_pdf',
+            description: "Extracts raw text from a PDF document. Provide the URL of the PDF. Ideal for analyzing reports, invoices, resumes, or articles. Due to processing limits, it defaults to extracting 15 pages.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        fileUrl: { 
+                            type: "string", 
+                            description: "The HTTP/HTTPS or S3 URL of the PDF document to extract." 
+                        },
+                        maxPages: { 
+                            type: "number", 
+                            description: "Maximum number of pages to extract. Default is 15." 
+                        }
+                    },
+                    required: ["fileUrl"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
             name: 'arduino_iot_agent',
             description: "Manages Arduino IoT Cloud microcontrollers. Can list Things, discover sensor Properties (telemetry), and update Properties to actuate hardware (e.g. spin motors, toggle relays).",
             inputSchema: {
@@ -1055,6 +1077,83 @@ export const NATIVE_TOOLS_REGISTRY = [
             }
         }
     },
+    {
+        toolSpec: {
+            name: 'enterprise_voice_agent',
+            description: "Dispatches an autonomous AI voice agent to dial a phone number and engage the recipient in a live conversation. You dictate the agent's objective, tone, and what data it must capture. Returns a call ID. Live calls take minutes to complete; you MUST use CHECK_CALL_RESULTS later to retrieve the conversation summary and extracted data.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["DISPATCH_CALL", "CHECK_CALL_RESULTS"],
+                            description: "The action to execute. Use DISPATCH_CALL to initiate the voice agent, and CHECK_CALL_RESULTS to get the summary/data after it finishes."
+                        },
+                        destinationPhoneNumber: { 
+                            type: "string", 
+                            description: "The target phone number in E.164 format (e.g., +1234567890). Required for DISPATCH_CALL." 
+                        },
+                        objective: { 
+                            type: "string", 
+                            description: "Detailed system prompt instructions for the live voice agent. E.g., 'Inform the customer their order is delayed and ask if they prefer a refund or to wait.' Required for DISPATCH_CALL." 
+                        },
+                        dataToCapture: { 
+                            type: "array", 
+                            items: { type: "string" },
+                            description: "A list of specific variables the voice agent must extract from the live conversation. E.g., ['customer_preference', 'best_callback_time']." 
+                        },
+                        voiceTone: { 
+                            type: "string", 
+                            enum: ["professional", "casual", "urgent", "empathetic", "friendly"],
+                            description: "The behavioral tone and cadence for the AI voice agent. Defaults to professional." 
+                        },
+                        voiceGender: { 
+                            type: "string", 
+                            enum: ["FEMALE", "MALE", "NEUTRAL"],
+                            description: "The vocal profile mapping (influences the Amazon Polly neural voice mapping)." 
+                        },
+                        callId: { 
+                            type: "string", 
+                            description: "The internal call ID returned from DISPATCH_CALL. Required for CHECK_CALL_RESULTS." 
+                        }
+                    },
+                    required: ["action"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: 'formstack_agile_agent',
+            description: "Deeply integrates with the Formstack v2 API to build and manage forms, fields, submissions, and automation workflows. You MUST formulate the correct endpoint based on the resource. ENDPOINT ROUTING GUIDE: Forms: `/form`. Fields: `/form/{id}/field`. Submissions: `/form/{id}/submission` (GET) or `/submission/{id}` (PUT/DELETE). Folders: `/folder`. Webhooks: `/form/{id}/webhook`. Confirmation Emails: `/form/{id}/confirmation`. Notification Emails: `/form/{id}/notification`. Smart Lists: `/smartlist`. Smart List Options: `/smartlist/{id}/option`. Partial Submissions: `/form/{id}/partialsubmission`. Portals: `/portal`. Submit Actions: `/form/{id}/submitaction`. Subaccounts: `/subaccount`. Themes: `/theme`.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        endpoint: { 
+                            type: "string", 
+                            description: "The API endpoint path (e.g., '/form', '/folder', '/form/12345/field'). Do not include the base URL. The executor will automatically append '.json'." 
+                        },
+                        method: { 
+                            type: "string", 
+                            enum: ["GET", "POST", "PUT", "DELETE"],
+                            description: "The HTTP method for the operation." 
+                        },
+                        payload: { 
+                            type: "object", 
+                            description: "The JSON body for POST or PUT requests (e.g., creating a form, updating a field, setting up a webhook payload)." 
+                        },
+                        queryParams: {
+                            type: "object",
+                            description: "URL query parameters for GET requests (e.g., { 'page': '1', 'per_page': '100', 'sort': 'DESC' })."
+                        }
+                    },
+                    required: ["endpoint", "method"]
+                }
+            }
+        }
+    }
 ];
 
 export const isValidUrl = (urlString: string) => {
