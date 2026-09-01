@@ -20,8 +20,9 @@ import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as lambda from 'aws-cdk-lib/aws-lambda'; 
 import * as cdk from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { RemovalPolicy, Duration } from 'aws-cdk-lib';
-import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import { DynamoEventSource, SqsDlq } from 'aws-cdk-lib/aws-lambda-event-sources';
 
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -58,6 +59,12 @@ const backend = defineBackend({
 
 const customStack = backend.createStack('BedrockAIStack');
 
+// Enforce environment validation on build/synth
+const isProd = cdk.Stage.of(customStack)?.stageName === 'prod';
+const connectInstanceId = process.env.CONNECT_INSTANCE_ID || '';
+const connectContactFlowId = process.env.CONNECT_CONTACT_FLOW_ID || '';
+const connectSourcePhone = process.env.CONNECT_SOURCE_PHONE_NUMBER || '';
+
 // DynamoDB Tables
 const profilesTable = backend.data.resources.tables["ContextProfile"];
 const workflowsTable = backend.data.resources.tables["ContextWorkflow"];
@@ -67,7 +74,7 @@ const ragArtifactsTable = backend.data.resources.tables["RAGArtifact"];
 const usageRecordsTable = backend.data.resources.tables["UsageRecord"];
 const foundationModelsTable = backend.data.resources.tables["FoundationModel"];
 
-// Serverless Microservices
+// Serverless Lambdas
 const processVectorLambda = backend.processVector.resources.lambda as lambda.Function;
 const statusLambda = backend.updateVectorStatus.resources.lambda as lambda.Function;
 const provisionerLambda = backend.agentProvisioner.resources.lambda as lambda.Function;
@@ -82,11 +89,26 @@ const lexFulfillmentLambda = backend.lexFulfillment.resources.lambda as lambda.F
 const postCallAnalysisLambda = backend.postCallAnalysis.resources.lambda as lambda.Function;
 const seederLambda = backend.foundationModelSeeder.resources.lambda as lambda.Function;
 
+const streamDlq = new sqs.Queue(customStack, 'DynamoStreamDLQ', {
+  retentionPeriod: Duration.days(14),
+  encryption: sqs.QueueEncryption.SQS_MANAGED
+});
 
-// ===========================================
-// BEDROCK KNOWLEDGE BASE & S3 VECTOR DATABASE
-// ===========================================
+const multimodalBucket = new s3.Bucket(customStack, 'MultimodalStorageBucket', {
+  encryption: s3.BucketEncryption.S3_MANAGED,
+  blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+  removalPolicy: isProd ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY, 
+  autoDeleteObjects: !isProd,
+});
 
+const airflowDagsBucket = new s3.Bucket(customStack, 'AirflowDagsBucket', {
+  encryption: s3.BucketEncryption.S3_MANAGED,
+  blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+  versioned: true, 
+  removalPolicy: RemovalPolicy.RETAIN,
+});
+
+// Vector DB Infrastructure
 const vectorBucket = new s3vectors.CfnVectorBucket(customStack, 'CentralVectorBucket', {});
 
 const titanIndex = new s3vectors.CfnIndex(customStack, 'TitanTextIndex', {
@@ -107,20 +129,6 @@ const novaIndex = new s3vectors.CfnIndex(customStack, 'NovaMediaIndex', {
   metadataConfiguration: {
     nonFilterableMetadataKeys: ['AMAZON_BEDROCK_TEXT', 'AMAZON_BEDROCK_METADATA', 'x-amz-bedrock-kb-source-uri', 'x-amz-bedrock-kb-chunk-id', 'x-amz-bedrock-kb-data-source-id']
   }
-});
-
-const multimodalBucket = new s3.Bucket(customStack, 'MultimodalStorageBucket', {
-  encryption: s3.BucketEncryption.S3_MANAGED,
-  blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-  removalPolicy: RemovalPolicy.DESTROY, 
-  autoDeleteObjects: true,
-});
-
-const airflowDagsBucket = new s3.Bucket(customStack, 'AirflowDagsBucket', {
-  encryption: s3.BucketEncryption.S3_MANAGED,
-  blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-  versioned: true, 
-  removalPolicy: RemovalPolicy.RETAIN,
 });
 
 const bedrockKbRole = new iam.Role(customStack, 'BedrockKBRole', {
@@ -153,7 +161,7 @@ const bedrockKbPolicy = new iam.Policy(customStack, 'BedrockKBPolicy', {
 });
 bedrockKbRole.attachInlinePolicy(bedrockKbPolicy);
 
-// TITAN TEXT KNOWLEDGE BASE
+// Knowledge Base Configurations
 const titanKb = new bedrock.CfnKnowledgeBase(customStack, 'TitanTextKB', {
   name: 'TitanTextKB',
   roleArn: bedrockKbRole.roleArn,
@@ -188,13 +196,13 @@ new bedrock.CfnDataSource(customStack, 'TitanTextDataSource', {
       chunkingStrategy: 'HIERARCHICAL',
       hierarchicalChunkingConfiguration: {
         levelConfigurations: [{ maxTokens: 1500 }, { maxTokens: 300 }],
-        overlapTokens: 60      
+        overlapTokens: 60       
       }
     }
   }
 });
 
-// NOVA MULTIMODAL KNOWLEDGE BASE
+// Custom Resource for Multimodal Knowledge Base
 const novaKbCr = new cr.AwsCustomResource(customStack, 'NovaMediaKBCR', {
   onCreate: {
     service: 'BedrockAgent',
@@ -248,14 +256,10 @@ new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
   }
 });
 
-// PROCESS VECTOR EMBEDDING LAMBDA
+// Vector Processing
 backend.vectorCollectionsS3.resources.bucket.grantReadWrite(processVectorLambda);
 processVectorLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: [
-    'bedrock:ListKnowledgeBases',
-    'bedrock:ListDataSources',
-    'bedrock:StartIngestionJob'
-  ],
+  actions: ['bedrock:ListKnowledgeBases', 'bedrock:ListDataSources', 'bedrock:StartIngestionJob'],
   resources: ['*'] 
 }));
 
@@ -273,15 +277,11 @@ const bedrockEventRule = new events.Rule(customStack, 'BedrockIngestionStatusRul
 });
 bedrockEventRule.addTarget(new targets.LambdaFunction(statusLambda));
 
-
-// ===========================================
-// MULTI-AGENT PROVISIONING & WEBHOOK ROUTING
-// ===========================================
-
 provisionerLambda.addEventSource(new DynamoEventSource(profilesTable, {
   startingPosition: lambda.StartingPosition.LATEST,
   batchSize: 1, 
-  retryAttempts: 3
+  retryAttempts: 3,
+  onFailure: new SqsDlq(streamDlq)
 }));
 
 provisionerLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
@@ -302,23 +302,16 @@ workflowsTable.grantReadData(routerLambda);
 
 const bedrockAgentRole = new iam.Role(customStack, 'BedrockAgentExecutionRole', {
   assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
-  managedPolicies: [
-    iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonBedrockFullAccess')
-  ]
+  managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonBedrockFullAccess')]
 });
 provisionerLambda.addEnvironment('BEDROCK_AGENT_ROLE_ARN', bedrockAgentRole.roleArn);
 
 const bedrockAdminPolicy = new iam.PolicyStatement({
   actions: [
-    "bedrock:CreateAgent",
-    "bedrock:UpdateAgent",
-    "bedrock:DeleteAgent",
-    "bedrock:CreateAgentActionGroup",
-    "bedrock:AssociateAgentKnowledgeBase",
-    "bedrock:AssociateAgentCollaborator",
-    "bedrock:PrepareAgent",
-    "bedrock:CreateAgentAlias",
-    "iam:PassRole" 
+    "bedrock:CreateAgent", "bedrock:UpdateAgent", "bedrock:DeleteAgent",
+    "bedrock:CreateAgentActionGroup", "bedrock:AssociateAgentKnowledgeBase",
+    "bedrock:AssociateAgentCollaborator", "bedrock:PrepareAgent",
+    "bedrock:CreateAgentAlias", "iam:PassRole" 
   ],
   resources: ["*"], 
 });
@@ -331,11 +324,7 @@ routerLambda.addPermission('AllowBedrockInvoke', {
   action: 'lambda:InvokeFunction',
 });
 
-
-// =====================
-// AGENTIC CHAT HANDLER
-// =====================
-
+// Chat Lambda & Vector Tools Configuration
 chatLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 chatLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 chatLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
@@ -358,13 +347,7 @@ multimodalBucket.grantReadWrite(chatLambda);
 routerLambda.grantInvoke(chatLambda);
 
 chatLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: [
-    'bedrock:InvokeModel',
-    'bedrock:InvokeModelWithResponseStream',
-    'bedrock:StartAsyncInvoke', 
-    'bedrock:Retrieve',
-    'polly:SynthesizeSpeech'    
-  ],
+  actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream', 'bedrock:StartAsyncInvoke', 'bedrock:Retrieve', 'polly:SynthesizeSpeech'],
   resources: ['*']
 }));
 
@@ -381,10 +364,7 @@ dagValidatorLambda.grantInvoke(chatLambda);
 chatLambda.addEnvironment('AIRFLOW_DAGS_BUCKET', airflowDagsBucket.bucketName);
 airflowDagsBucket.grantWrite(chatLambda);
 
-// ====================================
-// MULTIMEDIA EXECUTOR
-// ====================================
-
+// Multimedia Executor Configuration
 mediaLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
 mediaLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
 mediaLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
@@ -396,11 +376,7 @@ userProfilesTable.grantReadWriteData(mediaLambda);
 usageRecordsTable.grantReadWriteData(mediaLambda);
 
 mediaLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: [
-    'bedrock:InvokeModel',
-    'bedrock:StartAsyncInvoke',
-    'polly:SynthesizeSpeech'
-  ],
+  actions: ['bedrock:InvokeModel', 'bedrock:StartAsyncInvoke', 'polly:SynthesizeSpeech'],
   resources: ['*']
 }));
 
@@ -409,23 +385,14 @@ mediaLambda.addPermission('AllowBedrockAgentInvoke', {
   action: 'lambda:InvokeFunction',
 });
 
-
-// ============================
-// STRIPE BILLING & PROMO CODE
-// ============================
-
-const vanguardPriceId = process.env.VANGUARD_PRICE_ID || 'price_1_TEST_VANGUARD';
-const elitePriceId = process.env.VANGUARD_ELITE_PRICE_ID || 'price_1_TEST_ELITE';
-const topUpPriceId = process.env.TOP_UP_PRICE_ID || 'price_1_TEST_TOPUP';
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-
-checkoutLambda.addEnvironment('VANGUARD_PRICE_ID', vanguardPriceId);
-checkoutLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', elitePriceId);
-checkoutLambda.addEnvironment('TOP_UP_PRICE_ID', topUpPriceId);
-checkoutLambda.addEnvironment('FRONTEND_URL', frontendUrl);
-webhookLambda.addEnvironment('VANGUARD_PRICE_ID', vanguardPriceId);
-webhookLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', elitePriceId);
-webhookLambda.addEnvironment('TOP_UP_PRICE_ID', topUpPriceId);
+// Billing Configuration
+checkoutLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || '');
+checkoutLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || '');
+checkoutLambda.addEnvironment('TOP_UP_PRICE_ID', process.env.TOP_UP_PRICE_ID || '');
+checkoutLambda.addEnvironment('FRONTEND_URL', process.env.FRONTEND_URL || '');
+webhookLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || '');
+webhookLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || '');
+webhookLambda.addEnvironment('TOP_UP_PRICE_ID', process.env.TOP_UP_PRICE_ID || '');
 webhookLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 webhookLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
 seederLambda.addEnvironment('FOUNDATION_MODELS_TABLE_NAME', foundationModelsTable.tableName);
@@ -449,31 +416,26 @@ promoLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableNa
 userProfilesTable.grantReadWriteData(promoLambda);
 usageRecordsTable.grantReadWriteData(promoLambda);
 
-// ====================================
-// VOICE AGENT INFRASTRUCTURE & ROUTES
-// ====================================
-
+// Voice Agent Infrastructure
 const voiceAgentTable = new dynamodb.Table(customStack, 'VoiceAgentCallLogs', {
   partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-  removalPolicy: RemovalPolicy.DESTROY,
+  removalPolicy: isProd ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
 });
 
 lexFulfillmentLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
 postCallAnalysisLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
 chatLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
 
-// *IMPORTANT*: Update environment variables in Amplify Hosting environment 
-// after you creating Amazon Connect instance.
-chatLambda.addEnvironment('CONNECT_INSTANCE_ID', process.env.CONNECT_INSTANCE_ID || '');
-chatLambda.addEnvironment('CONNECT_CONTACT_FLOW_ID', process.env.CONNECT_CONTACT_FLOW_ID || '');
-chatLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', process.env.CONNECT_SOURCE_PHONE_NUMBER || '');
+chatLambda.addEnvironment('CONNECT_INSTANCE_ID', connectInstanceId);
+chatLambda.addEnvironment('CONNECT_CONTACT_FLOW_ID', connectContactFlowId);
+chatLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', connectSourcePhone);
 postCallAnalysisLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 postCallAnalysisLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
 mediaLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
-mediaLambda.addEnvironment('CONNECT_INSTANCE_ID', process.env.CONNECT_INSTANCE_ID || '');
-mediaLambda.addEnvironment('CONNECT_CONTACT_FLOW_ID', process.env.CONNECT_CONTACT_FLOW_ID || '');
-mediaLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', process.env.CONNECT_SOURCE_PHONE_NUMBER || '');
+mediaLambda.addEnvironment('CONNECT_INSTANCE_ID', connectInstanceId);
+mediaLambda.addEnvironment('CONNECT_CONTACT_FLOW_ID', connectContactFlowId);
+mediaLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', connectSourcePhone);
 
 voiceAgentTable.grantReadWriteData(lexFulfillmentLambda);
 voiceAgentTable.grantReadWriteData(postCallAnalysisLambda);
@@ -489,15 +451,17 @@ const voiceBedrockPolicy = new iam.PolicyStatement({
 lexFulfillmentLambda.addToRolePolicy(voiceBedrockPolicy);
 postCallAnalysisLambda.addToRolePolicy(voiceBedrockPolicy);
 
-chatLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['connect:StartOutboundVoiceContact'],
-  resources: ['*'] 
-}));
+const connectArn = connectInstanceId 
+  ? `arn:aws:connect:${customStack.region}:${customStack.account}:instance/${connectInstanceId}/*`
+  : '*';
 
-mediaLambda.addToRolePolicy(new iam.PolicyStatement({
+const connectPolicy = new iam.PolicyStatement({
   actions: ['connect:StartOutboundVoiceContact'],
-  resources: ['*'] 
-}));
+  resources: [connectArn] 
+});
+
+chatLambda.addToRolePolicy(connectPolicy);
+mediaLambda.addToRolePolicy(connectPolicy);
 
 lexFulfillmentLambda.addPermission('LexInvokePermission', {
   principal: new iam.ServicePrincipal('lexv2.amazonaws.com'),
@@ -508,13 +472,10 @@ const connectCtrRule = new events.Rule(customStack, 'ConnectCtrDisconnectRule', 
   eventPattern: {
     source: ['aws.connect'],
     detailType: ['Amazon Connect Contact Event'],
-    detail: {
-      eventType: ['DISCONNECTED'],
-    },
+    detail: { eventType: ['DISCONNECTED'] },
   },
 });
 connectCtrRule.addTarget(new targets.LambdaFunction(postCallAnalysisLambda));
-
 
 const modelSeederCustomResource = new cr.AwsCustomResource(customStack, 'FoundationModelSeederResource', {
   onCreate: {
