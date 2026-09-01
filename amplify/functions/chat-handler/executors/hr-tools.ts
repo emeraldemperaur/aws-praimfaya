@@ -1,35 +1,52 @@
 import axios from 'axios';
 import { ToolExecutionContext } from './types';
 
+const TIMEOUT_MS = 10000; 
+const MAX_RECORD_LIMIT = 50; 
+
+
+const safeJsonObject = (data: any): Record<string, any> => {
+    if (!data) return {};
+    if (typeof data === 'object' && !Array.isArray(data)) return data;
+    try {
+        const parsed = JSON.parse(data);
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch {
+        return {};
+    }
+};
 
 export const executeRippling = async ({ toolInput, ephemeralSecrets }: ToolExecutionContext) => {
     const RIPPLING_API_KEY = ephemeralSecrets.ripplingApiKey;
-    if (!RIPPLING_API_KEY) return { error: "Missing Rippling API Key. You MUST call 'request_secure_credentials' with serviceName 'rippling' to proceed." };
+    if (!RIPPLING_API_KEY) {
+        return { error: "Missing Rippling API Key. You MUST call 'request_secure_credentials' with serviceName 'rippling' to proceed." };
+    }
 
     try {
-        const headers = { Authorization: `Bearer ${RIPPLING_API_KEY}`, Accept: 'application/json', 'Content-Type': 'application/json' };
+        const headers = { 
+            Authorization: `Bearer ${RIPPLING_API_KEY}`, 
+            Accept: 'application/json', 
+            'Content-Type': 'application/json' 
+        };
         const { action, employeeId, employeeData } = toolInput;
         
-        let parsedData = {};
-        if (employeeData) {
-            try { parsedData = typeof employeeData === 'string' ? JSON.parse(employeeData) : employeeData; } 
-            catch (e) { return { error: "Failed to parse employeeData JSON payload. Ensure valid formatting." }; }
-        }
+        const parsedData = safeJsonObject(employeeData);
+        const safeEmployeeId = employeeId ? encodeURIComponent(employeeId) : '';
 
-        if (action === 'GET_EMPLOYEE' && employeeId) {
-            const res = await axios.get(`https://api.rippling.com/platform/api/employees/${employeeId}`, { headers });
+        if (action === 'GET_EMPLOYEE' && safeEmployeeId) {
+            const res = await axios.get(`https://api.rippling.com/platform/api/employees/${safeEmployeeId}`, { headers, timeout: TIMEOUT_MS });
             return { status: "Success", data: res.data };
         } 
         else if (action === 'ONBOARD_EMPLOYEE') {
-            const res = await axios.post(`https://api.rippling.com/platform/api/employees`, parsedData, { headers });
+            const res = await axios.post(`https://api.rippling.com/platform/api/employees`, parsedData, { headers, timeout: TIMEOUT_MS });
             return { status: "Success", data: res.data };
         } 
-        else if (action === 'UPDATE_EMPLOYEE' && employeeId) {
-            const res = await axios.put(`https://api.rippling.com/platform/api/employees/${employeeId}`, parsedData, { headers });
+        else if (action === 'UPDATE_EMPLOYEE' && safeEmployeeId) {
+            const res = await axios.put(`https://api.rippling.com/platform/api/employees/${safeEmployeeId}`, parsedData, { headers, timeout: TIMEOUT_MS });
             return { status: "Success", data: res.data };
         }
-        else if (action === 'TERMINATE_EMPLOYEE' && employeeId) {
-            const res = await axios.post(`https://api.rippling.com/platform/api/employees/${employeeId}/terminate`, parsedData, { headers });
+        else if (action === 'TERMINATE_EMPLOYEE' && safeEmployeeId) {
+            const res = await axios.post(`https://api.rippling.com/platform/api/employees/${safeEmployeeId}/terminate`, parsedData, { headers, timeout: TIMEOUT_MS });
             return { status: "Success", message: "Termination workflow initiated.", data: res.data };
         }
 
@@ -52,33 +69,62 @@ export const executeBambooHR = async ({ toolInput, ephemeralSecrets }: ToolExecu
         const authHeader = `Basic ${Buffer.from(`${BAMBOO_API_KEY}:x`).toString('base64')}`;
         const headers = { Authorization: authHeader, Accept: 'application/json', 'Content-Type': 'application/json' };
         const { action, startDate, endDate, searchName, requestId, status } = toolInput;
-        const baseUrl = `https://api.bamboohr.com/api/gateway.php/${BAMBOO_SUBDOMAIN}/v1`;
+        
+        const cleanSubdomain = encodeURIComponent(BAMBOO_SUBDOMAIN.replace(/[^a-zA-Z0-9-]/g, ''));
+        const baseUrl = `https://api.bamboohr.com/api/gateway.php/${cleanSubdomain}/v1`;
 
         if (action === 'GET_DIRECTORY') {
-            const res = await axios.get(`${baseUrl}/employees/directory`, { headers });
-            let employees = res.data.employees || [];
+            const res = await axios.get(`${baseUrl}/employees/directory`, { headers, timeout: TIMEOUT_MS });
+            const rawEmployees = Array.isArray(res.data?.employees) ? res.data.employees : [];
+            
+            let employees = rawEmployees.map((emp: any) => ({
+                id: emp.id,
+                displayName: emp.displayName || `${emp.firstName || ''} ${emp.lastName || ''}`.trim(),
+                jobTitle: emp.jobTitle || 'N/A',
+                department: emp.department || 'N/A',
+                workEmail: emp.workEmail || 'N/A'
+            }));
             
             if (searchName) {
                 const term = searchName.toLowerCase();
                 employees = employees.filter((emp: any) => 
-                    (emp.firstName && emp.firstName.toLowerCase().includes(term)) || 
-                    (emp.lastName && emp.lastName.toLowerCase().includes(term)) ||
-                    (emp.displayName && emp.displayName.toLowerCase().includes(term))
+                    emp.displayName.toLowerCase().includes(term) ||
+                    emp.workEmail.toLowerCase().includes(term) ||
+                    emp.department.toLowerCase().includes(term) ||
+                    emp.jobTitle.toLowerCase().includes(term)
                 );
-                return { status: "Success", resultsFound: employees.length, directory: employees };
             }
+
+            const truncated = employees.length > MAX_RECORD_LIMIT;
+            const finalDirectory = employees.slice(0, MAX_RECORD_LIMIT);
             
-            return { status: "Success", warning: "Truncated to 50 records. Use searchName for specific lookups.", directory: employees.slice(0, 50) };
+            return { 
+                status: "Success", 
+                resultsFound: employees.length, 
+                returnedCount: finalDirectory.length,
+                truncated,
+                directory: finalDirectory 
+            };
         } 
         else if (action === 'GET_TIME_OFF') {
             const start = startDate || new Date().toISOString().split('T')[0];
             const end = endDate || start; 
             
-            const res = await axios.get(`${baseUrl}/time_off/requests?start=${start}&end=${end}`, { headers });
-            return { status: "Success", requests: res.data };
+            const res = await axios.get(`${baseUrl}/time_off/requests?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, { headers, timeout: TIMEOUT_MS });
+            const rawRequests = Array.isArray(res.data) ? res.data : [];
+            
+            const requests = rawRequests.slice(0, MAX_RECORD_LIMIT);
+
+            return { 
+                status: "Success", 
+                totalFound: rawRequests.length, 
+                returnedCount: requests.length, 
+                requests 
+            };
         }
         else if (action === 'APPROVE_TIME_OFF' && requestId && status) {
-            const res = await axios.put(`${baseUrl}/time_off/requests/${requestId}/status`, { status: status }, { headers });
+            const safeRequestId = encodeURIComponent(requestId);
+            const res = await axios.put(`${baseUrl}/time_off/requests/${safeRequestId}/status`, { status }, { headers, timeout: TIMEOUT_MS });
             return { status: "Success", message: `Time off request ${requestId} marked as ${status}.` };
         }
 

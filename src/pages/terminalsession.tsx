@@ -6,6 +6,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import EphemeralCredentialsModal from '../components/ephemeralcredentialsmodal';
 import type { EphemeralSecrets } from '../data/consoleterminal';
+import { JotformEmbed } from '../components/jotformportal';
+
 
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -106,15 +108,18 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       });
 
       const transactionPayload = JSON.parse(response.data);
-
-      if (transactionPayload.requestedCredentials && transactionPayload.requestedCredentials.length > 0) {
+      const outputText = transactionPayload.answer || transactionPayload.error || "No response generated.";
+      
+      const authMatch = outputText.match(/<vanguard_auth_request>(.*?)<\/vanguard_auth_request>/);
+      
+      if (authMatch) {
+        setActiveAuthPrompt(authMatch[1]);
+      } else if (transactionPayload.requestedCredentials && transactionPayload.requestedCredentials.length > 0) {
         setActiveAuthPrompt(transactionPayload.requestedCredentials[0]);
       } else {
         setActiveAuthPrompt(null);
       }
 
-      const outputText = transactionPayload.answer || transactionPayload.error || "No response generated.";
-      
       const generatedChips = transactionPayload.citations?.map((source: any) => {
         if (source.type === 'media') return `📸 Media Reference: ${source.uri.split('/').pop()}`;
         if (source.type === 'asset') return `🎥 Asset Generated: ${source.uri}`;
@@ -179,8 +184,11 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       const avatarName = isUser ? (session.userId?.split('@')[0] || 'Anonymous') : (session.contextProfile?.name || 'Vanguard AI');
       const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+      // Strip auth tags from transcript
+      const cleanContent = (msg.content || '').replace(/<vanguard_auth_request>.*?<\/vanguard_auth_request>/g, '').trim();
+
       markdown += `### ${avatarName} _(${time})_\n\n`;
-      markdown += `${msg.content}\n\n`;
+      markdown += `${cleanContent}\n\n`;
 
       if (msg.contextSources && msg.contextSources.length > 0) {
         markdown += `> **Retrieved Artifacts:**\n`;
@@ -330,6 +338,13 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
             const isUser = msg.role === 'USER';
             const avatarName = isUser ? (session?.userId?.split('@')[0] || 'Anonymous') : (session?.contextProfile?.name || 'Vanguard AI');
             const initials = getInitials(avatarName);
+            
+            let displayContent = msg.content || "";
+            displayContent = displayContent.replace(/<vanguard_auth_request>.*?<\/vanguard_auth_request>/g, '').trim();
+
+            const jotformRegex = /https:\/\/form\.jotform\.com\/(\d+)/g;
+            const jotformMatches = [...displayContent.matchAll(jotformRegex)];
+            const uniqueFormIds = Array.from(new Set(jotformMatches.map(m => m[1])));
 
             return (
               <div 
@@ -411,10 +426,14 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                         )
                       }}
                     >
-                      {msg.content}
+                      {displayContent}
                     </ReactMarkdown>
                   </div>
                   
+                  {uniqueFormIds.map(formId => (
+                    <JotformEmbed key={formId} formId={formId} darkMode={darkMode} />
+                  ))}
+
                   {msg.contextSources && msg.contextSources.length > 0 && (
                     <div style={{ 
                       marginTop: '1rem', paddingTop: '0.75rem', 

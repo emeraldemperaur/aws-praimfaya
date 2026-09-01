@@ -349,6 +349,16 @@ const EphemeralCredentialsModal: React.FC<EphemeralCredentialsModalProps> = ({
             />
           )}
 
+          {activeAuthPrompt === 'jotform' && (
+            <SecretInput 
+              placeholder="Jotform API Key" 
+              onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, jotformToken: e.target.value })} 
+              required 
+              style={inputStyle} 
+              darkMode={darkMode} 
+            />
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
             <button 
               type="button" 

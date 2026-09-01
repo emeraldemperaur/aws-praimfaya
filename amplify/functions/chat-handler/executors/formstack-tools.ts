@@ -1,9 +1,23 @@
 import axios from 'axios';
 import { ToolExecutionContext } from './types';
 
+const TIMEOUT_MS = 6000; 
+const MAX_ARRAY_ITEMS = 50; 
+
+
+const safeJsonParse = (input: any, fallback: any = {}) => {
+    if (!input) return fallback;
+    if (typeof input === 'object') return input;
+    try {
+        const parsed = JSON.parse(input);
+        return parsed && typeof parsed === 'object' ? parsed : fallback;
+    } catch {
+        return fallback;
+    }
+};
+
 export const executeFormstackAgent = async ({ toolInput, ephemeralSecrets }: ToolExecutionContext) => {
     const { endpoint, method = 'GET', payload = {}, queryParams = {} } = toolInput;
-    
     const apiToken = ephemeralSecrets.formstackToken;
 
     if (!apiToken) {
@@ -13,20 +27,41 @@ export const executeFormstackAgent = async ({ toolInput, ephemeralSecrets }: Too
         };
     }
 
- 
-    let cleanEndpoint = endpoint.replace(/^https?:\/\/(www\.)?formstack\.com\/api\/v2/i, '');
-    cleanEndpoint = cleanEndpoint.replace(/{(\d+)}/g, '$1');
-    cleanEndpoint = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
-    const finalEndpoint = cleanEndpoint.endsWith('.json') ? cleanEndpoint : `${cleanEndpoint}.json`;
-    
-    const baseUrl = `https://www.formstack.com/api/v2${finalEndpoint}`;
 
-    const executeRequest = async (url: string, params: any, retryCount = 0): Promise<any> => {
+    let cleanEndpoint = (endpoint || '/form')
+        .replace(/^https?:\/\/(www\.)?formstack\.com\/api\/v2/i, '')
+        .replace(/{(\d+)}/g, '$1');
+
+    let inlineParams: Record<string, any> = {};
+    if (cleanEndpoint.includes('?')) {
+        const [pathPart, queryString] = cleanEndpoint.split('?');
+        cleanEndpoint = pathPart;
+        const searchParams = new URLSearchParams(queryString);
+        searchParams.forEach((val, key) => {
+            inlineParams[key] = val;
+        });
+    }
+
+    cleanEndpoint = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
+    if (!cleanEndpoint.endsWith('.json')) {
+        cleanEndpoint = `${cleanEndpoint}.json`;
+    }
+
+    const baseUrl = `https://www.formstack.com/api/v2${cleanEndpoint}`;
+
+    const parsedPayload = safeJsonParse(payload, {});
+    const parsedQueryParams = {
+        ...inlineParams,
+        ...safeJsonParse(queryParams, {})
+    };
+
+    
+    const executeRequest = async (url: string, params: any, bodyData: any, retryCount = 0): Promise<any> => {
         try {
             const config: any = {
                 method: method.toUpperCase(),
                 url,
-                timeout: 10000, 
+                timeout: TIMEOUT_MS,
                 headers: {
                     'Authorization': `Bearer ${apiToken}`,
                     'Content-Type': 'application/json',
@@ -37,48 +72,52 @@ export const executeFormstackAgent = async ({ toolInput, ephemeralSecrets }: Too
             if (config.method === 'GET' || config.method === 'DELETE') {
                 config.params = params;
             } else {
-                config.data = payload;
+                config.data = bodyData;
             }
 
             return await axios(config);
         } catch (error: any) {
-            if (error.response?.status === 429 && retryCount < 3) {
+            if (error.response?.status === 429 && retryCount < 2) {
                 const backoffMs = Math.pow(2, retryCount) * 1000;
                 await new Promise(resolve => setTimeout(resolve, backoffMs));
-                return executeRequest(url, params, retryCount + 1);
+                return executeRequest(url, params, bodyData, retryCount + 1);
             }
             throw error;
         }
     };
 
     try {
-        const response = await executeRequest(baseUrl, queryParams);
+        const response = await executeRequest(baseUrl, parsedQueryParams, parsedPayload);
         let data = response.data;
 
-        if (method.toUpperCase() === 'GET' && data.pages && data.pages > 1) {
-            let allItems: any[] = [];
+       
+        if (method.toUpperCase() === 'GET' && data && data.pages && data.pages > 1) {
             const arrayKey = Object.keys(data).find(key => Array.isArray(data[key]));
             
             if (arrayKey) {
-                allItems = [...data[arrayKey]];
-                const maxPages = Math.min(data.pages, 5); 
-                
-              
-                for (let i = 2; i <= maxPages; i++) {
-                    try {
-                        const pageRes = await executeRequest(baseUrl, { ...queryParams, page: i });
-                        if (pageRes.data[arrayKey]) {
-                            allItems = allItems.concat(pageRes.data[arrayKey]);
-                        }
-                    } catch (pageErr) {
-                        console.warn(`Formstack pagination failed on page ${i}. Halting pagination early.`);
-                        break; 
-                    }
+                let allItems = [...data[arrayKey]];
+                const maxPagesToFetch = Math.min(data.pages, 4); // Limit to top 4 pages max
+
+                const pagePromises = [];
+                for (let page = 2; page <= maxPagesToFetch; page++) {
+                    pagePromises.push(
+                        executeRequest(baseUrl, { ...parsedQueryParams, page }, parsedPayload)
+                            .then(res => res.data[arrayKey] || [])
+                            .catch(err => {
+                                console.warn(`Formstack pagination failed for page ${page}:`, err.message);
+                                return [];
+                            })
+                    );
                 }
-                
-                data[arrayKey] = allItems;
+
+                const additionalPages = await Promise.all(pagePromises);
+                additionalPages.forEach(pageItems => {
+                    allItems = allItems.concat(pageItems);
+                });
+
+                data[arrayKey] = allItems.slice(0, MAX_ARRAY_ITEMS);
                 data.auto_paginated = true;
-                data.pages_fetched = maxPages;
+                data.total_retrieved = data[arrayKey].length;
             }
         }
 

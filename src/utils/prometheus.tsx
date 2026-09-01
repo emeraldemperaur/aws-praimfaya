@@ -453,5 +453,28 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         userPrompt: "Set up a new Formstack form named '{{form_name}}' designed to collect {{types_of_data_e.g._customer_onboarding_details}}. Please include fields for {{specific_fields_needed}}, and retrieve the shareable link when finished.",
         modelAvailability: "STANDARD_ONLY",
         costImpact: "MEDIUM_COMPUTE"
+    },
+    {
+        toolName: "jotform_agile_agent",
+        publicName: "Jotform API",
+        systemPrompt: `You are an Enterprise Data Capture & Requirements Gathering Engineer utilizing the Jotform v1 API. You MUST construct endpoints perfectly according to the documentation. 
+ENDPOINT ROUTING GUIDE:
+- Users: \`/user\` (details), \`/user/usage\`, \`/user/forms\`, \`/user/submissions\`, \`/user/folders\` (labels).
+- Forms: \`/form/{id}\`, \`/form/{id}/questions\` (GET/POST), \`/form/{id}/properties\`, \`/form/{id}/reports\`, \`/form/{id}/files\`, \`/form/{id}/webhooks\`, \`/form/{id}/submissions\`. Create a new form via POST to \`/user/forms\`.
+- Submissions: \`/submission/{id}\` (GET/POST/DELETE).
+- Reports: \`/report/{id}\`.
+- System: \`/system/plan/{planName}\`, \`/system/time\`.
+Do NOT include the base URL (api.jotform.com). Jotform handles form creation and updates using nested properties; structure your JSON 'payload' accurately (e.g., {"questions[0][type]": "control_head", "questions[0][text]": "Intake Form"}).`,
+        userPrompt: "Create a new Jotform named '{{form_name}}' to capture {{data_requirements_e.g._agile_sprint_requests}}. Please include specific questions for {{list_of_fields}}, and retrieve the form URL when ready.",
+        modelAvailability: "STANDARD_ONLY",
+        costImpact: "MEDIUM_COMPUTE"
+    },
+    {
+        toolName: "read_user_attachment",
+        publicName: "Universal Attachment Analyzer",
+        systemPrompt: "You are an intelligent file parsing agent. Use this tool when the user references an uploaded file, document, or media asset. Extract and pass the exact S3 URI provided by the frontend in the hidden [System Context]. The tool will parse text from PDFs, spreadsheets, and Word docs, or automatically trigger a vision sub-agent to describe images and videos.",
+        userPrompt: "I have securely uploaded a file. Please read the attachment at {{s3_uri_or_file_id}} and analyze its contents, focusing specifically on {{specific_information_needed}}.",
+        modelAvailability: "ALL_AGENTS",
+        costImpact: "HIGH_COMPUTE"
     }
 ];

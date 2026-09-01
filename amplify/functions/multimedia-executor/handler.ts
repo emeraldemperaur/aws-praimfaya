@@ -5,7 +5,8 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, TransactWriteCommand, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ConnectClient, StartOutboundVoiceContactCommand } from "@aws-sdk/client-connect";
 import axios from "axios";
-import { executeExtractPdf } from "../chat-handler/executors/document-tools";
+import { executeAttachmentReader } from "../chat-handler/executors/attachment-tools";
+import { executeJotformAgent } from "../chat-handler/executors/jotform-tools";
 
 const bedrockRuntime = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const pollyClient = new PollyClient({ region: process.env.AWS_REGION });
@@ -17,6 +18,7 @@ const MEDIA_BUCKET = process.env.MEDIA_OUTPUT_BUCKET_NAME!;
 const RAG_ARTIFACTS_TABLE = process.env.RAG_ARTIFACTS_TABLE_NAME!;
 const USER_PROFILES_TABLE = process.env.USER_PROFILES_TABLE_NAME!;
 const USAGE_RECORDS_TABLE = process.env.USAGE_RECORDS_TABLE_NAME!;
+const TIMEOUT_MS = 10000;
 
 const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = { 
     "generate_luma_video": 150000, 
@@ -24,7 +26,32 @@ const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = {
     "generate_enterprise_image": 4000, 
     "edit_image": 15000,
     "generate_audio": 500,
-    "enterprise_voice_agent": 2500
+    "enterprise_voice_agent": 2500,
+    "jotform_agile_agent": 500,
+    "formstack_agile_agent": 500,
+    "generate_document_agent": 100
+};
+
+
+const formatE164 = (phone: string, defaultCountry: string = 'US'): string => {
+    if (!phone) return '';
+    if (phone.trim().startsWith('+')) return '+' + phone.replace(/[^0-9]/g, '');
+    const digits = phone.replace(/[^0-9]/g, '');
+    if (!digits) return '';
+
+    if (digits.startsWith('00')) return `+${digits.substring(2)}`;
+
+    const countryMap: Record<string, { code: string; keepLeadingZero?: boolean }> = {
+        US: { code: '1' }, CA: { code: '1' }, UK: { code: '44' }, FR: { code: '33' },
+        IT: { code: '39', keepLeadingZero: true }, NG: { code: '234' }, ZA: { code: '27' }, JP: { code: '81' }
+    };
+
+    const target = countryMap[defaultCountry.toUpperCase()] || { code: '1' };
+    let processedDigits = digits;
+    if (processedDigits.startsWith('0') && !target.keepLeadingZero) {
+        processedDigits = processedDigits.substring(1);
+    }
+    return `+${target.code}${processedDigits}`;
 };
 
 export const handler = async (event: any) => {
@@ -34,12 +61,30 @@ export const handler = async (event: any) => {
 
     const getParam = (name: string) => parameters.find((p: any) => p.name === name)?.value;
 
+    const sessionAttrs = event.sessionAttributes || event.requestBody?.sessionAttributes || {};
+    const userId = sessionAttrs.userId || event.userId;
     let responseText = "";
 
     try {
+        if (!userId) {
+            throw new Error("Missing user identification in session attributes.");
+        }
+
+        const requiredCost = MULTIMODAL_TOOL_FLAT_COSTS[functionName] || 0;
+        if (requiredCost > 0) {
+            const userRes = await dynamodb.send(new GetCommand({ TableName: USER_PROFILES_TABLE, Key: { cognitoUserId: userId } }));
+            const availableCredits = userRes.Item?.computeCredits ?? 0;
+
+            if (availableCredits < requiredCost) {
+                responseText = `INSUFFICIENT_CREDITS: Executing ${functionName} requires ${requiredCost} compute credits, but you only have ${availableCredits} credits remaining. Please top up your balance.`;
+                return buildActionGroupResponse(actionGroup, functionName, responseText);
+            }
+        }
+
         if (functionName === 'generate_audio') {
             const text = getParam('text');
             const voiceId = getParam('voiceId') || 'Matthew';
+            if (!text) throw new Error("Missing required 'text' parameter.");
 
             const pollyRes = await pollyClient.send(new SynthesizeSpeechCommand({ Engine: "generative", OutputFormat: "mp3", Text: text, VoiceId: voiceId }));
             const audioBytes = await pollyRes.AudioStream?.transformToByteArray();
@@ -56,6 +101,8 @@ export const handler = async (event: any) => {
 
         } else if (functionName === 'generate_image') {
             const prompt = getParam('prompt');
+            if (!prompt) throw new Error("Missing required 'prompt' parameter.");
+
             const invokeRes = await bedrockRuntime.send(new InvokeModelCommand({
                 modelId: "stability.sd3-5-large-v1:0",
                 contentType: "application/json",
@@ -70,6 +117,8 @@ export const handler = async (event: any) => {
 
         } else if (functionName === 'generate_enterprise_image') {
             const prompt = getParam('prompt');
+            if (!prompt) throw new Error("Missing required 'prompt' parameter.");
+
             const invokeRes = await bedrockRuntime.send(new InvokeModelCommand({
                 modelId: "amazon.titan-image-generator-v2:0",
                 contentType: "application/json",
@@ -84,7 +133,7 @@ export const handler = async (event: any) => {
 
         } else if (functionName === 'edit_image') {
             const s3Uri = getParam('s3Uri');
-            const taskType = getParam('taskType');
+            const taskType = getParam('taskType') || 'BACKGROUND_REMOVAL';
             const prompt = getParam('prompt');
             const maskPrompt = getParam('maskPrompt');
 
@@ -101,9 +150,8 @@ export const handler = async (event: any) => {
             if (!byteArray) throw new Error("Failed to read image from S3.");
             
             const base64Image = Buffer.from(byteArray).toString('base64');
-
-            // 2. Build Payload
             const payload: any = { taskType };
+
             if (taskType === "BACKGROUND_REMOVAL") {
                 payload.backgroundRemovalParams = { image: base64Image };
             } else if (taskType === "INPAINTING") {
@@ -129,6 +177,8 @@ export const handler = async (event: any) => {
 
         } else if (functionName === 'generate_luma_video') {
             const prompt = getParam('prompt');
+            if (!prompt) throw new Error("Missing required 'prompt' parameter.");
+
             const aspectRatio = getParam('aspectRatio') || '16:9';
             const videoKeyPrefix = `video-renders/luma-${Date.now()}`;
 
@@ -143,8 +193,8 @@ export const handler = async (event: any) => {
             await deductToolCredits(event, functionName);
             responseText = `Success. Video generation job submitted. Destination: ${videoUrl}. Job ARN: ${asyncJob.invocationArn}`;
 
-        } else if (functionName === 'generate_document') {
-            const content = getParam('content');
+        } else if (functionName === 'generate_document_agent') {
+            const content = getParam('content') || '';
             const filePrefix = getParam('fileName') || 'document';
             const format = getParam('format') || 'md';
 
@@ -160,26 +210,63 @@ export const handler = async (event: any) => {
             const fileUrl = `https://${MEDIA_BUCKET}.s3.amazonaws.com/${s3Key}`;
 
             await recordRAGArtifact(event, fileUrl, 'DOCUMENT');
+            await deductToolCredits(event, functionName);
             responseText = `Success. Document generated and saved to S3: ${fileUrl}`;
+
+        } else if (functionName === 'jotform_agile_agent') {
+            const endpoint = getParam('endpoint');
+            const method = getParam('method') || 'GET';
+            const rawPayload = getParam('payload');
+            const rawQueryParams = getParam('queryParams');
+
+            let payload = {};
+            let queryParams = {};
+
+            try { if (rawPayload) payload = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload; } catch {}
+            try { if (rawQueryParams) queryParams = typeof rawQueryParams === 'string' ? JSON.parse(rawQueryParams) : rawQueryParams; } catch {}
+
+            const ephemeralSecrets = sessionAttrs.ephemeralSecrets ? JSON.parse(sessionAttrs.ephemeralSecrets) : {};
+
+            const result = await executeJotformAgent({
+                toolInput: { endpoint, method, payload, queryParams },
+                ephemeralSecrets,
+                clients: { dynamodb, s3: s3Client, bedrockRuntime },
+                env: process.env as Record<string, string>
+            } as any);
+
+            await deductToolCredits(event, functionName);
+
+            if (result.error) {
+                responseText = `Jotform API Error: ${result.error}. ${result.details ? JSON.stringify(result.details) : ''}`;
+            } else {
+                responseText = `Jotform Execution Success: ${JSON.stringify(result)}`;
+            }
 
         } else if (functionName === 'formstack_agile_agent') {
             const endpoint = getParam('endpoint');
             const method = getParam('method') || 'GET';
-            const payload = getParam('payload') ? JSON.parse(getParam('payload')) : {};
-            const queryParams = getParam('queryParams') ? JSON.parse(getParam('queryParams')) : {};
-            
-            const secrets = event.sessionAttributes?.ephemeralSecrets ? JSON.parse(event.sessionAttributes.ephemeralSecrets) : {};
+            const rawPayload = getParam('payload');
+            const rawQueryParams = getParam('queryParams');
+
+            let payload = {};
+            let queryParams = {};
+
+            try { if (rawPayload) payload = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload; } catch {}
+            try { if (rawQueryParams) queryParams = typeof rawQueryParams === 'string' ? JSON.parse(rawQueryParams) : rawQueryParams; } catch {}
+
+            const secrets = sessionAttrs.ephemeralSecrets ? JSON.parse(sessionAttrs.ephemeralSecrets) : {};
             const apiToken = secrets.formstackToken;
 
             if (!apiToken) {
-                responseText = "Error: Missing Formstack API Token. Request the user provide their credentials using request_secure_credentials.";
+                responseText = "Error: Missing Formstack API Token. Request credentials via request_secure_credentials.";
             } else {
-                const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+                const cleanEndpoint = (endpoint || '/form').startsWith('/') ? endpoint : `/${endpoint}`;
                 const finalEndpoint = cleanEndpoint.endsWith('.json') ? cleanEndpoint : `${cleanEndpoint}.json`;
                 
                 const config: any = {
                     method: method.toUpperCase(),
                     url: `https://www.formstack.com/api/v2${finalEndpoint}`,
+                    timeout: TIMEOUT_MS,
                     headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' }
                 };
 
@@ -187,27 +274,34 @@ export const handler = async (event: any) => {
                 else config.data = payload;
 
                 const response = await axios(config);
+                await deductToolCredits(event, functionName);
                 responseText = `Formstack Execution Success: ${JSON.stringify(response.data)}`;
             }
 
         } else if (functionName === 'enterprise_voice_agent') {
             const action = getParam('action');
             const VOICE_CALLS_TABLE = process.env.VOICE_AGENT_TRACKING_TABLE!;
-            const userId = event.sessionAttributes?.userId || 'managed-agent-user';
 
             if (action === 'DISPATCH_CALL') {
+                const destPhone = getParam('destinationPhoneNumber');
+                const objective = getParam('objective');
+
+                if (!destPhone || !objective) {
+                    throw new Error("Missing required destinationPhoneNumber or objective.");
+                }
+
+                const formattedPhone = formatE164(destPhone);
                 const internalCallId = `va_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
                 const voiceTone = getParam('voiceTone') || 'professional';
                 const voiceGender = getParam('voiceGender') || 'FEMALE';
-                const destPhone = getParam('destinationPhoneNumber');
                 
                 await dynamodb.send(new PutCommand({
                     TableName: VOICE_CALLS_TABLE,
                     Item: {
                         id: internalCallId,
                         userId: userId,
-                        destinationPhoneNumber: destPhone,
-                        objective: getParam('objective'),
+                        destinationPhoneNumber: formattedPhone,
+                        objective: objective,
                         dataToCapture: getParam('dataToCapture') ? JSON.parse(getParam('dataToCapture')) : [],
                         voiceTone: voiceTone,
                         voiceGender: voiceGender,
@@ -216,14 +310,12 @@ export const handler = async (event: any) => {
                     }
                 }));
 
-                const connectClient = new ConnectClient({ region: process.env.AWS_REGION });
+                const connectClient = new ConnectClient({ region: process.env.AWS_REGION, maxAttempts: 2 });
                 const res = await connectClient.send(new StartOutboundVoiceContactCommand({
-                    DestinationPhoneNumber: destPhone,
+                    DestinationPhoneNumber: formattedPhone,
                     ContactFlowId: process.env.CONNECT_CONTACT_FLOW_ID!,
                     InstanceId: process.env.CONNECT_INSTANCE_ID!,
                     SourcePhoneNumber: process.env.CONNECT_SOURCE_PHONE_NUMBER!,
-                    TrafficType: 'CAMPAIGN',
-                    AnswerMachineDetectionConfig: { EnableAnswerMachineDetection: true, AwaitAnswerMachinePrompt: false },
                     Attributes: { internalCallId, voiceTone, voiceGender }
                 }));
 
@@ -236,7 +328,7 @@ export const handler = async (event: any) => {
                 }));
 
                 await deductToolCredits(event, functionName);
-                responseText = `Success. Voice agent dispatched. Call ID: ${internalCallId}. Use CHECK_CALL_RESULTS later.`;
+                responseText = `Success. Voice agent dispatched to ${formattedPhone}. Call ID: ${internalCallId}. Use CHECK_CALL_RESULTS later.`;
 
             } else if (action === 'CHECK_CALL_RESULTS') {
                 const callId = getParam('callId');
@@ -247,27 +339,37 @@ export const handler = async (event: any) => {
                 } else if (['QUEUED', 'DISPATCHED', 'IN_PROGRESS', 'RINGING'].includes(callRes.Item.status)) {
                     responseText = "In Progress: The AI agent is currently on the call or waiting for an answer.";
                 } else {
-                    responseText = `Call Complete. Status: ${callRes.Item.status}. Summary: ${callRes.Item.summary}. Captured Data: ${JSON.stringify(callRes.Item.capturedData || {})}`;
+                    responseText = `Call Complete. Status: ${callRes.Item.status}. Summary: ${callRes.Item.summary || 'N/A'}. Captured Data: ${JSON.stringify(callRes.Item.capturedData || {})}`;
                 }
             }
 
-        } else if (functionName === 'extract_pdf') {
-            const fileUrl = getParam('fileUrl');
-            const maxPages = getParam('maxPages') || 15;
+        } else if (functionName === 'read_user_attachment') {
+            const s3Uri = getParam('s3Uri');
             
-            const pdfContext = {
-                toolInput: { fileUrl, maxPages },
-                clients: { s3: s3Client },
+            const attachmentContext = {
+                toolInput: { s3Uri },
+                clients: { s3: s3Client, bedrockRuntime },
                 env: process.env
             };
             
-            const result = await executeExtractPdf(pdfContext as any);
+            const result = await executeAttachmentReader(attachmentContext as any);
+            
+            if (result.additionalCreditsUsed && result.additionalCreditsUsed > 0) {
+                const sessionId = sessionAttrs.terminalId || event.sessionId || `session-${Date.now()}`;
+                
+                await recordUsageTransaction(userId, result.additionalCreditsUsed, {
+                    sessionId: sessionId,
+                    sessionTitle: sessionAttrs.terminalTitle,
+                    actionType: 'TOOL_EXECUTION',
+                    toolName: functionName,
+                });
+            }
             
             responseText = JSON.stringify(result);
-        } 
-        else if (functionName === 'request_secure_credentials') {
+
+        } else if (functionName === 'request_secure_credentials') {
             const serviceName = getParam('serviceName');
-            responseText = `<vanguard_auth_request>${serviceName}</vanguard_auth_request> Credentials requested successfully. Wait for the user to reply.`;
+            responseText = `<vanguard_auth_request>${serviceName}</vanguard_auth_request> Credentials requested successfully. Wait for user response.`;
             
         } else {
             responseText = `Error: Unknown function requested - ${functionName}`;
@@ -278,22 +380,25 @@ export const handler = async (event: any) => {
         responseText = `Error during execution: ${error.message}`;
     }
 
+    return buildActionGroupResponse(actionGroup, functionName, responseText);
+};
+
+function buildActionGroupResponse(actionGroup: string, functionName: string, text: string) {
     return {
         messageVersion: "1.0",
         response: {
             actionGroup: actionGroup,
             function: functionName,
             functionResponse: {
-                responseBody: { TEXT: { body: responseText } }
+                responseBody: { TEXT: { body: text } }
             }
         }
     };
-};
-
+}
 
 async function deductToolCredits(event: any, functionName: string) {
-    const sessionAttrs = event.sessionAttributes || {};
-    const userId = sessionAttrs.userId;
+    const sessionAttrs = event.sessionAttributes || event.requestBody?.sessionAttributes || {};
+    const userId = sessionAttrs.userId || event.userId;
     const sessionId = sessionAttrs.terminalId || event.sessionId || `session-${Date.now()}`;
     const cost = MULTIMODAL_TOOL_FLAT_COSTS[functionName];
 
@@ -323,8 +428,8 @@ async function processAndUploadImage(bytes: Uint8Array, family: string): Promise
 async function recordRAGArtifact(event: any, fileUrl: string, fileType: string) {
     if (!RAG_ARTIFACTS_TABLE) return;
 
-    const sessionAttrs = event.sessionAttributes || {};
-    const userId = sessionAttrs.userId || 'managed-agent-user';
+    const sessionAttrs = event.sessionAttributes || event.requestBody?.sessionAttributes || {};
+    const userId = sessionAttrs.userId || event.userId || 'managed-agent-user';
     const terminalId = sessionAttrs.terminalId || event.sessionId || `session-${Date.now()}`;
     const terminalTitle = sessionAttrs.terminalTitle || 'Supervisor Managed Session';
     const profileName = sessionAttrs.contextProfileName || 'Supervisor Agent';
@@ -401,6 +506,16 @@ async function recordUsageTransaction(
             ]
         }));
     } catch (err) {
-        console.error(`CRITICAL: Transaction failed for user ${userId}. Credits not deducted.`, err);
+        console.error(`CRITICAL: Transaction failed for user ${userId}. Executing direct credit deduction fallback.`, err);
+        try {
+            await dynamodb.send(new UpdateCommand({
+                TableName: USER_PROFILES_TABLE,
+                Key: { cognitoUserId: userId },
+                UpdateExpression: "SET computeCredits = computeCredits - :cost",
+                ExpressionAttributeValues: { ":cost": cost }
+            }));
+        } catch (fallbackErr) {
+            console.error(`FATAL: Fallback credit deduction failed for user ${userId}:`, fallbackErr);
+        }
     }
 }

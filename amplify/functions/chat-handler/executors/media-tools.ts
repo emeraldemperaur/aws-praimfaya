@@ -1,4 +1,4 @@
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
 import { InvokeModelCommand, StartAsyncInvokeCommand } from "@aws-sdk/client-bedrock-runtime";
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
@@ -27,9 +27,9 @@ async function recordRAGArtifact(
                 id: `art_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
                 userId: session.userId,
                 terminalId: session.id,
-                terminalTitle: session.title || 'Untitled Session',
-                modelName: profile.llmModelId || 'amazon.nova-pro-v1:0',
-                contextProfileName: profile.name || 'Vanguard AI',
+                terminalTitle: session.title || profile?.name || 'Terminal Session',
+                modelName: profile?.llmModelId || 'amazon.nova-pro-v1:0',
+                contextProfileName: profile?.name || 'Vanguard AI',
                 fileUrl: fileUrl,
                 fileName: fileName,
                 fileType: fileType,
@@ -103,7 +103,7 @@ export const executeAudioGenerator = async ({
         
         await recordRAGArtifact(
             profile,
-            { userId: cognitoUserId, id: sessionId, title: profile.title },
+            { userId: cognitoUserId, id: sessionId, title: profile?.name },
             audioUrl,
             'AUDIO',
             clients.dynamodb,
@@ -131,22 +131,61 @@ export const executeImageGenerator = async ({
 }: ToolExecutionContext & { toolName: string }) => {
     try {
         const bucketName = getMediaBucketName(env);
-        if (!toolInput.prompt) return { error: "Prompt parameter is required for image generation." };
-
         let modelId = "stability.sd3-5-large-v1:0";
         let reqBody: any;
 
         if (toolName === 'generate_image') {
+            if (!toolInput.prompt) return { error: "Prompt parameter is required for image generation." };
             modelId = "stability.sd3-5-large-v1:0";
             reqBody = { prompt: toolInput.prompt, output_format: "jpeg" };
-        } else if (toolName === 'edit_image') {
+        } 
+        else if (toolName === 'edit_image') {
             modelId = "amazon.nova-canvas-v1:0";
-            reqBody = {
-                taskType: "TEXT_IMAGE",
-                textToImageParams: { text: toolInput.prompt },
-                imageGenerationConfig: { numberOfImages: 1, height: 1024, width: 1024 }
-            };
-        } else {
+            const { s3Uri, taskType = "BACKGROUND_REMOVAL", prompt, maskPrompt } = toolInput;
+
+            if (s3Uri && s3Uri.startsWith('s3://')) {
+                const uriParts = s3Uri.replace('s3://', '').split('/');
+                const srcBucket = uriParts.shift()!;
+                const srcKey = uriParts.join('/');
+
+                const s3Res = await clients.s3.send(new GetObjectCommand({ Bucket: srcBucket, Key: srcKey }));
+                const byteArr = await s3Res.Body?.transformToByteArray();
+                if (!byteArr) throw new Error("Failed to read source image from S3 for editing.");
+
+                const base64Image = Buffer.from(byteArr).toString('base64');
+                reqBody = { taskType };
+
+                if (taskType === "BACKGROUND_REMOVAL") {
+                    reqBody.backgroundRemovalParams = { image: base64Image };
+                } else if (taskType === "INPAINTING") {
+                    reqBody.inPaintingParams = {
+                        image: base64Image,
+                        text: prompt || "remove object",
+                        maskPrompt: maskPrompt || "main subject"
+                    };
+                } else if (taskType === "OUTPAINTING") {
+                    reqBody.outPaintingParams = {
+                        image: base64Image,
+                        text: prompt || "extend background",
+                        outPaintingMode: "DEFAULT"
+                    };
+                } else if (taskType === "IMAGE_VARIATION") {
+                    reqBody.imageVariationParams = {
+                        images: [base64Image],
+                        text: prompt || "create variation"
+                    };
+                }
+            } else {
+                if (!toolInput.prompt) return { error: "Prompt or s3Uri parameter is required for image editing." };
+                reqBody = {
+                    taskType: "TEXT_IMAGE",
+                    textToImageParams: { text: toolInput.prompt },
+                    imageGenerationConfig: { numberOfImages: 1, height: 1024, width: 1024 }
+                };
+            }
+        } 
+        else {
+            if (!toolInput.prompt) return { error: "Prompt parameter is required for enterprise image generation." };
             modelId = "amazon.titan-image-generator-v2:0";
             reqBody = {
                 taskType: "TEXT_IMAGE",
@@ -167,7 +206,7 @@ export const executeImageGenerator = async ({
         if (result.imageUrl) {
             await recordRAGArtifact(
                 profile,
-                { userId: cognitoUserId, id: sessionId, title: profile.title },
+                { userId: cognitoUserId, id: sessionId, title: profile?.name },
                 result.imageUrl,
                 'IMAGE',
                 clients.dynamodb,
@@ -211,7 +250,7 @@ export const executeLumaVideo = async ({
 
         await recordRAGArtifact(
             profile,
-            { userId: cognitoUserId, id: sessionId, title: profile.title },
+            { userId: cognitoUserId, id: sessionId, title: profile?.name },
             videoUrl,
             'VIDEO',
             clients.dynamodb,

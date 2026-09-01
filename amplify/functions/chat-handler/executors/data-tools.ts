@@ -5,6 +5,17 @@ import { InvokeCommand } from "@aws-sdk/client-lambda";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { ToolExecutionContext } from './types';
 
+const safeJsonParse = (data: any, fallback: any = []) => {
+    if (!data) return fallback;
+    if (typeof data === 'object') return data;
+    try {
+        return JSON.parse(data);
+    } catch {
+        return fallback; 
+    }
+};
+
+const TIMEOUT_MS = 15000;
 
 export const executeAirtable = async ({ toolInput, ephemeralSecrets }: ToolExecutionContext) => {
     const AIRTABLE_API_KEY = ephemeralSecrets.airtableApiKey;
@@ -21,29 +32,43 @@ export const executeAirtable = async ({ toolInput, ephemeralSecrets }: ToolExecu
         const baseUrl = `https://api.airtable.com/v0`;
 
         if (action === 'INSPECT_SCHEMA' && baseId) {
-            const res = await axios.get(`${baseUrl}/meta/bases/${baseId}/tables`, { headers });
+            const res = await axios.get(`${baseUrl}/meta/bases/${baseId}/tables`, { headers, timeout: TIMEOUT_MS });
             return { status: "Success", tables: res.data.tables.map((t: any) => ({ name: t.name, id: t.id, fields: t.fields.map((f:any) => f.name) })) };
         } 
         else if (action === 'QUERY_RECORDS' && baseId && tableIdOrName) {
-            const query = queryParams ? `?${queryParams}` : '';
-            const res = await axios.get(`${baseUrl}/${baseId}/${encodeURIComponent(tableIdOrName)}${query}`, { headers });
+            // DEFENSE 2: Protect against LLMs hallucinating the '?' in query params
+            const query = queryParams ? (queryParams.startsWith('?') ? queryParams : `?${queryParams}`) : '';
+            const res = await axios.get(`${baseUrl}/${baseId}/${encodeURIComponent(tableIdOrName)}${query}`, { headers, timeout: TIMEOUT_MS });
             return { status: "Success", records: res.data.records };
         }
         else if (action === 'CREATE_RECORDS' && baseId && tableIdOrName && recordsData) {
-            const payload = { records: JSON.parse(recordsData), typecast: true };
-            const res = await axios.post(`${baseUrl}/${baseId}/${encodeURIComponent(tableIdOrName)}`, payload, { headers });
+            const parsedRecords = safeJsonParse(recordsData, []);
+            if (!Array.isArray(parsedRecords) || parsedRecords.length === 0) {
+                return { error: "recordsData must be a valid stringified JSON array of record objects." };
+            }
+            const payload = { records: parsedRecords, typecast: true };
+            const res = await axios.post(`${baseUrl}/${baseId}/${encodeURIComponent(tableIdOrName)}`, payload, { headers, timeout: TIMEOUT_MS });
             return { status: "Success", createdRecords: res.data.records.length };
         }
         else if (action === 'INGEST_SPREADSHEET' && fileUrl && baseId && tableIdOrName) {
-            const fileRes = await axios.get(fileUrl, { responseType: 'arraybuffer' });
+            const fileRes = await axios.get(fileUrl, { 
+                responseType: 'arraybuffer',
+                timeout: TIMEOUT_MS,
+                maxContentLength: 10485760,
+                maxBodyLength: 10485760
+            });
             const workbook = xlsx.read(fileRes.data, { type: 'buffer' });
             const firstSheetName = workbook.SheetNames[0];
             const rawJson = xlsx.utils.sheet_to_json(workbook.Sheets[firstSheetName]);
             
             const mappedRecords = rawJson.slice(0, 10).map(row => ({ fields: row }));
             
+            if (mappedRecords.length === 0) {
+                return { error: "Spreadsheet was empty or could not be parsed." };
+            }
+
             const payload = { records: mappedRecords, typecast: true };
-            const res = await axios.post(`${baseUrl}/${baseId}/${encodeURIComponent(tableIdOrName)}`, payload, { headers });
+            await axios.post(`${baseUrl}/${baseId}/${encodeURIComponent(tableIdOrName)}`, payload, { headers, timeout: TIMEOUT_MS });
             
             return { 
                 status: "Success", 
@@ -94,7 +119,7 @@ export const executeSnowflake = async ({ toolInput, ephemeralSecrets }: ToolExec
         if (warehouse) payload.warehouse = warehouse;
         if (role) payload.role = role;
 
-        const res = await axios.post(`https://${sfAccount}.snowflakecomputing.com/api/v2/statements`, payload, { headers });
+        const res = await axios.post(`https://${sfAccount}.snowflakecomputing.com/api/v2/statements`, payload, { headers, timeout: TIMEOUT_MS });
         
         if (res.data?.code === '333334') {
             return { status: "Processing", message: "Query is running asynchronously.", statementHandle: res.data.statementHandle };
@@ -152,15 +177,15 @@ export const executeAirflow = async ({ toolInput, ephemeralSecrets, env, clients
         }
         else if (action === 'TRIGGER_DAG' && dagId) {
             const payload = logicalDate ? { logical_date: logicalDate } : {};
-            const res = await axios.post(`${baseUrl}/dags/${dagId}/dagRuns`, payload, { headers });
+            const res = await axios.post(`${baseUrl}/dags/${dagId}/dagRuns`, payload, { headers, timeout: TIMEOUT_MS });
             return { status: "Success", dagRunId: res.data.dag_run_id, state: res.data.state };
         }
         else if (action === 'GET_DAG_RUNS' && dagId) {
-            const res = await axios.get(`${baseUrl}/dags/${dagId}/dagRuns?limit=10&order_by=-start_date`, { headers });
+            const res = await axios.get(`${baseUrl}/dags/${dagId}/dagRuns?limit=10&order_by=-start_date`, { headers, timeout: TIMEOUT_MS });
             return { status: "Success", runs: res.data.dag_runs };
         }
         else if (action === 'GET_FAILED_TASKS' && dagId && dagRunId) {
-            const res = await axios.get(`${baseUrl}/dags/${dagId}/dagRuns/${dagRunId}/taskInstances?state=failed`, { headers });
+            const res = await axios.get(`${baseUrl}/dags/${dagId}/dagRuns/${dagRunId}/taskInstances?state=failed`, { headers, timeout: TIMEOUT_MS });
             return { status: "Success", failedTasks: res.data.task_instances };
         }
 

@@ -16,6 +16,8 @@ import { executeExtractPdf, executeGenerateDocument } from './document-tools';
 import { executeApotheosisMCP, executeBYOMCP, executeMitoMCP } from './mcp-tools';
 import { executeEnterpriseVoiceAgent } from './voice-tools';
 import { executeFormstackAgent } from './formstack-tools';
+import { executeAttachmentReader } from './attachment-tools';
+import { executeJotformAgent } from './jotform-tools';
 
 
 export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
@@ -24,10 +26,11 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
     'generate_enterprise_image': (ctx) => executeImageGenerator({ ...ctx, toolName: 'generate_enterprise_image' }),
     'edit_image': (ctx) => executeImageGenerator({ ...ctx, toolName: 'edit_image' }),
     'generate_luma_video': executeLumaVideo,
-    'generate_document': executeGenerateDocument,
-    'extract_pdf': executeExtractPdf,
+    'generate_document_agent': executeGenerateDocument,
+    'read_user_attachment': executeAttachmentReader,
     'enterprise_voice_agent': executeEnterpriseVoiceAgent,
     'formstack_agile_agent': executeFormstackAgent,
+    'jotform_agile_agent': executeJotformAgent,
     'rippling_hr_agent': executeRippling,
     'bamboohr_agent': executeBambooHR,
     'zendesk_support_agent': executeZendesk,
@@ -67,5 +70,4 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
     'raspberry_pi_fleet_agent': executeRaspberryPiFleet,
     'mito_mcp_agent': executeMitoMCP,
     'apotheosis_mcp_agent': executeApotheosisMCP,
-    'byo_mcp_agent': executeBYOMCP
 };

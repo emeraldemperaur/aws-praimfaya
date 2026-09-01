@@ -62,6 +62,25 @@ export const NATIVE_TOOLS_REGISTRY = [
             } 
         } 
     },
+    {
+        toolSpec: {
+            name: 'read_user_attachment',
+            description: "Extracts raw text from documents (PDF, DOCX, XLSX, CSV) and performs visual/audio transcription on media files (Images, Videos). Use this whenever the user asks you to analyze, read, or summarize an attached file.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        s3Uri: { 
+                            type: "string", 
+                            description: "The strict s3:// URI of the file to read, which is provided to you in the hidden [System Context]." 
+                        }
+                    },
+                    required: ["s3Uri"]
+                }
+            }
+        }
+    },
+    
 
     // --- Data & Pipeline Engineering ---
     {
@@ -437,25 +456,29 @@ export const NATIVE_TOOLS_REGISTRY = [
             }
     },
     {
-    toolSpec: {
-        name: 'slack_collaboration_agent',
-        description: "Interacts with Slack. Can read channel history and post messages.",
-        inputSchema: {
-            json: {
-                type: "object",
-                properties: {
-                    action: { 
-                        type: "string", 
-                        enum: ["READ_CHANNEL_HISTORY", "POST_MESSAGE"],
-                        description: "The Slack action to execute."
+        toolSpec: {
+            name: 'slack_collaboration_agent',
+            description: "Interacts with Slack. Can read channel history and post messages. To read long histories, use the 'cursor' parameter returned from previous calls to paginate backwards, or use 'oldest'/'latest' Unix timestamps.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["READ_CHANNEL_HISTORY", "POST_MESSAGE"],
+                            description: "The Slack action to execute."
+                        },
+                        channelId: { type: "string", description: "The Slack Channel ID. Required for all actions." },
+                        message: { type: "string", description: "The message text to post. Required for POST_MESSAGE." },
+                        cursor: { type: "string", description: "Optional pagination cursor to fetch older messages." },
+                        limit: { type: "number", description: "Number of messages to fetch per request. Max 100. Default 50." },
+                        oldest: { type: "string", description: "Start of time range (Unix timestamp string)." },
+                        latest: { type: "string", description: "End of time range (Unix timestamp string)." }
                     },
-                    channelId: { type: "string", description: "The Slack Channel ID. Required for all actions." },
-                    message: { type: "string", description: "The message text to post. Required for POST_MESSAGE." }
-                },
-                required: ["action", "channelId"]
+                    required: ["action", "channelId"]
+                }
             }
-                    }
-            }
+        }
     },
     // --- Enterprise Software Development ---
     {
@@ -1025,28 +1048,6 @@ export const NATIVE_TOOLS_REGISTRY = [
     },
     {
         toolSpec: {
-            name: 'extract_pdf',
-            description: "Extracts raw text from a PDF document. Provide the URL of the PDF. Ideal for analyzing reports, invoices, resumes, or articles. Due to processing limits, it defaults to extracting 15 pages.",
-            inputSchema: {
-                json: {
-                    type: "object",
-                    properties: {
-                        fileUrl: { 
-                            type: "string", 
-                            description: "The HTTP/HTTPS or S3 URL of the PDF document to extract." 
-                        },
-                        maxPages: { 
-                            type: "number", 
-                            description: "Maximum number of pages to extract. Default is 15." 
-                        }
-                    },
-                    required: ["fileUrl"]
-                }
-            }
-        }
-    },
-    {
-        toolSpec: {
             name: 'arduino_iot_agent',
             description: "Manages Arduino IoT Cloud microcontrollers. Can list Things, discover sensor Properties (telemetry), and update Properties to actuate hardware (e.g. spin motors, toggle relays).",
             inputSchema: {
@@ -1089,50 +1090,31 @@ export const NATIVE_TOOLS_REGISTRY = [
         }
     },
     {
-        toolSpec: {
-            name: 'enterprise_voice_agent',
-            description: "Dispatches an autonomous AI voice agent to dial a phone number and engage the recipient in a live conversation. You dictate the agent's objective, tone, and what data it must capture. Returns a call ID. Live calls take minutes to complete; you MUST use CHECK_CALL_RESULTS later to retrieve the conversation summary and extracted data.",
-            inputSchema: {
-                json: {
-                    type: "object",
-                    properties: {
-                        action: { 
-                            type: "string", 
-                            enum: ["DISPATCH_CALL", "CHECK_CALL_RESULTS"],
-                            description: "The action to execute. Use DISPATCH_CALL to initiate the voice agent, and CHECK_CALL_RESULTS to get the summary/data after it finishes."
-                        },
-                        destinationPhoneNumber: { 
-                            type: "string", 
-                            description: "The target phone number in E.164 format (e.g., +1234567890). Required for DISPATCH_CALL." 
-                        },
-                        objective: { 
-                            type: "string", 
-                            description: "Detailed system prompt instructions for the live voice agent. E.g., 'Inform the customer their order is delayed and ask if they prefer a refund or to wait.' Required for DISPATCH_CALL." 
-                        },
-                        dataToCapture: { 
-                            type: "array", 
-                            items: { type: "string" },
-                            description: "A list of specific variables the voice agent must extract from the live conversation. E.g., ['customer_preference', 'best_callback_time']." 
-                        },
-                        voiceTone: { 
-                            type: "string", 
-                            enum: ["professional", "casual", "urgent", "empathetic", "friendly"],
-                            description: "The behavioral tone and cadence for the AI voice agent. Defaults to professional." 
-                        },
-                        voiceGender: { 
-                            type: "string", 
-                            enum: ["FEMALE", "MALE", "NEUTRAL"],
-                            description: "The vocal profile mapping (influences the Amazon Polly neural voice mapping)." 
-                        },
-                        callId: { 
-                            type: "string", 
-                            description: "The internal call ID returned from DISPATCH_CALL. Required for CHECK_CALL_RESULTS." 
-                        }
+    toolSpec: {
+        name: 'enterprise_voice_agent',
+        description: 'Dispatches autonomous phone calls via Amazon Connect and checks call outcomes. For completed calls, use CHECK_CALL_RESULTS first. If you need the exact word-for-word transcript to answer a specific question, call GET_CALL_TRANSCRIPT.',
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: ["DISPATCH_CALL", "CHECK_CALL_RESULTS", "GET_CALL_TRANSCRIPT"],
+                        description: "The action to execute."
                     },
-                    required: ["action"]
-                }
+                    callId: { type: "string", description: "The internal call ID (required for CHECK_CALL_RESULTS and GET_CALL_TRANSCRIPT)." },
+                    destinationPhoneNumber: { type: "string", description: "E.164 phone number for DISPATCH_CALL." },
+                    objective: { type: "string", description: "Call objective for DISPATCH_CALL." },
+                    dataToCapture: { type: "array", items: { type: "string" }, description: "Keys to extract during the call." },
+                    voiceTone: { type: "string", enum: ["professional", "casual", "urgent"] },
+                    voiceGender: { type: "string", enum: ["MALE", "FEMALE"] },
+                    searchQuery: { type: "string", description: "Optional keyword or phrase to filter the transcript." },
+                    page: { type: "number", description: "Page number for long transcripts (default: 1)." }
+                },
+                required: ["action"]
             }
-        }
+                    }
+            }
     },
     {
         toolSpec: {
@@ -1158,6 +1140,37 @@ export const NATIVE_TOOLS_REGISTRY = [
                         queryParams: {
                             type: "object",
                             description: "URL query parameters for GET requests (e.g., { 'page': '1', 'per_page': '100', 'sort': 'DESC' })."
+                        }
+                    },
+                    required: ["endpoint", "method"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: 'jotform_agile_agent',
+            description: "Deeply integrates with the Jotform API to build and manage forms, questions, submissions, user details, folders (labels), and reports.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        endpoint: { 
+                            type: "string", 
+                            description: "The API endpoint path (e.g., '/user/forms', '/form/12345/questions'). Do not include the base URL." 
+                        },
+                        method: { 
+                            type: "string", 
+                            enum: ["GET", "POST", "PUT", "DELETE"],
+                            description: "The HTTP method for the operation." 
+                        },
+                        payload: { 
+                            type: "object", 
+                            description: "The JSON body for POST or PUT requests. Jotform expects flat key-value pairs for nested updates (e.g., {'properties[title]': 'New Form'})." 
+                        },
+                        queryParams: {
+                            type: "object",
+                            description: "URL query parameters for GET requests (e.g., { 'limit': '50', 'offset': '0', 'orderby': 'id' })."
                         }
                     },
                     required: ["endpoint", "method"]

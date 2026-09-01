@@ -1,14 +1,14 @@
-import { BedrockRuntimeClient, ConverseCommand, StartAsyncInvokeCommand, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
+import { BedrockRuntimeClient, ConverseCommand, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 import { BedrockAgentRuntimeClient, RetrieveCommand, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { PollyClient } from "@aws-sdk/client-polly";
 import { S3Client } from "@aws-sdk/client-s3";
-import axios from "axios";
 import { CORE_SYSTEM_TOOLS, isValidUrl, NATIVE_TOOLS_REGISTRY } from "./tool-registry";
 import { TOOL_EXECUTORS } from "./executors";
 import { MODEL_CREDIT_MULTIPLIERS } from "./model-credit-multipliers";
+import { executeBYOMCP } from "./executors/mcp-tools";
 
 const bedrockRuntime = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const bedrockAgentRuntime = new BedrockAgentRuntimeClient({ region: process.env.AWS_REGION });
@@ -25,11 +25,39 @@ const WEBHOOK_ROUTER_ARN = process.env.WEBHOOK_ROUTER_LAMBDA_ARN!;
 const USER_PROFILES_TABLE = process.env.USER_PROFILES_TABLE_NAME!;
 const USAGE_RECORDS_TABLE = process.env.USAGE_RECORDS_TABLE_NAME!;
 
+const MAX_CACHE_ENTRIES = 500;
 const workflowEmbeddingCache: Record<string, number[]> = {};
 const nativeToolEmbeddingCache: Record<string, number[]> = {};
 
-const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = { "generate_luma_video": 150000, "generate_audio": 500, "generate_image": 30000, "generate_enterprise_image": 4000, "edit_image": 15000, "enterprise_voice_agent": 2500 };
+const setBoundedCache = (cache: Record<string, number[]>, key: string, vector: number[]) => {
+    const keys = Object.keys(cache);
+    if (keys.length >= MAX_CACHE_ENTRIES) {
+        delete cache[keys[0]]; // FIFO eviction
+    }
+    cache[key] = vector;
+};
 
+const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = { 
+    "generate_luma_video": 150000, 
+    "generate_audio": 500, 
+    "generate_image": 30000, 
+    "generate_enterprise_image": 4000, 
+    "edit_image": 15000, 
+    "enterprise_voice_agent": 2500, 
+    "generate_document_agent": 100,
+    "jotform_agile_agent": 500,        
+    "formstack_agile_agent": 500       
+};
+
+const safeJsonParse = (str: any, fallback: any = {}) => {
+    if (!str) return fallback;
+    if (typeof str === 'object') return str;
+    try {
+        return JSON.parse(str);
+    } catch {
+        return fallback;
+    }
+};
 
 export const handler = async (event: any) => {
     try {
@@ -38,19 +66,21 @@ export const handler = async (event: any) => {
         const userMessage = args.prompt || args.userMessage; 
         const cognitoUserId = args.cognitoUserId || event.identity?.claims?.sub;
         
-        const ephemeralSecrets = args.ephemeralSecretsJson ? JSON.parse(args.ephemeralSecretsJson) : {};
+        const ephemeralSecrets = safeJsonParse(args.ephemeralSecretsJson, {});
 
         if (!profileId || !userMessage || !cognitoUserId) {
-            throw new Error("Missing required parameters in event arguments");
+            return JSON.stringify({ error: "Missing required parameters: profileId, userMessage, and cognitoUserId are required." });
         }
 
         const userRes = await dynamodb.send(new GetCommand({ TableName: USER_PROFILES_TABLE, Key: { cognitoUserId } }));
-        if (!userRes.Item || (userRes.Item.computeCredits ?? 0) <= 0) return { statusCode: 402, body: JSON.stringify({ error: "INSUFFICIENT_CREDITS" }) };
+        if (!userRes.Item || (userRes.Item.computeCredits ?? 0) <= 0) {
+            return JSON.stringify({ error: "INSUFFICIENT_CREDITS: Your compute credit balance is exhausted. Please top up to continue." });
+        }
 
-        const history = args.chatHistory ? JSON.parse(args.chatHistory) : [];
+        const history = safeJsonParse(args.chatHistory, []);
         const profileRes = await dynamodb.send(new GetCommand({ TableName: PROFILES_TABLE, Key: { id: profileId } }));
         const profile = profileRes.Item;
-        if (!profile) throw new Error(`Context Profile not found`);
+        if (!profile) return JSON.stringify({ error: "Context Profile not found." });
 
         const targetModelId = profile.llmModelId || "amazon.nova-pro-v1:0";
         const multiplier = MODEL_CREDIT_MULTIPLIERS[targetModelId] || 2;
@@ -61,15 +91,9 @@ export const handler = async (event: any) => {
         const minimumCreditsNeeded = estimatedInputTokens * multiplier;
 
         if (computeCredits < minimumCreditsNeeded) {
-            return { 
-                statusCode: 402, 
-                body: JSON.stringify({ error: `INSUFFICIENT_CREDITS: Your prompt and chat history require at least ${minimumCreditsNeeded} credits to process. You only have ${computeCredits} available. Please top up or start a new session.` }) 
-            };
-        }
-
-        const maxAffordableOutputTokens = Math.floor((computeCredits - minimumCreditsNeeded) / multiplier);
-        if (maxAffordableOutputTokens <= 5) {
-            return { statusCode: 402, body: JSON.stringify({ error: "INSUFFICIENT_CREDITS: Balance too low to generate a response." }) };
+            return JSON.stringify({ 
+                error: `INSUFFICIENT_CREDITS: Your prompt and chat history require at least ${minimumCreditsNeeded} credits to process. You only have ${computeCredits} available.` 
+            });
         }
 
         const citations: any[] = []; 
@@ -125,7 +149,6 @@ export const handler = async (event: any) => {
                 }
                 
                 const cleanResponse = agentResponse.replace(authRegex, '').trim();
-
                 const outputTokens = Math.ceil(cleanResponse.length / 4);
                 const llmCost = Math.ceil((estimatedInputTokens + outputTokens) * multiplier);
                 
@@ -187,7 +210,10 @@ export const handler = async (event: any) => {
             const scoredWorkflows = await Promise.all(
                 assignedWorkflows.map(async (wf) => {
                     let v = workflowEmbeddingCache[wf.id];
-                    if (!v) { v = await getEmbedding(`${wf.name}: ${wf.description || ''}`); if (v.length > 0) workflowEmbeddingCache[wf.id] = v; }
+                    if (!v) { 
+                        v = await getEmbedding(`${wf.name}: ${wf.description || ''}`); 
+                        if (v.length > 0) setBoundedCache(workflowEmbeddingCache, wf.id, v); 
+                    }
                     return { wf, similarity: cosineSimilarity(userQueryVector, v) };
                 })
             );
@@ -211,9 +237,12 @@ export const handler = async (event: any) => {
         let relevantNativeTools = allowedNativeTools;
         if (userQueryVector.length > 0) {
             const scoredNativeTools = await Promise.all(
-                NATIVE_TOOLS_REGISTRY.map(async (tool) => {
+                allowedNativeTools.map(async (tool) => {
                     let v = nativeToolEmbeddingCache[tool.toolSpec.name];
-                    if (!v) { v = await getEmbedding(`${tool.toolSpec.name}: ${tool.toolSpec.description}`); if (v.length > 0) nativeToolEmbeddingCache[tool.toolSpec.name] = v; }
+                    if (!v) { 
+                        v = await getEmbedding(`${tool.toolSpec.name}: ${tool.toolSpec.description}`); 
+                        if (v.length > 0) setBoundedCache(nativeToolEmbeddingCache, tool.toolSpec.name, v); 
+                    }
                     return { tool, similarity: cosineSimilarity(userQueryVector, v) };
                 })
             );
@@ -225,8 +254,10 @@ export const handler = async (event: any) => {
         const toolConfig = allTools.length > 0 ? { tools: allTools as any[] } : undefined;
         const messages = [...history, { role: "user", content: [{ text: userMessage }] }];
 
-        let totalInboundTokens = 0; let totalOutboundTokens = 0; let flatToolCredits = 0;
-        const safeMaxTokens = Math.max(1, Math.min(8192, Math.floor((computeCredits - (estimatedInputTokens * multiplier)) / multiplier)));
+        let totalInboundTokens = 0; 
+        let totalOutboundTokens = 0; 
+        let flatToolCredits = 0;
+        const safeMaxTokens = Math.max(256, Math.min(4096, Math.floor((computeCredits - (estimatedInputTokens * multiplier)) / multiplier)));
 
         let converseResponse = await bedrockRuntime.send(new ConverseCommand({
             modelId: targetModelId, 
@@ -236,16 +267,21 @@ export const handler = async (event: any) => {
             inferenceConfig: { 
                 temperature: llmTemperature,
                 maxTokens: safeMaxTokens
-             }
+            }
         }));
 
         totalInboundTokens += converseResponse.usage?.inputTokens || 0;
         totalOutboundTokens += converseResponse.usage?.outputTokens || 0;
 
-        const outputMessage = converseResponse.output?.message;
-        const toolUseBlocks = outputMessage?.content?.filter(block => block.toolUse) || [];
+        let loopCount = 0;
+        const MAX_TOOL_LOOPS = 5;
 
-        if (toolUseBlocks.length > 0) {
+        while (loopCount < MAX_TOOL_LOOPS) {
+            const outputMessage = converseResponse.output?.message;
+            const toolUseBlocks = outputMessage?.content?.filter(block => block.toolUse) || [];
+
+            if (toolUseBlocks.length === 0) break;
+
             messages.push(outputMessage!);
             const toolResults = [];
 
@@ -256,7 +292,9 @@ export const handler = async (event: any) => {
                 const toolInput: any = toolUse.input || {};
                 let executionResult: any;
 
-                if (MULTIMODAL_TOOL_FLAT_COSTS[toolUse.name]) flatToolCredits += MULTIMODAL_TOOL_FLAT_COSTS[toolUse.name];
+                if (MULTIMODAL_TOOL_FLAT_COSTS[toolUse.name]) {
+                    flatToolCredits += MULTIMODAL_TOOL_FLAT_COSTS[toolUse.name];
+                }
 
                 if (toolUse.name === 'request_secure_credentials') {
                     requestedCredentials.push(toolInput.serviceName?.toLowerCase());
@@ -276,13 +314,16 @@ export const handler = async (event: any) => {
                                 s3: s3Client, 
                                 polly: pollyClient, 
                                 bedrockRuntime: bedrockRuntime,
-                                dynamodb: dynamodb,       
+                                dynamodb: dynamodb,        
                                 lambda: lambdaClient      
-                             },
+                            },
                             env: process.env as Record<string, string>
                         };
                         
                         executionResult = await TOOL_EXECUTORS[toolUse.name](context);
+                        if (executionResult?.additionalCreditsUsed) {
+                            flatToolCredits += executionResult.additionalCreditsUsed;
+                        }
                     } catch (err: any) {
                         executionResult = { error: `Tool Execution Error: ${err.message}` };
                     }
@@ -296,7 +337,13 @@ export const handler = async (event: any) => {
                     executionResult = await executeMcpTool(profile.customMcpUrl, toolUse.name, toolInput);
                 }
 
-                toolResults.push({ toolResult: { toolUseId: toolUse.toolUseId, content: [{ text: JSON.stringify(executionResult) }], status: executionResult?.error ? "error" : "success" } });
+                toolResults.push({ 
+                    toolResult: { 
+                        toolUseId: toolUse.toolUseId, 
+                        content: [{ text: JSON.stringify(executionResult) }], 
+                        status: executionResult?.error ? "error" : "success" 
+                    } 
+                });
             }
 
             messages.push({ role: "user", content: toolResults });
@@ -305,10 +352,13 @@ export const handler = async (event: any) => {
                 modelId: targetModelId, 
                 messages: messages, 
                 system: [{ text: systemPrompt }],
+                toolConfig: toolConfig,
                 inferenceConfig: { temperature: llmTemperature }
-             }));
+            }));
+
             totalInboundTokens += converseResponse.usage?.inputTokens || 0;
             totalOutboundTokens += converseResponse.usage?.outputTokens || 0;
+            loopCount++;
         }
 
         const responseText = converseResponse.output?.message?.content?.[0]?.text || "No response generated.";
@@ -337,14 +387,88 @@ export const handler = async (event: any) => {
     }
 };
 
-async function getEmbedding(text: string): Promise<number[]> { try { const res = await bedrockRuntime.send(new InvokeModelCommand({ modelId: "amazon.titan-embed-text-v2:0", contentType: "application/json", accept: "application/json", body: JSON.stringify({ inputText: text, dimensions: 1024, normalize: true }) })); return JSON.parse(new TextDecoder().decode(res.body)).embedding || []; } catch { return []; } }
-function cosineSimilarity(a: number[], b: number[]): number { if (!a.length || !b.length || a.length !== b.length) return 0; let d = 0; for (let i = 0; i < a.length; i++) d += a[i] * b[i]; return d; }
-async function invokeWebhookRouter(id: string, payload: any) { try { const res = await lambdaClient.send(new InvokeCommand({ FunctionName: WEBHOOK_ROUTER_ARN, Payload: Buffer.from(JSON.stringify({ parameters: [{ name: 'workflowId', value: id }, { name: 'payloadJson', value: JSON.stringify(payload) }] })) })); const out = JSON.parse(Buffer.from(res.Payload!).toString()); return out?.response?.functionResponse?.responseBody?.TEXT?.body ? JSON.parse(out.response.functionResponse.responseBody.TEXT.body) : out; } catch (err: any) { return { error: err.message }; } }
-async function getAssignedWorkflows(pid: string) { const m = await dynamodb.send(new QueryCommand({ TableName: PROFILE_WORKFLOWS_TABLE, IndexName: 'byProfile', KeyConditionExpression: 'contextProfileId = :pid', ExpressionAttributeValues: { ':pid': pid } })); const wfs = []; for (const wId of (m.Items?.map(i => i.contextWorkflowId) || [])) { const r = await dynamodb.send(new GetCommand({ TableName: WORKFLOWS_TABLE, Key: { id: wId } })); if (r.Item && !r.Item.archived) wfs.push(r.Item); } return wfs; }
-async function executeMcpTool(url: string, name: string, args: any) { try { const res = await axios.post(`${url}/tools/call`, { name, arguments: args }, { timeout: 15000 }); return res.data; } catch (err: any) { return { error: err.message }; } }
-function mapToBedrockType(t?: string): string { switch (t?.toLowerCase()) { case 'number': case 'float': return 'number'; case 'boolean': return 'boolean'; case 'array': return 'array'; case 'object': return 'object'; default: return 'string'; } }
-function buildJsonSchemaFromParams(params?: any[]) { if (!params || !params.length) return { type: "object", properties: {} }; const props: any = {}; const req: string[] = []; params.forEach(p => { props[p.variable] = { type: mapToBedrockType(p.type), description: p.variable }; if (p.isRequired) req.push(p.variable); }); return { type: "object", properties: props, required: req.length ? req : undefined }; }
-function sanitizeToolName(n: string): string { return n.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 64); }
+async function getEmbedding(text: string): Promise<number[]> { 
+    try { 
+        const res = await bedrockRuntime.send(new InvokeModelCommand({ 
+            modelId: "amazon.titan-embed-text-v2:0", 
+            contentType: "application/json", 
+            accept: "application/json", 
+            body: JSON.stringify({ inputText: text, dimensions: 1024, normalize: true }) 
+        })); 
+        return JSON.parse(new TextDecoder().decode(res.body)).embedding || []; 
+    } catch { 
+        return []; 
+    } 
+}
+
+function cosineSimilarity(a: number[], b: number[]): number { 
+    if (!a.length || !b.length || a.length !== b.length) return 0; 
+    let d = 0; 
+    for (let i = 0; i < a.length; i++) d += a[i] * b[i]; 
+    return d; 
+}
+
+async function invokeWebhookRouter(id: string, payload: any) { 
+    try { 
+        const res = await lambdaClient.send(new InvokeCommand({ 
+            FunctionName: WEBHOOK_ROUTER_ARN, 
+            Payload: Buffer.from(JSON.stringify({ parameters: [{ name: 'workflowId', value: id }, { name: 'payloadJson', value: JSON.stringify(payload) }] })) 
+        })); 
+        const out = JSON.parse(Buffer.from(res.Payload!).toString()); 
+        return out?.response?.functionResponse?.responseBody?.TEXT?.body ? JSON.parse(out.response.functionResponse.responseBody.TEXT.body) : out; 
+    } catch (err: any) { 
+        return { error: err.message }; 
+    } 
+}
+
+async function getAssignedWorkflows(pid: string) { 
+    const m = await dynamodb.send(new QueryCommand({ 
+        TableName: PROFILE_WORKFLOWS_TABLE, 
+        IndexName: 'byProfile', 
+        KeyConditionExpression: 'contextProfileId = :pid', 
+        ExpressionAttributeValues: { ':pid': pid } 
+    })); 
+    const wfs = []; 
+    for (const wId of (m.Items?.map(i => i.contextWorkflowId) || [])) { 
+        const r = await dynamodb.send(new GetCommand({ TableName: WORKFLOWS_TABLE, Key: { id: wId } })); 
+        if (r.Item && !r.Item.archived) wfs.push(r.Item); 
+    } 
+    return wfs; 
+}
+
+async function executeMcpTool(url: string, name: string, args: any) {
+    const mockContext: any = {
+        toolInput: { action: 'CALL_TOOL', mcpToolName: name, mcpArguments: args },
+        profile: { customMcpUrl: url }
+    };
+    return await executeBYOMCP(mockContext);
+}
+
+function mapToBedrockType(t?: string): string { 
+    switch (t?.toLowerCase()) { 
+        case 'number': 
+        case 'float': return 'number'; 
+        case 'boolean': return 'boolean'; 
+        case 'array': return 'array'; 
+        case 'object': return 'object'; 
+        default: return 'string'; 
+    } 
+}
+
+function buildJsonSchemaFromParams(params?: any[]) { 
+    if (!params || !params.length) return { type: "object", properties: {} }; 
+    const props: any = {}; 
+    const req: string[] = []; 
+    params.forEach(p => { 
+        props[p.variable] = { type: mapToBedrockType(p.type), description: p.variable }; 
+        if (p.isRequired) req.push(p.variable); 
+    }); 
+    return { type: "object", properties: props, required: req.length ? req : undefined }; 
+}
+
+function sanitizeToolName(n: string): string { 
+    return n.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 64); 
+}
 
 async function recordUsageTransaction(
     userId: string, 
@@ -396,6 +520,16 @@ async function recordUsageTransaction(
             ]
         }));
     } catch (err) {
-        console.error(`CRITICAL: Transaction failed for user ${userId}. Credits not deducted.`, err);
+        console.error(`CRITICAL: Transaction failed for user ${userId}. Attempting direct credit deduction fallback.`, err);
+        try {
+            await dynamodb.send(new UpdateCommand({
+                TableName: USER_PROFILES_TABLE!,
+                Key: { cognitoUserId: userId },
+                UpdateExpression: "SET computeCredits = computeCredits - :cost",
+                ExpressionAttributeValues: { ":cost": cost }
+            }));
+        } catch (fallbackErr) {
+            console.error(`FATAL: Fallback credit deduction failed for user ${userId}:`, fallbackErr);
+        }
     }
 }
