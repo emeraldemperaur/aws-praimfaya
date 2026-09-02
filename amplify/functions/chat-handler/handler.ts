@@ -32,7 +32,7 @@ const nativeToolEmbeddingCache: Record<string, number[]> = {};
 const setBoundedCache = (cache: Record<string, number[]>, key: string, vector: number[]) => {
     const keys = Object.keys(cache);
     if (keys.length >= MAX_CACHE_ENTRIES) {
-        delete cache[keys[0]]; // FIFO eviction
+        delete cache[keys[0]];
     }
     cache[key] = vector;
 };
@@ -76,6 +76,7 @@ export const handler = async (event: any) => {
         if (!userRes.Item || (userRes.Item.computeCredits ?? 0) <= 0) {
             return JSON.stringify({ error: "INSUFFICIENT_CREDITS: Your compute credit balance is exhausted. Please top up to continue." });
         }
+        // const isEliteUser = userRes.Item?.planName === 'VANGUARD_ELITE';
 
         const history = safeJsonParse(args.chatHistory, []);
         const profileRes = await dynamodb.send(new GetCommand({ TableName: PROFILES_TABLE, Key: { id: profileId } }));
@@ -103,6 +104,11 @@ export const handler = async (event: any) => {
         // Managed Agent (Supervisor & Collaborator Agents)
         // ================================================
         if (profile.role === 'SUPERVISOR' && profile.awsAgentId && profile.awsAliasId) {
+            //if (!isEliteUser) {
+              //  return JSON.stringify({ 
+                //    error: "FEATURE_LOCKED: Autonomous Supervisor agents require the Vanguard Elite subscription tier. Please upgrade your plan to access multi-agent orchestration." 
+               // });
+            //}
             try {
                 const safeSessionId = cognitoUserId.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50) + "-session";
                 const dynamicPrompt = profile.systemPrompt || "You are an enterprise supervisor agent.";

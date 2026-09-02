@@ -1320,8 +1320,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                 </div>
 
               </div>
-
             </div>
+
           </div>
 
         </div>
