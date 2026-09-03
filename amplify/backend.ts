@@ -33,6 +33,7 @@ import { multimediaExecutor } from './functions/multimedia-executor/resource';
 import { lexFulfillment } from './functions/lex-fulfillment/resource';
 import { postCallAnalysis } from './functions/post-call-analysis/resource';
 import { foundationModelSeeder } from './functions/foundation-model-seeder/resource';
+import { syncKnowledgeBase } from './functions/sync-kyb/resource';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -54,12 +55,12 @@ const backend = defineBackend({
   multimediaExecutor,
   lexFulfillment,
   postCallAnalysis,
-  foundationModelSeeder
+  foundationModelSeeder,
+  syncKnowledgeBase 
 });
 
 const customStack = backend.createStack('BedrockAIStack');
 
-// Enforce environment validation on build/synth
 const isProd = cdk.Stage.of(customStack)?.stageName === 'prod';
 const connectInstanceId = process.env.CONNECT_INSTANCE_ID || '';
 const connectContactFlowId = process.env.CONNECT_CONTACT_FLOW_ID || '';
@@ -88,6 +89,7 @@ const promoLambda = backend.grantPromoCredits.resources.lambda as lambda.Functio
 const lexFulfillmentLambda = backend.lexFulfillment.resources.lambda as lambda.Function;
 const postCallAnalysisLambda = backend.postCallAnalysis.resources.lambda as lambda.Function;
 const seederLambda = backend.foundationModelSeeder.resources.lambda as lambda.Function;
+const syncKbLambda = backend.syncKnowledgeBase.resources.lambda as lambda.Function; // 1. GET LAMBDA REF
 
 const streamDlq = new sqs.Queue(customStack, 'DynamoStreamDLQ', {
   retentionPeriod: Duration.days(14),
@@ -202,7 +204,6 @@ new bedrock.CfnDataSource(customStack, 'TitanTextDataSource', {
   }
 });
 
-// Custom Resource for Multimodal Knowledge Base
 const novaKbCr = new cr.AwsCustomResource(customStack, 'NovaMediaKBCR', {
   onCreate: {
     service: 'BedrockAgent',
@@ -256,18 +257,25 @@ new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
   }
 });
 
-// Vector Processing
+
 backend.vectorCollectionsS3.resources.bucket.grantReadWrite(processVectorLambda);
-processVectorLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['bedrock:ListKnowledgeBases', 'bedrock:ListDataSources', 'bedrock:StartIngestionJob'],
-  resources: ['*'] 
-}));
 
 backend.vectorCollectionsS3.resources.bucket.addEventNotification(
   s3.EventType.OBJECT_CREATED,
   new s3n.LambdaDestination(processVectorLambda),
   { prefix: 'vector-collections/' }
 );
+
+syncKbLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['bedrock:ListKnowledgeBases', 'bedrock:ListDataSources', 'bedrock:StartIngestionJob'],
+  resources: ['*'] 
+}));
+
+syncKbLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+syncKbLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
+userProfilesTable.grantReadWriteData(syncKbLambda);
+usageRecordsTable.grantReadWriteData(syncKbLambda);
+
 
 const bedrockEventRule = new events.Rule(customStack, 'BedrockIngestionStatusRule', {
   eventPattern: {
@@ -336,6 +344,7 @@ chatLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableNam
 chatLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
 chatLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
 chatLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
+chatLambda.addEnvironment('TITAN_TEXT_KB_ID', titanKb.ref);
 
 profilesTable.grantReadData(chatLambda);
 workflowsTable.grantReadData(chatLambda);
@@ -386,13 +395,13 @@ mediaLambda.addPermission('AllowBedrockAgentInvoke', {
 });
 
 // Billing Configuration
-checkoutLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || '');
-checkoutLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || '');
-checkoutLambda.addEnvironment('TOP_UP_PRICE_ID', process.env.TOP_UP_PRICE_ID || '');
-checkoutLambda.addEnvironment('FRONTEND_URL', process.env.FRONTEND_URL || '');
-webhookLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || '');
-webhookLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || '');
-webhookLambda.addEnvironment('TOP_UP_PRICE_ID', process.env.TOP_UP_PRICE_ID || '');
+checkoutLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || 'price_1UB4nDI2Coxc9y6EopiOCY2v');
+checkoutLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS');
+checkoutLambda.addEnvironment('TOP_UP_PRICE_ID', process.env.TOP_UP_PRICE_ID || 'price_1UB56mI2Coxc9y6Ejo4sGyve');
+checkoutLambda.addEnvironment('FRONTEND_URL', process.env.FRONTEND_URL || 'http://localhost:5173');
+webhookLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS');
+webhookLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS');
+webhookLambda.addEnvironment('TOP_UP_PRICE_ID', process.env.TOP_UP_PRICE_ID || 'price_1UB56mI2Coxc9y6Ejo4sGyve');
 webhookLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 webhookLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
 seederLambda.addEnvironment('FOUNDATION_MODELS_TABLE_NAME', foundationModelsTable.tableName);

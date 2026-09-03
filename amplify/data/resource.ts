@@ -3,6 +3,7 @@ import { chronos } from '../functions/chronos/resource';
 import { createCheckoutSession } from '../functions/stripe-checkout/resource';
 import { grantPromoCredits } from '../functions/admin-promo/resource';
 import { chatHandler } from '../functions/chat-handler/resource';
+import { syncKnowledgeBase } from '../functions/sync-kyb/resource';
 
 const headerRBAC = (allow: any) => [
   allow.owner(),
@@ -247,6 +248,15 @@ const schema = a.schema({
     .returns(a.boolean())
     .authorization((allow) => [allow.groups(['superadmin', 'admin', 'root', 'heda'])])
     .handler(a.handler.function(grantPromoCredits)),
+
+  syncKnowledgeBase: a.mutation()
+    .arguments({ 
+      collectionId: a.id().required(),
+      syncCost: a.integer().required()
+     })
+    .returns(a.string())
+    .authorization(iamRBAC)
+    .handler(a.handler.function(syncKnowledgeBase)),
 
   
 
