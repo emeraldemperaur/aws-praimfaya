@@ -642,7 +642,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               <div style={{ marginBottom: '1rem' }}>
                 <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Foundation Model</span>
                 <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827', fontWeight: 500 }}>
-                  {viewContextProfile?.foundationModel?.name || foundationModels.find(fm => fm.id === viewContextProfile?.llmModelId)?.name || viewContextProfile?.llmModelId || 'Unknown Model'}
+                  {viewContextProfile?.foundationModel?.name || foundationModels.find(fm => fm.apiIdentifier === viewContextProfile?.llmModelId)?.name || viewContextProfile?.llmModelId || 'Unknown Model'}
                 </span>
               </div>
 
@@ -841,7 +841,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               <select name="llmModelId" value={newContextProfileData.llmModelId || ''} onChange={handleNewTextChange} style={inputStyle}>
                 <option value="" disabled>Select a Foundation Model...</option>
                 {foundationModels.map((model) => (
-                  <option key={model.id} value={model.id}>{model.name}</option>
+                  <option key={model.id} value={model.apiIdentifier}>{model.name}</option>
                 ))}
               </select>
               {selectedCreateModelDescription && (
@@ -1132,7 +1132,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               <select name="llmModelId" value={editContextProfileData.llmModelId || ''} onChange={handleEditTextChange} style={inputStyle}>
                 <option value="">Select a Foundation Model...</option>
                 {foundationModels.map((model) => (
-                  <option key={model.id} value={model.id}>{model.name}</option>
+                  <option key={model.id} value={model.apiIdentifier}>{model.name}</option>
                 ))}
               </select>
               {selectedEditModelDescription && (
