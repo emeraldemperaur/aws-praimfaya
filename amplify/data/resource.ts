@@ -240,7 +240,10 @@ const schema = a.schema({
   createCheckoutSession: a.mutation()
     .arguments({ planTier: a.enum(['VANGUARD', 'VANGUARD_ELITE', 'TOP_UP']) })
     .returns(a.string())
-    .authorization(iamRBAC)
+    .authorization((allow) => [
+      allow.authenticated('identityPool'),
+      allow.groups(['superadmin', 'root', 'admin', 'heda'])
+    ])
     .handler(a.handler.function(createCheckoutSession)),
 
   grantPromoCredits: a.mutation()
@@ -255,7 +258,10 @@ const schema = a.schema({
       syncCost: a.integer().required()
      })
     .returns(a.string())
-    .authorization(iamRBAC)
+    .authorization((allow) => [
+      allow.authenticated('identityPool'),
+      allow.groups(['superadmin', 'root', 'admin', 'heda'])
+    ])
     .handler(a.handler.function(syncKnowledgeBase)),
 
   
