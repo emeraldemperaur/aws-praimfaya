@@ -4,6 +4,10 @@ import { generateClient } from 'aws-amplify/api';
 import { getInitials, getModelIcon } from '../utils/voltaire';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import EphemeralCredentialsModal from '../components/ephemeralcredentialsmodal';
+import type { EphemeralSecrets } from '../data/consoleterminal';
+import { JotformEmbed } from '../components/jotformportal';
+
 
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -15,9 +19,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
+  const [ephemeralSecrets, setEphemeralSecrets] = useState<EphemeralSecrets>({});
+  const [activeAuthPrompt, setActiveAuthPrompt] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(20);
-
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -68,12 +72,13 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     hydrateTerminalSession();
   }, [sessionId, navigate]);
 
-  const handleExecutePrompt = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputMessage.trim() || isAiTyping || session?.status === 'ARCHIVED') return;
+  const handleExecutePrompt = async (e?: React.SyntheticEvent, overridePrompt?: string) => {
+    if (e) e.preventDefault();
+    
+    const queryText = (overridePrompt || inputMessage).trim();
+    if (!queryText || isAiTyping || session?.status === 'ARCHIVED') return;
 
-    const queryText = inputMessage.trim();
-    setInputMessage('');
+    if (!overridePrompt) setInputMessage('');
     setIsAiTyping(true);
 
     try {
@@ -87,15 +92,34 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       const activeProfile = session.contextProfile;
       const targetModelIdentifier = activeProfile?.foundationModel?.apiIdentifier || "us.amazon.nova-pro-v1:0";
 
+      const bedrockHistory = messages.map((m: any) => ({
+        role: m.role === 'USER' ? 'user' : 'assistant',
+        content: [{ text: m.content }]
+      }));
+
       const response = await client.queries.askAssistant({
         prompt: queryText,
         systemPrompt: activeProfile?.systemPrompt || "Act as a factual system console.",
-        modelId: targetModelIdentifier
+        modelId: targetModelIdentifier,
+        profileId: session.contextProfileId,
+        cognitoUserId: session.userId,
+        chatHistory: JSON.stringify(bedrockHistory),
+        ephemeralSecretsJson: JSON.stringify(ephemeralSecrets)
       });
 
       const transactionPayload = JSON.parse(response.data);
-      const outputText = transactionPayload.answer;
+      const outputText = transactionPayload.answer || transactionPayload.error || "No response generated.";
       
+      const authMatch = outputText.match(/<vanguard_auth_request>(.*?)<\/vanguard_auth_request>/);
+      
+      if (authMatch) {
+        setActiveAuthPrompt(authMatch[1]);
+      } else if (transactionPayload.requestedCredentials && transactionPayload.requestedCredentials.length > 0) {
+        setActiveAuthPrompt(transactionPayload.requestedCredentials[0]);
+      } else {
+        setActiveAuthPrompt(null);
+      }
+
       const generatedChips = transactionPayload.citations?.map((source: any) => {
         if (source.type === 'media') return `📸 Media Reference: ${source.uri.split('/').pop()}`;
         if (source.type === 'asset') return `🎥 Asset Generated: ${source.uri}`;
@@ -114,26 +138,32 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       const outboundTokens = transactionPayload.tokenUsage?.outputTokens || 0;
       const aggregatedCost = inboundTokens + outboundTokens;
 
-      const incrementedSessionTotal = (session.totalTokensUsed || 0) + aggregatedCost;
-
-      await client.models.ConsoleTerminal.update({
-        id: session.id,
-        totalTokensUsed: incrementedSessionTotal
-      });
-
-      setSession((prev: any) => ({ ...prev, totalTokensUsed: incrementedSessionTotal }));
+      if (aggregatedCost > 0) {
+        const incrementedSessionTotal = (session.totalTokensUsed || 0) + aggregatedCost;
+        await client.models.ConsoleTerminal.update({
+          id: session.id,
+          totalTokensUsed: incrementedSessionTotal
+        });
+        setSession((prev: any) => ({ ...prev, totalTokensUsed: incrementedSessionTotal }));
+      }
 
     } catch (err) {
       console.error("Relay framework dropped socket connection during model invocation:", err);
       setMessages(prev => [...prev, {
         id: 'runtime-err-' + Date.now(),
         role: 'ASSISTANT',
-        content: "RAG Pipeline Routing Interface Timeout. Verify cross-region endpoint models are activated inside the AWS Bedrock Control Panel console.",
+        content: "RAG Pipeline Routing Interface Timeout or Configuration Error.",
         createdAt: new Date().toISOString()
       }]);
     } finally {
       setIsAiTyping(false);
     }
+  };
+
+  const handleSecretSubmit = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    setActiveAuthPrompt(null);
+    handleExecutePrompt(undefined, "Credentials securely injected into ephemeral memory. Please resume and complete the requested operation.");
   };
 
   const handleDownloadTranscript = () => {
@@ -154,8 +184,11 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       const avatarName = isUser ? (session.userId?.split('@')[0] || 'Anonymous') : (session.contextProfile?.name || 'Vanguard AI');
       const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+      // Strip auth tags from transcript
+      const cleanContent = (msg.content || '').replace(/<vanguard_auth_request>.*?<\/vanguard_auth_request>/g, '').trim();
+
       markdown += `### ${avatarName} _(${time})_\n\n`;
-      markdown += `${msg.content}\n\n`;
+      markdown += `${cleanContent}\n\n`;
 
       if (msg.contextSources && msg.contextSources.length > 0) {
         markdown += `> **Retrieved Artifacts:**\n`;
@@ -305,6 +338,13 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
             const isUser = msg.role === 'USER';
             const avatarName = isUser ? (session?.userId?.split('@')[0] || 'Anonymous') : (session?.contextProfile?.name || 'Vanguard AI');
             const initials = getInitials(avatarName);
+            
+            let displayContent = msg.content || "";
+            displayContent = displayContent.replace(/<vanguard_auth_request>.*?<\/vanguard_auth_request>/g, '').trim();
+
+            const jotformRegex = /https:\/\/form\.jotform\.com\/(\d+)/g;
+            const jotformMatches = [...displayContent.matchAll(jotformRegex)];
+            const uniqueFormIds = Array.from(new Set(jotformMatches.map(m => m[1])));
 
             return (
               <div 
@@ -386,28 +426,60 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                         )
                       }}
                     >
-                      {msg.content}
+                      {displayContent}
                     </ReactMarkdown>
                   </div>
                   
+                  {uniqueFormIds.map(formId => (
+                    <JotformEmbed key={formId} formId={formId} darkMode={darkMode} />
+                  ))}
+
                   {msg.contextSources && msg.contextSources.length > 0 && (
                     <div style={{ 
                       marginTop: '1rem', paddingTop: '0.75rem', 
                       borderTop: `1px solid ${isUser ? 'rgba(255,255,255,0.2)' : (darkMode ? '#374151' : '#e5e7eb')}`, 
-                      fontSize: '0.75rem', color: isUser ? '#fecaca' : (darkMode ? '#9ca3af' : '#6b7280') 
+                      fontSize: '0.75rem' 
                     }}>
-                      <div style={{ fontWeight: 600, marginBottom: '0.5rem', fontFamily: 'Bodoni Moda Variable' }}>Retrieved Artifacts:</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div style={{ fontWeight: 600, marginBottom: '0.75rem', fontFamily: 'Bodoni Moda Variable', color: isUser ? '#fecaca' : (darkMode ? '#9ca3af' : '#6b7280') }}>Generated Artifacts:</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                         {msg.contextSources.map((source: string, idx: number) => {
-                          const isMedia = source.toLowerCase().includes('media') || source.toLowerCase().includes('asset');
+                          const urlMatch = source.match(/https:\/\/[^\s]+/);
+                          const url = urlMatch ? urlMatch[0] : null;
+                          const cleanName = url ? url.split('/').pop() : source.replace(/[📸🎥📄]/g, '').trim();
+
+                          if (!url) {
+                            return (
+                              <span key={idx} style={{ padding: '0.35rem 0.6rem', backgroundColor: isUser ? 'rgba(0,0,0,0.2)' : (darkMode ? '#1f2937' : '#f3f4f6'), borderRadius: '4px', border: isUser ? 'none' : `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontFamily: 'Google Sans Code, monospace', width: 'fit-content' }}>
+                                📄 {cleanName}
+                              </span>
+                            );
+                          }
+
+                          const isAudio = url.endsWith('.mp3') || url.endsWith('.wav');
+                          const isVideo = url.endsWith('.mp4');
+                          const isImage = url.endsWith('.jpeg') || url.endsWith('.jpg') || url.endsWith('.png');
+                          const isDocument = url.endsWith('.md') || url.endsWith('.csv') || url.endsWith('.txt') || url.endsWith('.html') || url.endsWith('.pdf');
+
                           return (
-                            <span key={idx} style={{ 
-                              padding: '0.25rem 0.5rem', backgroundColor: isUser ? 'rgba(0,0,0,0.2)' : (darkMode ? '#111827' : '#f3f4f6'), 
-                              borderRadius: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem',
-                              border: isUser ? 'none' : `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontFamily: 'Google Sans Code, monospace'
+                            <div key={idx} style={{ 
+                                padding: '0.5rem', backgroundColor: isUser ? 'rgba(0,0,0,0.2)' : (darkMode ? '#111827' : '#f9fafb'), 
+                                border: isUser ? 'none' : `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
+                                borderRadius: '8px', maxWidth: '400px' 
                             }}>
-                              {isMedia ? '📸' : '📄'} {source}
-                            </span>
+                              {isImage && <img src={url} alt="Generated" style={{ width: '100%', borderRadius: '4px', marginBottom: '0.5rem', objectFit: 'contain' }} loading="lazy" />}
+                              {isVideo && <video controls src={url} style={{ width: '100%', borderRadius: '4px', marginBottom: '0.5rem' }} />}
+                              {isAudio && <audio controls src={url} style={{ width: '100%', height: '32px', marginBottom: '0.5rem' }} />}
+                              {isDocument && (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80px', backgroundColor: darkMode ? '#1f2937' : '#e5e7eb', borderRadius: '4px', marginBottom: '0.5rem' }}>
+                                    <i className="fa-solid fa-file-lines" style={{ fontSize: '2.5rem', color: darkMode ? '#9ca3af' : '#6b7280' }}></i>
+                                </div>
+                              )}
+                              
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'Google Sans Code, monospace', fontSize: '0.7rem', color: isUser ? '#fca5a5' : (darkMode ? '#9ca3af' : '#6b7280') }}>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cleanName}</span>
+                                <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: isUser ? '#ffffff' : '#2563eb', textDecoration: 'none', fontWeight: 'bold' }}>View ↗</a>
+                              </div>
+                            </div>
                           );
                         })}
                       </div>
@@ -439,7 +511,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           <div ref={scrollRef} />
         </div>
 
-        <form onSubmit={handleExecutePrompt} style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexShrink: 0 }}>
+        <form onSubmit={(e) => handleExecutePrompt(e)} style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexShrink: 0 }}>
           <input
             type="text"
             value={inputMessage}
@@ -475,6 +547,17 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           </button>
         </form>
       </div>
+
+      {activeAuthPrompt && (
+        <EphemeralCredentialsModal
+          darkMode={darkMode}
+          activeAuthPrompt={activeAuthPrompt}
+          ephemeralSecrets={ephemeralSecrets}
+          setEphemeralSecrets={setEphemeralSecrets}
+          onSubmit={handleSecretSubmit}
+          onCancel={() => setActiveAuthPrompt(null)}
+        />
+      )}
     </>
   );
 };

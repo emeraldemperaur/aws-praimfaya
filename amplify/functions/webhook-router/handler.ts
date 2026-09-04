@@ -32,8 +32,14 @@ export const handler = async (event: BedrockFunctionEvent) => {
 
         const triggerUrl = wfRes.Item?.triggerURL;
         const authHeader = wfRes.Item?.authHeader; 
+        const callbackUrl = wfRes.Item?.callbackURL;
 
         if (!triggerUrl) throw new Error(`Workflow ID ${workflowId} not found or missing triggerURL`);
+
+        if (callbackUrl) {
+            payload.callbackUrl = callbackUrl;
+            payload.callback_url = callbackUrl;
+        }
 
         const headers: Record<string, string> = { 
             'Content-Type': 'application/json' 

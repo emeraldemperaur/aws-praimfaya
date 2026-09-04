@@ -218,18 +218,25 @@ export const getUiModality = (modality: string): string => {
 };
 
 export const MODEL_FAMILY_DESCRIPTIONS: Record<string, string> = {
-  'AMAZON': 'Exceptional speed-to-token ratios, massive context windows, and deeply integrated multimodal capabilities.',
-  'ANTHROPIC': 'The gold standard for complex workflows, tool utilization, and extended reasoning.',
-  'OPENAI': 'Enterprise grade GPT architecture with strict AWS procurement, regional data residency, and IAM boundaries.',
-  'DEEPSEEK': 'Elite, cost-efficient open-source mixture-of-experts (MoE) reasoning directly within AWS secure perimeter. Fully supports rendering reasoning tokens alongside output tokens.',
-  'META': 'Open-weight enterprise scaling. Incredibly resilient structural processing, highly optimized for Cross-Region Inference to bypass local data center capacity bottlenecks.',
-  'GOOGLE': 'Brings Google’s premier open-weight family into the AWS cloud, giving developers the benefit of massive architectural optionality without vendor lock-in.',
-  'MISTRAL': 'Strong mathematical, structural coding, and multilingual capabilities.',
-  'COHERE': 'Built purposely for enterprise-grade Retrieval-Augmented Generation (RAG) and agentic multi-step tool deployment.',
-  'NVIDIA': 'Hyper-focused on ultra-low latency execution and deep domain customization alignment.',
-  'STABILITY_AI': 'Supports complex text-to-image, outpainting, search-and-replace, and structural editing.',
-  'TWELVELABS': 'Processes visual, auditory, and textual information to generate contextually relevant text directly from video content.',
-  'LUMA': 'Primarily harnessed for high-fidelity physical world modeling and advanced continuous generation.'
+    'AMAZON': 'Exceptional speed-to-token ratios, massive context windows, and deeply integrated multimodal capabilities.',
+    'ANTHROPIC': 'The gold standard for complex workflows, tool utilization, and extended reasoning.',
+    'OPENAI': 'Enterprise grade GPT architecture with strict AWS procurement, regional data residency, and IAM boundaries.',
+    'DEEPSEEK': 'Elite, cost-efficient open-source mixture-of-experts (MoE) reasoning directly within AWS secure perimeter. Fully supports rendering reasoning tokens alongside output tokens.',
+    'META': 'Open-weight enterprise scaling. Incredibly resilient structural processing, highly optimized for Cross-Region Inference to bypass local data center capacity bottlenecks.',
+    'GOOGLE': 'Brings Google’s premier open-weight family into the AWS cloud, giving developers the benefit of massive architectural optionality without vendor lock-in.',
+    'MISTRAL': 'Strong mathematical, structural coding, and multilingual capabilities.',
+    'COHERE': 'Built purposely for enterprise-grade Retrieval-Augmented Generation (RAG) and agentic multi-step tool deployment.',
+    'NVIDIA': 'Hyper-focused on ultra-low latency execution and deep domain customization alignment.',
+    'STABILITY_AI': 'Supports complex text-to-image, outpainting, search-and-replace, and structural editing.',
+    'TWELVELABS': 'Processes visual, auditory, and textual information to generate contextually relevant text directly from video content.',
+    'LUMA': 'Primarily harnessed for high-fidelity physical world modeling and advanced continuous generation.',
+    'AI21': 'Enterprise-grade hybrid SSM-Transformer architecture specializing in highly efficient processing of ultra-long context windows and document structures.',
+    'MINIMAX': 'Fast, flexible frontier models offering strong generalized capabilities and reasoning for rapid application deployment.',
+    'MOONSHOT': 'Flagship models seamlessly merging native image understanding with robust tool calling and context capabilities.',
+    'QWEN': 'Top-tier open-weight family excelling in complex multi-lingual processing, coding, and mathematical reasoning.',
+    'WRITER': 'Purpose-built for enterprise workflows, offering massive 1 million token context windows, structural compliance, and precise tool delegation.',
+    'XAI': 'Resilient, high-tier reasoning models equipped for extended agentic task loops, advanced coding, and robust data synthesis.',
+    'ZAI': 'Strong all-rounder models balancing high-speed execution with dependable tool calling and cost-conscious performance.'
 };
 
 export const ROLE_DESCRIPTIONS: Record<string, string> = {

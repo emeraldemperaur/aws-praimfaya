@@ -19,10 +19,12 @@ export interface UserProfileCardProps {
   permissions: string[];
   subscription: SubscriptionDetails;
   darkMode?: boolean; 
-  onSubscribe?: () => Promise<void>;
+  onSubscribeVanguard?: () => Promise<void>;
+  onSubscribeElite?: () => Promise<void>;
   onCancelSubscription?: () => Promise<void>;
   onRenewSubscription?: () => Promise<void>;
   onTopUpCredits?: () => Promise<void>;
+  onUpdatePayment?: () => Promise<void>; 
 }
 
 const getInitials = (name: string) => {
@@ -41,10 +43,12 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
   permissions,
   subscription,
   darkMode = false,
-  onSubscribe,
+  onSubscribeVanguard,
+  onSubscribeElite,
   onCancelSubscription,
   onRenewSubscription,
-  onTopUpCredits
+  onTopUpCredits,
+  onUpdatePayment
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const initials = getInitials(username);
@@ -121,46 +125,55 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
           </div>
 
           <div className="profile-detail-full subscription-section">
-            <div className="subscription-content">
-              <div>
+            <div className="subscription-content" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem' }}>
+              
+              <div style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
                 <dt className="profile-detail-label mb-small">Subscription Plan</dt>
                 {subscription.status === 'none' ? (
-                  <dd className="profile-detail-value font-medium">Free Tier (Read-Only)</dd>
+                  <dd className="profile-detail-value font-medium" style={{ whiteSpace: 'nowrap' }}>Free Tier (Read-Only)</dd>
                 ) : (
-                  <dd className="profile-detail-value font-medium" style={{ fontFamily: 'Bodoni Moda Variable', fontSize: '1.2rem' }}>
+                  <dd className="profile-detail-value font-medium" style={{ fontFamily: 'Bodoni Moda Variable', fontSize: '1.2rem', whiteSpace: 'nowrap' }}>
                     {subscription.planName}
-                    <span className={`subscription-status ${subscription.status}`}>
+                    <span className={`subscription-status ${subscription.status}`} style={{ marginLeft: '0.5rem' }}>
                       {subscription.status.replace('_', ' ')}
                     </span>
                   </dd>
                 )}
                 
                 {subscription.currentPeriodEnd && (
-                  <p className="subscription-date" style={{ fontFamily: 'Google Sans Code, monospace' }}>
+                  <p className="subscription-date" style={{ fontFamily: 'Google Sans Code, monospace', whiteSpace: 'nowrap', marginTop: '0.25rem' }}>
                     {subscription.status === 'canceled' ? 'Ends on: ' : 'Renews on: '}
                     {formatDate(subscription.currentPeriodEnd)}
                   </p>
                 )}
               </div>
 
-              <div className="subscription-actions">
+              <div className="subscription-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: '0 0 auto', minWidth: '240px' }}>
                 {subscription.status === 'none' && (
-                  <button onClick={() => handleAction(onSubscribe)} disabled={isProcessing} className="btn btn-primary" style={{ backgroundColor: '#800020', border: 'none' }}>
-                    {isProcessing ? 'Processing...' : 'Subscribe via Stripe'}
-                  </button>
+                  <>
+                    <button onClick={() => handleAction(onSubscribeVanguard)} disabled={isProcessing} className="btn btn-primary" style={{ backgroundColor: '#800020', border: 'none', width: '100%', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                      {isProcessing ? 'Processing...' : 'Vanguard Pro | $69 USD / month'}
+                    </button>
+                    <button onClick={() => handleAction(onSubscribeElite)} disabled={isProcessing} className="btn btn-primary" style={{ backgroundColor: '#2563eb', border: 'none', width: '100%', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                      {isProcessing ? 'Processing...' : 'Vanguard Elite | $169 USD / month'}
+                    </button>
+                    <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280', textAlign: 'left', marginTop: '-0.25rem' }}>
+                    Pricing is localized to region at checkout.
+                    </span>
+                  </>
                 )}
                 {subscription.status === 'active' && (
-                  <button onClick={() => handleAction(onCancelSubscription)} disabled={isProcessing} className="btn btn-danger" style={{ backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444' }}>
-                    {isProcessing ? 'Processing...' : 'Cancel Plan'}
+                  <button onClick={() => handleAction(onCancelSubscription)} disabled={isProcessing} className="btn btn-danger" style={{ backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', width: '100%', textAlign: 'center' }}>
+                    {isProcessing ? 'Processing...' : 'Manage / Cancel Plan'}
                   </button>
                 )}
                 {subscription.status === 'canceled' && (
-                  <button onClick={() => handleAction(onRenewSubscription)} disabled={isProcessing} className="btn btn-secondary">
+                  <button onClick={() => handleAction(onRenewSubscription)} disabled={isProcessing} className="btn btn-secondary" style={{ width: '100%', textAlign: 'center' }}>
                     {isProcessing ? 'Processing...' : 'Renew Plan'}
                   </button>
                 )}
                 {subscription.status === 'past_due' && (
-                  <button onClick={() => handleAction(onSubscribe)} disabled={isProcessing} className="btn btn-danger-solid">
+                  <button onClick={() => handleAction(onUpdatePayment)} disabled={isProcessing} className="btn btn-danger-solid" style={{ width: '100%', textAlign: 'center' }}>
                     {isProcessing ? 'Processing...' : 'Update Payment Method'}
                   </button>
                 )}
@@ -184,7 +197,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
                   }} />
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                   <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
                     {isLowCredits ? '⚠️ Running low on synthesis credits.' : 'Credits reset at the end of your billing cycle.'}
                   </span>
@@ -193,7 +206,8 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
                     disabled={isProcessing}
                     style={{ 
                       padding: '0.5rem 1rem', backgroundColor: '#2563eb', color: 'white', border: 'none', 
-                      borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'Bodoni Moda Variable'
+                      borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'Bodoni Moda Variable',
+                      whiteSpace: 'nowrap'
                     }}
                   >
                     Top Up Credits

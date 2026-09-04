@@ -706,8 +706,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                 </ul>
                 <h4 style={{ margin: '1rem 0 0.5rem', color: darkMode ? '#f9fafb' : '#111827', fontSize: '0.9rem' }}>MCP Servers</h4>
                 <ul style={{ margin: 0, paddingLeft: '1.25rem', color: darkMode ? '#d1d5db' : '#4b5563', fontSize: '0.875rem' }}>
-                  <li>Mito MCP: {viewContextProfile?.enableMitoMcp ? <span style={{color: '#10b981'}}>Enabled</span> : 'Disabled'}</li>
-                  <li>Apotheosis MCP: {viewContextProfile?.enableApotheosisMcp ? <span style={{color: '#10b981'}}>Enabled</span> : 'Disabled'}</li>
+                  <li>Mito UI MCP: {viewContextProfile?.enableMitoMcp ? <span style={{color: '#10b981'}}>Enabled</span> : 'Disabled'}</li>
+                  <li>Apotheosis UX MCP: {viewContextProfile?.enableApotheosisMcp ? <span style={{color: '#10b981'}}>Enabled</span> : 'Disabled'}</li>
                   {viewContextProfile?.customMcpUrl && viewContextProfile.role !== 'SUPERVISOR' && <li>Custom: {viewContextProfile.customMcpUrl}</li>}
                 </ul>
               </div>
@@ -932,11 +932,11 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                   <h4 style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: darkMode ? '#d1d5db' : '#4b5563', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Model Context Protocol (MCP)</h4>
                   <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <input type="checkbox" name="enableMitoMcp" checked={newContextProfileData.enableMitoMcp!} onChange={handleNewToggleChange} style={{ cursor: 'pointer' }} />
-                    <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Enable Mito MCP</span>
+                    <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Enable Mito UI MCP</span>
                   </div>
                   <div style={{ marginBottom: newContextProfileData.role !== 'SUPERVISOR' ? '1rem' : '0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <input type="checkbox" name="enableApotheosisMcp" checked={newContextProfileData.enableApotheosisMcp!} onChange={handleNewToggleChange} style={{ cursor: 'pointer' }} />
-                    <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Enable Apotheosis MCP</span>
+                    <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Enable Apotheosis UX MCP</span>
                   </div>
                   {newContextProfileData.role !== 'SUPERVISOR' && (
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1225,11 +1225,11 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                   <h4 style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: darkMode ? '#d1d5db' : '#4b5563', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Model Context Protocol (MCP)</h4>
                   <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <input type="checkbox" name="enableMitoMcp" checked={editContextProfileData.enableMitoMcp!} onChange={handleEditToggleChange} style={{ cursor: 'pointer' }} />
-                    <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Enable Mito MCP</span>
+                    <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Enable Mito UI MCP</span>
                   </div>
                   <div style={{ marginBottom: editContextProfileData.role !== 'SUPERVISOR' ? '1rem' : '0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <input type="checkbox" name="enableApotheosisMcp" checked={editContextProfileData.enableApotheosisMcp!} onChange={handleEditToggleChange} style={{ cursor: 'pointer' }} />
-                    <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Enable Apotheosis MCP</span>
+                    <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Enable Apotheosis UX MCP</span>
                   </div>
                   {editContextProfileData.role !== 'SUPERVISOR' && (
                     <div>
@@ -1320,8 +1320,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                 </div>
 
               </div>
-
             </div>
+
           </div>
 
         </div>

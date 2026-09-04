@@ -1,5 +1,9 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { chronos } from '../functions/chronos/resource';
+import { createCheckoutSession } from '../functions/stripe-checkout/resource';
+import { grantPromoCredits } from '../functions/admin-promo/resource';
+import { chatHandler } from '../functions/chat-handler/resource';
+import { syncKnowledgeBase } from '../functions/sync-kyb/resource';
 
 const headerRBAC = (allow: any) => [
   allow.owner(),
@@ -22,6 +26,8 @@ const ModelModality = ['TEXT', 'MULTIMODAL', 'EMBEDDING', 'IMAGE'] as const;
 const AutomationTools = ['N8N', 'ZAPIER', 'MAKE', 'PIPEDREAM'] as const;
 const AgentRoles = ['SUPERVISOR', 'COLLABORATOR', 'STANDARD'] as const;
 const ProvisioningStatus = ['READY', 'PROVISIONING', 'UNPROVISIONED', 'FAILED'] as const;
+const ModelCaliber = ['FAST', 'MODERATE', 'HIGH_PERFORMANCE', 'ULTRA_PERFORMANCE'] as const;
+const ModelRegion = ['DEFAULT', 'GLOBAL', 'US', 'EU', 'APAC'] as const;
 
 const schema = a.schema({
   Todo: a
@@ -34,6 +40,20 @@ const schema = a.schema({
     .arguments({ name: a.string() })
     .returns(a.string())
     .handler(a.handler.function(chronos))
+    .authorization((allow) => [allow.authenticated()]),
+
+  askAssistant: a.query()
+    .arguments({
+      prompt: a.string(),
+      systemPrompt: a.string(),
+      modelId: a.string(),
+      profileId: a.id(),
+      cognitoUserId: a.string(),
+      chatHistory: a.string(),
+      ephemeralSecretsJson: a.string(),
+    })
+    .returns(a.string())
+    .handler(a.handler.function(chatHandler))
     .authorization((allow) => [allow.authenticated()]),
 
   ContextProfile: a
@@ -154,6 +174,22 @@ const schema = a.schema({
     })
     .authorization(headerRBAC),
 
+    RAGArtifact: a.model({
+      id: a.id(),
+      userId: a.string().required(),
+      terminalId: a.string().required(),
+      terminalTitle: a.string(),
+      modelName: a.string(),
+      contextProfileName: a.string(),
+      contextProfileId: a.string(),
+      fileName: a.string().required(),
+      fileUrl: a.string().required(),
+      fileType: a.enum(['IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT']),
+      createdAt: a.datetime().required()
+    })
+    .authorization(headerRBAC)
+    .secondaryIndexes(index => [index("userId").sortKeys(["createdAt"])]),
+
   FoundationModel: a
     .model({
       provider: a.enum(ModelProviders),
@@ -162,6 +198,9 @@ const schema = a.schema({
       modality: a.enum(ModelModality),
       contextWindowTokens: a.integer(),
       isActive: a.boolean(),
+      description: a.string(),
+      caliber: a.enum(ModelCaliber),
+      region: a.enum(ModelRegion),
       profiles: a.hasMany('ContextProfile', 'llmModelId'),
       updatedBy: a.string(),
     })
@@ -175,8 +214,49 @@ const schema = a.schema({
       planName: a.string(),
       currentPeriodEnd: a.datetime(),
       computeCredits: a.integer().default(0), 
+      maxCredits: a.integer().default(0),
     })
     .authorization(iamRBAC),
+
+  UsageRecord: a.model({
+      id: a.id(),
+      userId: a.string().required(),
+      sessionId: a.string().required(),
+      sessionTitle: a.string(),
+      actionType: a.enum(['LLM_INFERENCE', 'TOOL_EXECUTION', 'TOP_UP']),
+      modelId: a.string(),      
+      toolName: a.string(),
+      creditsUsed: a.integer().required(),
+      inputTokens: a.integer(),
+      outputTokens: a.integer(),
+      createdAt: a.datetime().required()
+    })
+    .authorization(iamRBAC)
+    .secondaryIndexes(index => [
+      index("userId").sortKeys(["createdAt"]),
+      index("sessionId").sortKeys(["createdAt"])
+    ]),
+
+  createCheckoutSession: a.mutation()
+    .arguments({ planTier: a.enum(['VANGUARD', 'VANGUARD_ELITE', 'TOP_UP']) })
+    .returns(a.string())
+    .authorization(iamRBAC)
+    .handler(a.handler.function(createCheckoutSession)),
+
+  grantPromoCredits: a.mutation()
+    .arguments({ targetCognitoUserId: a.string().required(), creditAmount: a.integer().required() })
+    .returns(a.boolean())
+    .authorization((allow) => [allow.groups(['superadmin', 'admin', 'root', 'heda'])])
+    .handler(a.handler.function(grantPromoCredits)),
+
+  syncKnowledgeBase: a.mutation()
+    .arguments({ 
+      collectionId: a.id().required(),
+      syncCost: a.integer().required()
+     })
+    .returns(a.string())
+    .authorization(iamRBAC)
+    .handler(a.handler.function(syncKnowledgeBase)),
 
   
 

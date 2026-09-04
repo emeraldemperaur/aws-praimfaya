@@ -271,52 +271,51 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
   };  
 
   const handleDirectS3Upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !editVectorCollection?.id) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0 || !editVectorCollection?.id) return;
 
     try {
       const session = await fetchAuthSession();
       const identityId = session.identityId;
       if (!identityId) throw new Error("Authentication required.");
 
-      const isMedia = 
-        file.type.startsWith('image/') || 
-        file.type.startsWith('video/') || 
-        file.type.startsWith('audio/');
-      
-      const subFolder = isMedia ? 'media' : 'text';
+      const newDocs = files.map(file => ({
+        id: 'temp-' + Math.random().toString(36).substring(2, 9),
+        name: file.name,
+        size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
+        status: 'Uploading...'
+      }));
+      setVectorDocuments(prev => [...prev, ...newDocs]);
 
-      const s3FilePath = `vector-collections/${subFolder}/${identityId}/${editVectorCollection.id}/${file.name}`;
-      const friendlySize = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
-
-      setVectorDocuments(prev => [...prev, 
-        { 
-          id: 'temp-' + Date.now().toString(), 
-          name: file.name, 
-          size: friendlySize,
-          status: 'Uploading...'
-        }
-      ]);
-
-      const uploadTask = uploadData({
-        path: s3FilePath,
-        data: file,
-        options: {
-          contentType: file.type, 
-          onProgress: ({ transferredBytes, totalBytes }) => {
-            if (totalBytes) console.log(`Progress: ${Math.round((transferredBytes / totalBytes) * 100)}%`);
-          }
-        }
+      const uploadPromises = files.map(async (file) => {
+        const isMedia = file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('audio/');
+        const subFolder = isMedia ? 'media' : 'text';
+        const s3FilePath = `vector-collections/${subFolder}/${identityId}/${editVectorCollection.id}/${file.name}`;
+        
+        await uploadData({
+          path: s3FilePath,
+          data: file,
+          options: { contentType: file.type }
+        }).result;
+        
+        setVectorDocuments(prev => prev.map(doc => doc.name === file.name ? { ...doc, status: 'Processing...' } : doc));
       });
 
-      await uploadTask.result;
+      await Promise.all(uploadPromises);
+
+      // Auto-trigger backend sync after entire batch uploads
+      await client.mutations.syncKnowledgeBase({ 
+          collectionId: editVectorCollection.id 
+      });
+
       setVectorDocuments(prev => prev.map(doc => 
-        doc.name === file.name ? { ...doc, status: 'Processing...' } : doc
+         files.some(f => f.name === doc.name) ? { ...doc, status: 'Syncing to DB...' } : doc
       ));
+
     } catch (error) {
-      console.error('Upload Error:', error);
+      console.error('Upload/Sync Error:', error);
       setVectorDocuments(prev => prev.map(doc => 
-        doc.name === file.name ? { ...doc, status: 'Failed' } : doc
+        files.some(f => f.name === doc.name) ? { ...doc, status: 'Failed' } : doc
       ));
     } finally {
       if (hiddenDirectS3Input.current) hiddenDirectS3Input.current.value = ''; 
@@ -458,10 +457,10 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                         <td style={{ padding: '0.75rem 1rem' }}>
                           <span style={{ 
                             padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', 
-                            backgroundColor: doc.status === 'Indexed' ? (darkMode ? '#064e3b' : '#dcfce7') : (darkMode ? '#713f12' : '#fef08a'),
-                            color: doc.status === 'Indexed' ? (darkMode ? '#34d399' : '#166534') : (darkMode ? '#fde047' : '#854d0e')
+                            backgroundColor: doc.status === 'Indexed' ? (darkMode ? '#064e3b' : '#dcfce7') : (doc.status === 'UNSYNCED' ? (darkMode ? '#7c2d12' : '#fef08a') : (darkMode ? '#1e3a8a' : '#dbeafe')),
+                            color: doc.status === 'Indexed' ? (darkMode ? '#34d399' : '#166534') : (doc.status === 'UNSYNCED' ? (darkMode ? '#fde047' : '#854d0e') : (darkMode ? '#93c5fd' : '#1d4ed8'))
                           }}>
-                            {doc.status || 'Indexed'}
+                            {doc.status || 'UNSYNCED'}
                           </span>
                         </td>
                       </tr>
@@ -641,14 +640,14 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                 <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Manage indexed hybrid documents.</p>
               </div>
               <div>
-                <input type="file" ref={hiddenDirectS3Input} style={{ display: 'none' }} onChange={handleDirectS3Upload} />
+                <input type="file" multiple ref={hiddenDirectS3Input} style={{ display: 'none' }} onChange={handleDirectS3Upload} />
                 <button 
                   onClick={() => hiddenDirectS3Input.current?.click()}
                   className="input-typography"
                   style={{ padding: '0.5rem 1rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500 }}
                   title="Upload directly to AWS S3 storage."
                 >
-                  Upload Vector Document
+                  Upload Vector Documents
                 </button>
               </div>
             </div>
@@ -683,10 +682,10 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                         <td style={{ padding: '0.75rem 1rem' }}>
                           <span style={{ 
                             padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', 
-                            backgroundColor: doc.status === 'Indexed' ? (darkMode ? '#064e3b' : '#dcfce7') : (darkMode ? '#713f12' : '#fef08a'),
-                            color: doc.status === 'Indexed' ? (darkMode ? '#34d399' : '#166534') : (darkMode ? '#fde047' : '#854d0e')
+                            backgroundColor: doc.status === 'Indexed' ? (darkMode ? '#064e3b' : '#dcfce7') : (doc.status === 'UNSYNCED' ? (darkMode ? '#7c2d12' : '#fef08a') : (darkMode ? '#1e3a8a' : '#dbeafe')),
+                            color: doc.status === 'Indexed' ? (darkMode ? '#34d399' : '#166534') : (doc.status === 'UNSYNCED' ? (darkMode ? '#fde047' : '#854d0e') : (darkMode ? '#93c5fd' : '#1d4ed8'))
                           }}>
-                            {doc.status || 'Indexed'}
+                            {doc.status || 'UNSYNCED'}
                           </span>
                         </td>
                         <td style={{ padding: '0.75rem 1rem' }}>
