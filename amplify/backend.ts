@@ -60,8 +60,6 @@ const backend = defineBackend({
 });
 
 const customStack = backend.createStack('BedrockAIStack');
-// ADDED: Glue stack to break the circular dependency between data Lambdas and Bedrock events
-const glueStack = backend.createStack('EventRoutingStack');
 
 const isProd = cdk.Stage.of(customStack)?.stageName === 'prod';
 const connectInstanceId = process.env.CONNECT_INSTANCE_ID || '';
@@ -277,14 +275,68 @@ syncKbLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableN
 userProfilesTable.grantReadWriteData(syncKbLambda);
 usageRecordsTable.grantReadWriteData(syncKbLambda);
 
-// UPDATED: Assigned to glueStack
-const bedrockEventRule = new events.Rule(glueStack, 'BedrockIngestionStatusRule', {
+// ==============================================================================
+// CRITICAL FIX: Bind EventBridge Rules & Outputs dynamically to the 'data' Stack
+// ==============================================================================
+
+const bedrockEventRule = new events.Rule(cdk.Stack.of(statusLambda), 'BedrockIngestionStatusRule', {
   eventPattern: {
     source: ['aws.bedrock'],
     detailType: ['Bedrock Knowledge Base Ingestion Job State Change'],
   },
 });
 bedrockEventRule.addTarget(new targets.LambdaFunction(statusLambda));
+
+const connectCtrRule = new events.Rule(cdk.Stack.of(postCallAnalysisLambda), 'ConnectCtrDisconnectRule', {
+  eventPattern: {
+    source: ['aws.connect'],
+    detailType: ['Amazon Connect Contact Event'],
+    detail: { eventType: ['DISCONNECTED'] },
+  },
+});
+connectCtrRule.addTarget(new targets.LambdaFunction(postCallAnalysisLambda));
+
+const modelSeederCustomResource = new cr.AwsCustomResource(cdk.Stack.of(seederLambda), 'FoundationModelSeederResource', {
+  onCreate: {
+    service: 'Lambda',
+    action: 'invoke',
+    parameters: {
+      FunctionName: seederLambda.functionName,
+      InvocationType: 'RequestResponse',
+    },
+    physicalResourceId: cr.PhysicalResourceId.of('FoundationModelSeederTrigger'),
+  },
+  onUpdate: {
+    service: 'Lambda',
+    action: 'invoke',
+    parameters: {
+      FunctionName: seederLambda.functionName,
+      InvocationType: 'RequestResponse',
+    },
+    physicalResourceId: cr.PhysicalResourceId.of(`FoundationModelSeederTrigger_${Date.now()}`),
+  },
+  policy: cr.AwsCustomResourcePolicy.fromStatements([
+    new iam.PolicyStatement({
+      actions: ['lambda:InvokeFunction'],
+      resources: [seederLambda.functionArn],
+    }),
+  ]),
+});
+modelSeederCustomResource.node.addDependency(foundationModelsTable);
+modelSeederCustomResource.node.addDependency(seederLambda);
+
+const webhookUrl = webhookLambda.addFunctionUrl({
+  authType: lambda.FunctionUrlAuthType.NONE,
+});
+
+new cdk.CfnOutput(cdk.Stack.of(webhookLambda), 'StripeWebhookUrl', {
+  value: webhookUrl.url,
+  description: 'Copy this URL and paste it into the Stripe Webhook Dashboard',
+});
+
+// ==============================================================================
+// Continue standard Lambda routing mapping below
+// ==============================================================================
 
 provisionerLambda.addEventSource(new DynamoEventSource(profilesTable, {
   startingPosition: lambda.StartingPosition.LATEST,
@@ -411,15 +463,6 @@ userProfilesTable.grantReadWriteData(webhookLambda);
 usageRecordsTable.grantReadWriteData(webhookLambda);
 foundationModelsTable.grantReadWriteData(seederLambda);
 
-const webhookUrl = webhookLambda.addFunctionUrl({
-  authType: lambda.FunctionUrlAuthType.NONE,
-});
-
-new cdk.CfnOutput(customStack, 'StripeWebhookUrl', {
-  value: webhookUrl.url,
-  description: 'Copy this URL and paste it into the Stripe Webhook Dashboard',
-});
-
 promoLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 promoLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
 
@@ -477,44 +520,3 @@ lexFulfillmentLambda.addPermission('LexInvokePermission', {
   principal: new iam.ServicePrincipal('lexv2.amazonaws.com'),
   action: 'lambda:InvokeFunction',
 });
-
-// UPDATED: Assigned to glueStack
-const connectCtrRule = new events.Rule(glueStack, 'ConnectCtrDisconnectRule', {
-  eventPattern: {
-    source: ['aws.connect'],
-    detailType: ['Amazon Connect Contact Event'],
-    detail: { eventType: ['DISCONNECTED'] },
-  },
-});
-connectCtrRule.addTarget(new targets.LambdaFunction(postCallAnalysisLambda));
-
-// UPDATED: Assigned to glueStack
-const modelSeederCustomResource = new cr.AwsCustomResource(glueStack, 'FoundationModelSeederResource', {
-  onCreate: {
-    service: 'Lambda',
-    action: 'invoke',
-    parameters: {
-      FunctionName: seederLambda.functionName,
-      InvocationType: 'RequestResponse',
-    },
-    physicalResourceId: cr.PhysicalResourceId.of('FoundationModelSeederTrigger'),
-  },
-  onUpdate: {
-    service: 'Lambda',
-    action: 'invoke',
-    parameters: {
-      FunctionName: seederLambda.functionName,
-      InvocationType: 'RequestResponse',
-    },
-    physicalResourceId: cr.PhysicalResourceId.of(`FoundationModelSeederTrigger_${Date.now()}`),
-  },
-  policy: cr.AwsCustomResourcePolicy.fromStatements([
-    new iam.PolicyStatement({
-      actions: ['lambda:InvokeFunction'],
-      resources: [seederLambda.functionArn],
-    }),
-  ]),
-});
-
-modelSeederCustomResource.node.addDependency(foundationModelsTable);
-modelSeederCustomResource.node.addDependency(seederLambda);
