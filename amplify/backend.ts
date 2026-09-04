@@ -60,6 +60,8 @@ const backend = defineBackend({
 });
 
 const customStack = backend.createStack('BedrockAIStack');
+// ADDED: Glue stack to break the circular dependency between data Lambdas and Bedrock events
+const glueStack = backend.createStack('EventRoutingStack');
 
 const isProd = cdk.Stage.of(customStack)?.stageName === 'prod';
 const connectInstanceId = process.env.CONNECT_INSTANCE_ID || '';
@@ -89,7 +91,7 @@ const promoLambda = backend.grantPromoCredits.resources.lambda as lambda.Functio
 const lexFulfillmentLambda = backend.lexFulfillment.resources.lambda as lambda.Function;
 const postCallAnalysisLambda = backend.postCallAnalysis.resources.lambda as lambda.Function;
 const seederLambda = backend.foundationModelSeeder.resources.lambda as lambda.Function;
-const syncKbLambda = backend.syncKnowledgeBase.resources.lambda as lambda.Function; // 1. GET LAMBDA REF
+const syncKbLambda = backend.syncKnowledgeBase.resources.lambda as lambda.Function;
 
 const streamDlq = new sqs.Queue(customStack, 'DynamoStreamDLQ', {
   retentionPeriod: Duration.days(14),
@@ -257,7 +259,6 @@ new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
   }
 });
 
-
 backend.vectorCollectionsS3.resources.bucket.grantReadWrite(processVectorLambda);
 
 backend.vectorCollectionsS3.resources.bucket.addEventNotification(
@@ -276,8 +277,8 @@ syncKbLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableN
 userProfilesTable.grantReadWriteData(syncKbLambda);
 usageRecordsTable.grantReadWriteData(syncKbLambda);
 
-
-const bedrockEventRule = new events.Rule(customStack, 'BedrockIngestionStatusRule', {
+// UPDATED: Assigned to glueStack
+const bedrockEventRule = new events.Rule(glueStack, 'BedrockIngestionStatusRule', {
   eventPattern: {
     source: ['aws.bedrock'],
     detailType: ['Bedrock Knowledge Base Ingestion Job State Change'],
@@ -477,7 +478,8 @@ lexFulfillmentLambda.addPermission('LexInvokePermission', {
   action: 'lambda:InvokeFunction',
 });
 
-const connectCtrRule = new events.Rule(customStack, 'ConnectCtrDisconnectRule', {
+// UPDATED: Assigned to glueStack
+const connectCtrRule = new events.Rule(glueStack, 'ConnectCtrDisconnectRule', {
   eventPattern: {
     source: ['aws.connect'],
     detailType: ['Amazon Connect Contact Event'],
@@ -486,7 +488,8 @@ const connectCtrRule = new events.Rule(customStack, 'ConnectCtrDisconnectRule', 
 });
 connectCtrRule.addTarget(new targets.LambdaFunction(postCallAnalysisLambda));
 
-const modelSeederCustomResource = new cr.AwsCustomResource(customStack, 'FoundationModelSeederResource', {
+// UPDATED: Assigned to glueStack
+const modelSeederCustomResource = new cr.AwsCustomResource(glueStack, 'FoundationModelSeederResource', {
   onCreate: {
     service: 'Lambda',
     action: 'invoke',
