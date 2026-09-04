@@ -36,7 +36,7 @@ export const handler = async (event: any) => {
     } while (LastEvaluatedKey);
 
     for (const model of SEED_MODELS) {
-      const deterministicId = `fm_${model.apiIdentifier.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      const deterministicId = model.apiIdentifier;
 
       const item = {
         id: deterministicId,
