@@ -18,8 +18,9 @@ const iamRBAC = (allow: any) => [
 
 const ModelProviders = [
   'AMAZON', 'ANTHROPIC', 'META', 'GOOGLE', 'OPENAI', 
-  'COHERE', 'MISTRAL', 'STABILITY', 'DEEPSEEK', 
-  'LUMA', 'TWELVELABS', 'NVIDIA'
+  'COHERE', 'MISTRAL', 'STABILITY', 'DEEPSEEK', 'LUMA', 
+  'TWELVELABS', 'NVIDIA', 'AI21', 'MINIMAX', 'MOONSHOT', 
+  'QWEN', 'WRITER', 'XAI', 'ZAI'
 ] as const;
 
 const ModelModality = ['TEXT', 'MULTIMODAL', 'EMBEDDING', 'IMAGE'] as const;

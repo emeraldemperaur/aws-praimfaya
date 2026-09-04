@@ -116,7 +116,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
           // Caliber styling
           let caliberColor = darkMode ? '#374151' : '#e5e7eb';
           let caliberText = darkMode ? '#d1d5db' : '#374151';
-          const caliberVal = (row as any).calibre || 'UNKNOWN';
+          const caliberVal = (row as any).caliber || 'UNKNOWN';
 
           if (caliberVal === 'FAST') {
             caliberColor = darkMode ? '#064e3b' : '#dcfce7';

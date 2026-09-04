@@ -304,7 +304,7 @@ const modelSeederCustomResource = new cr.AwsCustomResource(cdk.Stack.of(seederLa
       FunctionName: seederLambda.functionName,
       InvocationType: 'RequestResponse',
     },
-    physicalResourceId: cr.PhysicalResourceId.of('FoundationModelSeederTrigger'),
+    physicalResourceId: cr.PhysicalResourceId.of(`FoundationModelSeederTrigger_${Date.now()}`),
   },
   onUpdate: {
     service: 'Lambda',

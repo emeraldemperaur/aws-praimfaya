@@ -17,17 +17,23 @@ export const handler = async (event: any) => {
   const now = new Date().toISOString();
 
   try {
-    const existingData = await dynamodb.send(new ScanCommand({ TableName: tableName }));
-    
-    if (existingData.Items && existingData.Items.length > 0) {
-      console.log(`Clearing ${existingData.Items.length} existing records to prevent duplicates...`);
-      for (const item of existingData.Items) {
-        await dynamodb.send(new DeleteCommand({
-          TableName: tableName,
-          Key: { id: item.id }
-        }));
+    let LastEvaluatedKey: Record<string, any> | undefined;
+    do {
+      const scanRes = await dynamodb.send(new ScanCommand({ 
+        TableName: tableName,
+        ExclusiveStartKey: LastEvaluatedKey
+      }));
+      
+      if (scanRes.Items && scanRes.Items.length > 0) {
+        for (const item of scanRes.Items) {
+          await dynamodb.send(new DeleteCommand({
+            TableName: tableName,
+            Key: { id: item.id }
+          }));
+        }
       }
-    }
+      LastEvaluatedKey = scanRes.LastEvaluatedKey;
+    } while (LastEvaluatedKey);
 
     for (const model of SEED_MODELS) {
       const deterministicId = `fm_${model.apiIdentifier.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
@@ -55,7 +61,7 @@ export const handler = async (event: any) => {
       }));
     }
 
-    console.log("Foundation Models seeding completed successfully.");
+    console.log(`Seeding completed. Inserted ${SEED_MODELS.length} models.`);
     return { status: "SUCCESS" };
 
   } catch (error: any) {
