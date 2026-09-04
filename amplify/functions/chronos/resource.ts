@@ -6,6 +6,7 @@ import { defineFunction } from "@aws-amplify/backend";
 export const chronos = defineFunction({
   name: "getChronos",
   entry: "./handler.ts",
+  resourceGroupName: 'data',
   runtime: 24,
   bundling: {
     minify: true

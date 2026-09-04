@@ -4,5 +4,5 @@ export const syncKnowledgeBase = defineFunction({
   name: 'sync-knowledge-base',
   entry: './handler.ts',
   timeoutSeconds: 30,
-  resourceGroupName: 'storage'
+  resourceGroupName: 'data',
 });
