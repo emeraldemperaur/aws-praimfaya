@@ -17,6 +17,13 @@ import n8nIcon from '../assets/n8n-icon-logo.png';
 import zapierIcon from '../assets/zapier-icon-logo.png';
 import makeIcon from '../assets/make-icon-logo.png';
 import pipedreamIcon from '../assets/pipedream-icon.png';
+import miniMaxIcon from '../assets/minimax-icon.png';
+import ai21labsIcon from '../assets/ai21labs-icon.png';
+import moonshotAIIcon from '../assets/moonshotai-icon.png';
+import qwenIcon from '../assets/pipedream-icon.png';
+import spaceXAIIcon from '../assets/spacexai-icon.png';
+import writerIcon from '../assets/writer-icon.png';
+import zaiIcon from '../assets/zai-icon.png';
 
 export const SuccessIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-regular fa-circle-check"></i></a>;
 export const ErrorIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-solid fa-radiation"></i>&nbsp;</a>;
@@ -198,6 +205,34 @@ export const getModelIcon = (identifier?: string | null): string => {
   
   if (normalizedName.includes('gpt') || normalizedName.includes('openai')) {
     return gptIcon;
+  }
+
+  if (normalizedName.includes('ai21labs') || normalizedName.includes('ai21')) {
+    return ai21labsIcon;
+  }
+
+  if (normalizedName.includes('minimax') || normalizedName.includes('minimax.ai')) {
+    return miniMaxIcon;
+  }
+
+  if (normalizedName.includes('moonshot') || normalizedName.includes('moonshot kimi')) {
+    return moonshotAIIcon;
+  }
+
+  if (normalizedName.includes('qwen') || normalizedName.includes('qwen3')) {
+    return qwenIcon;
+  }
+
+  if (normalizedName.includes('XAI') || normalizedName.includes('spacexai')) {
+    return spaceXAIIcon;
+  }
+
+  if (normalizedName.includes('writer') || normalizedName.includes('writer.com')) {
+    return writerIcon;
+  }
+
+  if (normalizedName.includes('zai') || normalizedName.includes('zai.com')) {
+    return zaiIcon;
   }
 
   return cpuIcon;

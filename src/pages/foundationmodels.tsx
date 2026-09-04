@@ -108,45 +108,62 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
         accessor: 'modality',
         sortable: true,
         render: (row) => {
-          // Modality styling
-          let badgeClass = 'info';
-          if (row.modality?.toLocaleLowerCase().includes('amazon')) badgeClass = 'info';
-          if (row.modality?.toLocaleLowerCase().includes('openai')) badgeClass = 'success';
-          
-          // Caliber styling
-          let caliberColor = darkMode ? '#374151' : '#e5e7eb';
-          let caliberText = darkMode ? '#d1d5db' : '#374151';
           const caliberVal = (row as any).caliber || 'UNKNOWN';
+          
+          let caliberBorder = darkMode ? '#4b5563' : '#d1d5db';
+          let caliberText = darkMode ? '#9ca3af' : '#6b7280';
+          let caliberBg = 'transparent';
 
           if (caliberVal === 'FAST') {
-            caliberColor = darkMode ? '#064e3b' : '#dcfce7';
-            caliberText = darkMode ? '#34d399' : '#166534';
+            caliberBorder = darkMode ? '#059669' : '#10b981';
+            caliberText = darkMode ? '#34d399' : '#059669';
+            caliberBg = darkMode ? 'rgba(5, 150, 105, 0.1)' : 'rgba(16, 185, 129, 0.05)';
           } else if (caliberVal === 'MODERATE') {
-            caliberColor = darkMode ? '#713f12' : '#fef08a';
-            caliberText = darkMode ? '#fde047' : '#854d0e';
+            caliberBorder = darkMode ? '#d97706' : '#f59e0b';
+            caliberText = darkMode ? '#fbbf24' : '#d97706';
+            caliberBg = darkMode ? 'rgba(217, 119, 6, 0.1)' : 'rgba(245, 158, 11, 0.05)';
           } else if (caliberVal.includes('HIGH')) {
-            caliberColor = darkMode ? '#1e3a8a' : '#dbeafe';
-            caliberText = darkMode ? '#60a5fa' : '#1d4ed8';
+            caliberBorder = darkMode ? '#2563eb' : '#3b82f6';
+            caliberText = darkMode ? '#60a5fa' : '#2563eb';
+            caliberBg = darkMode ? 'rgba(37, 99, 235, 0.1)' : 'rgba(59, 130, 246, 0.05)';
           } else if (caliberVal.includes('ULTRA')) {
-            caliberColor = darkMode ? '#4c1d95' : '#ede9fe';
-            caliberText = darkMode ? '#a78bfa' : '#6d28d9';
+            caliberBorder = darkMode ? '#7c3aed' : '#8b5cf6';
+            caliberText = darkMode ? '#a78bfa' : '#7c3aed';
+            caliberBg = darkMode ? 'rgba(124, 58, 237, 0.1)' : 'rgba(139, 92, 246, 0.05)';
           }
-  
+
+          const modalityBorder = darkMode ? '#374151' : '#e5e7eb';
+          const modalityText = darkMode ? '#d1d5db' : '#4b5563';
+          const modalityBg = darkMode ? '#1f2937' : '#f9fafb';
+
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-start' }}>
               <span style={{ 
-                padding: '0.15rem 0.5rem', 
-                backgroundColor: caliberColor, 
+                padding: '0.15rem 0.4rem', 
+                backgroundColor: caliberBg, 
+                border: `1px solid ${caliberBorder}`,
                 color: caliberText, 
                 fontSize: '0.65rem', 
-                borderRadius: '999px', 
-                fontWeight: 700,
-                letterSpacing: '0.02em',
+                borderRadius: '3px', 
+                fontWeight: 600,
+                letterSpacing: '0.04em',
                 textTransform: 'uppercase'
               }}>
                 {caliberVal.replace('_', ' ')}
               </span>
-              <span className={`tbl-badge ${badgeClass}`}>{row.modality}</span>
+              <span style={{ 
+                padding: '0.15rem 0.4rem', 
+                backgroundColor: modalityBg, 
+                border: `1px solid ${modalityBorder}`,
+                color: modalityText, 
+                fontSize: '0.65rem', 
+                borderRadius: '3px', 
+                fontWeight: 500,
+                letterSpacing: '0.02em',
+                textTransform: 'uppercase'
+              }}>
+                {row.modality}
+              </span>
             </div>
           );
         }
@@ -194,7 +211,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.25rem', maxWidth: '240px' }}>
                 <p style={{ 
                   margin: 0, fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280', 
-                  lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' 
+                  lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'break-word'
                 }}>
                   {(row as any).description || 'No description available for this model.'}
                 </p>
@@ -202,7 +219,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                   alignSelf: 'flex-start', padding: '0.15rem 0.4rem', 
                   backgroundColor: darkMode ? '#374151' : '#f3f4f6', 
                   color: darkMode ? '#d1d5db' : '#4b5563', 
-                  fontSize: '0.65rem', borderRadius: '4px', fontWeight: 600,
+                  fontSize: '0.65rem', borderRadius: '3px', fontWeight: 600,
                   border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
                   letterSpacing: '0.025em'
                 }}>
