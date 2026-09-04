@@ -19,11 +19,11 @@ import makeIcon from '../assets/make-icon-logo.png';
 import pipedreamIcon from '../assets/pipedream-icon.png';
 import miniMaxIcon from '../assets/minimax-icon.png';
 import ai21labsIcon from '../assets/ai21labs-icon.png';
-import moonshotAIIcon from '../assets/moonshotai-icon.png';
-import qwenIcon from '../assets/pipedream-icon.png';
+import moonshotAIIcon from '../assets/moonshot-icon.png';
+import qwenIcon from '../assets/qwen-icon.png';
 import spaceXAIIcon from '../assets/spacexai-icon.png';
 import writerIcon from '../assets/writer-icon.png';
-import zaiIcon from '../assets/zai-icon.png';
+import zaiIcon from '../assets/z-ai-icon.png';
 
 export const SuccessIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-regular fa-circle-check"></i></a>;
 export const ErrorIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-solid fa-radiation"></i>&nbsp;</a>;
@@ -139,101 +139,37 @@ export const labelStyle = (darkMode: boolean): React.CSSProperties => ({
 export const getModelIcon = (identifier?: string | null): string => {
   if (!identifier) return cpuIcon;
 
-  const normalizedName = identifier.toLowerCase();
+  const id = identifier.toLowerCase();
 
-  if (normalizedName.includes('n8n')) {
-    return n8nIcon;
-  }
-  if (normalizedName.includes('zapier')) {
-    return zapierIcon;
-  }
-  if (normalizedName === 'make' || normalizedName.includes('make.com')) {
-   
-    return makeIcon;
-  }
-  if (normalizedName.includes('pipedream')) {
-    return pipedreamIcon;
-  }
+  if (id.includes('n8n')) return n8nIcon;
+  if (id.includes('zapier')) return zapierIcon;
+  if (id === 'make' || id.includes('make.com')) return makeIcon;
+  if (id.includes('pipedream')) return pipedreamIcon;
 
-  if (normalizedName.includes('titan') || normalizedName.includes('amazon.titan-embed-text-v2:0')) {
-    return bedrockIcon;
-  }
+  if (id.includes('titan')) return bedrockIcon;
+  if (id.includes('nova') || id.includes('amazon')) return novaIcon;
 
-  if (normalizedName.includes('nova') || normalizedName.includes('amazon')) {
-    return novaIcon;
-  }
+  if (id.includes('claude') || id.includes('anthropic')) return claudeIcon;
+  if (id.includes('llama') || id.includes('meta')) return llamaIcon;
+  if (id.includes('gpt') || id.includes('openai')) return gptIcon;
+  if (id.includes('gemma') || id.includes('google')) return gemmaIcon;
 
-  if (normalizedName.includes('mistral') || normalizedName.includes('mistral.large') || normalizedName.includes('mistralai')) {
-    return mistralAIIcon;
-  }
+  if (id.includes('deepseek')) return deepseekIcon;
+  if (id.includes('mistral')) return mistralAIIcon;
+  if (id.includes('cohere')) return cohereAIIcon;
+  if (id.includes('qwen')) return qwenIcon;
 
-  if (normalizedName.includes('cohere') || normalizedName.includes('cohere.ai')) {
-    return cohereAIIcon;
-  }
+  if (id.includes('ai21')) return ai21labsIcon;
+  if (id.includes('minimax')) return miniMaxIcon;
+  if (id.includes('moonshot') || id.includes('kimi')) return moonshotAIIcon;
+  if (id.includes('xai') || id.includes('grok')) return spaceXAIIcon;
+  if (id.includes('writer') || id.includes('palmyra')) return writerIcon;
+  if (id.includes('zai') || id.includes('glm')) return zaiIcon;
 
-  if (normalizedName.includes('stability') || normalizedName.includes('stability.ai') || normalizedName.includes('stability_ai')) {
-    return stabilityAIIcon;
-  }
-
-  if (normalizedName.includes('deepseek') || normalizedName.includes('deepseek.ai')) {
-    return deepseekIcon;
-  }
-
-  if (normalizedName.includes('lumalabs') || normalizedName.includes('luma labs') || normalizedName.includes('luma')) {
-    return lumalabsIcon;
-  }
-
-  if (normalizedName.includes('twelvelabs') || normalizedName.includes('12labs')) {
-    return twelvelabsIcon;
-  }
-
-  if (normalizedName.includes('nvidia') || normalizedName.includes('nemotron')) {
-    return nvidiaIcon;
-  }
-  
-  if (normalizedName.includes('claude') || normalizedName.includes('anthropic')) {
-    return claudeIcon;
-  }
-  
-  if (normalizedName.includes('llama') || normalizedName.includes('meta')) {
-    return llamaIcon;
-  }
-  
-  if (normalizedName.includes('gemma') || normalizedName.includes('google')) {
-    return gemmaIcon;
-  }
-  
-  if (normalizedName.includes('gpt') || normalizedName.includes('openai')) {
-    return gptIcon;
-  }
-
-  if (normalizedName.includes('ai21labs') || normalizedName.includes('ai21')) {
-    return ai21labsIcon;
-  }
-
-  if (normalizedName.includes('minimax') || normalizedName.includes('minimax.ai')) {
-    return miniMaxIcon;
-  }
-
-  if (normalizedName.includes('moonshot') || normalizedName.includes('moonshot kimi')) {
-    return moonshotAIIcon;
-  }
-
-  if (normalizedName.includes('qwen') || normalizedName.includes('qwen3')) {
-    return qwenIcon;
-  }
-
-  if (normalizedName.includes('XAI') || normalizedName.includes('spacexai')) {
-    return spaceXAIIcon;
-  }
-
-  if (normalizedName.includes('writer') || normalizedName.includes('writer.com')) {
-    return writerIcon;
-  }
-
-  if (normalizedName.includes('zai') || normalizedName.includes('zai.com')) {
-    return zaiIcon;
-  }
+  if (id.includes('twelvelabs') || id.includes('12labs')) return twelvelabsIcon;
+  if (id.includes('luma')) return lumalabsIcon;
+  if (id.includes('nvidia') || id.includes('nemotron')) return nvidiaIcon;
+  if (id.includes('stability')) return stabilityAIIcon;
 
   return cpuIcon;
 };

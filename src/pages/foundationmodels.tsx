@@ -211,7 +211,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.25rem', maxWidth: '240px' }}>
                 <p style={{ 
                   margin: 0, fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280', 
-                  lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'break-word'
+                  lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'break-word', textAlign: 'justify'
                 }}>
                   {(row as any).description || 'No description available for this model.'}
                 </p>
