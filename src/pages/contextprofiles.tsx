@@ -190,7 +190,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       width: '45%', 
       render: (row) => {
         const linkedModel = foundationModels.find(fm => fm.id === row.llmModelId);
-        const apiIdentifier = linkedModel?.apiIdentifier || row.foundationModel?.apiIdentifier;
+        const apiIdentifier = linkedModel?.apiIdentifier || row.foundationModel?.apiIdentifier || row.llmModelId;;
         
         return (
           <div className="tbl-cell-user" style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: '300px' }}>
@@ -642,7 +642,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               <div style={{ marginBottom: '1rem' }}>
                 <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Foundation Model</span>
                 <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827', fontWeight: 500 }}>
-                  {viewContextProfile?.foundationModel?.name || foundationModels.find(fm => fm.id === viewContextProfile?.llmModelId)?.name || 'Unknown Model'}
+                  {viewContextProfile?.foundationModel?.name || foundationModels.find(fm => fm.id === viewContextProfile?.llmModelId)?.name || viewContextProfile?.llmModelId || 'Unknown Model'}
                 </span>
               </div>
 
