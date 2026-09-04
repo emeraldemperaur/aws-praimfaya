@@ -42,7 +42,7 @@ export const handler = async (event: any) => {
         contextWindowTokens: model.contextWindowTokens,
         isActive: model.isActive,
         description: model.description,
-        calibre: model.caliber,
+        caliber: model.caliber,
         region: model.region,
         updatedBy: 'SYSTEM_SEEDER',
         createdAt: now,

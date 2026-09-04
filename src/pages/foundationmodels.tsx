@@ -47,7 +47,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
       selectionSet: [
         'id', 'name', 'provider', 'apiIdentifier', 'modality', 
         'contextWindowTokens', 'isActive', 'createdAt', 'updatedAt', 'profiles.*',
-        'calibre', 'description', 'region'
+        'caliber', 'description', 'region'
       ]
     }).subscribe({
       next: (data: any) => {
