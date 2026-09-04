@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { generateClient } from 'aws-amplify/api';
 
-const WatchtowerDashboard = ({ darkMode = false, isAdmin = false, currentUserId = '' }) => {
+const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = '' }) => {
   const client = generateClient() as any;
   const [usageRecords, setUsageRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,20 +34,20 @@ const WatchtowerDashboard = ({ darkMode = false, isAdmin = false, currentUserId 
   const totalTokens = filteredRecords.reduce((sum, rec) => sum + (rec.inputTokens || 0) + (rec.outputTokens || 0), 0);
 
   return (
-    <div style={{ padding: '2rem', marginTop: '7.3rem', minHeight: 'calc(100vh - 7.3rem)', backgroundColor: darkMode ? '#111827' : '#f9fafb', color: darkMode ? '#f9fafb' : '#111827', fontFamily: 'Google Sans Code, monospace' }}>
+    <div style={{ padding: '2rem', marginTop: '7.3rem', minHeight: 'calc(100vh - 7.3rem)', backgroundColor: darkMode ? '#1b1c1d' : '#f9fafb', color: darkMode ? '#f9fafb' : '#111827', fontFamily: 'Google Sans Code, monospace' }}>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingBottom: '1rem' }}>
         <div>
           <h1 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '2rem' }}>Watchtower Metrics</h1>
           <p style={{ margin: 0, fontSize: '0.85rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
-            {isAdmin ? 'System-wide compute usage telemetry and unit economics.' : 'Your personal compute usage and session telemetry.'}
+            {isAdmin ? 'System-wide compute usage telemetry and unit economics.' : 'Compute credit usage and session telemetry.'}
           </p>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         <div style={{ padding: '1.5rem', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px' }}>
-          <div style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Credits Burned (Filtered)</div>
+          <div style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Credits Burned</div>
           <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{totalCreditsBurned.toLocaleString()}</div>
         </div>
         <div style={{ padding: '1.5rem', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px' }}>
@@ -118,4 +118,4 @@ const WatchtowerDashboard = ({ darkMode = false, isAdmin = false, currentUserId 
   );
 };
 
-export default WatchtowerDashboard;
+export default UsageWatchtower;

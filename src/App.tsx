@@ -24,6 +24,8 @@ import UserProfile from './pages/userprofile';
 import TerminalSessionUI from './pages/terminalsession';
 import SystemBootstrap from './components/systembootstrap';
 import AutomationWorkflowsUI from './pages/automationworkflows';
+import RAGArtifactsUI from './pages/ragartifacts';
+import UsageWatchtower from './pages/watchtowerdashboard';
 
 const apiClient = generateClient<Schema>();
 
@@ -94,6 +96,12 @@ function App() {
             }/>
             <Route path='dashboard' element={
               isAuthenticated ? <DashboardUI darkMode={darkMode}/> : <Navigate to="/" replace />
+            }/>
+            <Route path='dashboard/usage-watchtower' element={
+              isAuthenticated ? <UsageWatchtower darkMode={darkMode}/> : <Navigate to="/" replace />
+            }/>
+             <Route path='dashboard/rag-artifacts' element={
+              isAuthenticated ? <RAGArtifactsUI darkMode={darkMode}/> : <Navigate to="/" replace />
             }/>
             <Route path='context-profiles' element={
               isAuthenticated ? <ContextProfilesUI darkMode={darkMode}/> : <Navigate to="/" replace />

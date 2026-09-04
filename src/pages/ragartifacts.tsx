@@ -64,7 +64,7 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       padding: '2rem', 
       marginTop: '7.3rem', 
       minHeight: 'calc(100vh - 7.3rem)', 
-      backgroundColor: darkMode ? '#111827' : '#f9fafb',
+      backgroundColor: darkMode ? '#1b1c1d' : '#f9fafb',
       color: darkMode ? '#f9fafb' : '#111827',
       fontFamily: 'Google Sans Code, monospace'
     }}>

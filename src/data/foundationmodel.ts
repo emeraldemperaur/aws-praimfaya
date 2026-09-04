@@ -22,6 +22,9 @@ export interface FoundationModel {
   apiIdentifier: string;
   modality?: ModelModality | null;
   contextWindowTokens?: number | null;
+  description?: string;
+  caliber?: string;
+  region?: string;
   isActive?: boolean | null;
   profiles?: ContextProfile[]; 
   createdAt?: string;
@@ -35,6 +38,9 @@ export interface UIFoundationModel {
   apiIdentifier: string;
   modality: string;
   contextWindowTokens?: number | null;
+  description?: string;
+  caliber?: string;
+  region?: string;
   isActive?: boolean | null;
   createdAt?: string;
   updatedAt?: string;

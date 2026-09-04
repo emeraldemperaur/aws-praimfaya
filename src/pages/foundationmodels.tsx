@@ -46,7 +46,8 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
     const sub = foundationModelsClient.observeQuery({
       selectionSet: [
         'id', 'name', 'provider', 'apiIdentifier', 'modality', 
-        'contextWindowTokens', 'isActive', 'createdAt', 'updatedAt', 'profiles.*'
+        'contextWindowTokens', 'isActive', 'createdAt', 'updatedAt', 'profiles.*',
+        'calibre', 'description', 'region'
       ]
     }).subscribe({
       next: (data: any) => {
@@ -103,49 +104,112 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
         )
       },
       {
-        header: 'Modality',
+        header: 'Axioms',
         accessor: 'modality',
         sortable: true,
         render: (row) => {
+          // Modality styling
           let badgeClass = 'info';
           if (row.modality?.toLocaleLowerCase().includes('amazon')) badgeClass = 'info';
           if (row.modality?.toLocaleLowerCase().includes('openai')) badgeClass = 'success';
+          
+          // Caliber styling
+          let caliberColor = darkMode ? '#374151' : '#e5e7eb';
+          let caliberText = darkMode ? '#d1d5db' : '#374151';
+          const caliberVal = (row as any).calibre || 'UNKNOWN';
+
+          if (caliberVal === 'FAST') {
+            caliberColor = darkMode ? '#064e3b' : '#dcfce7';
+            caliberText = darkMode ? '#34d399' : '#166534';
+          } else if (caliberVal === 'MODERATE') {
+            caliberColor = darkMode ? '#713f12' : '#fef08a';
+            caliberText = darkMode ? '#fde047' : '#854d0e';
+          } else if (caliberVal.includes('HIGH')) {
+            caliberColor = darkMode ? '#1e3a8a' : '#dbeafe';
+            caliberText = darkMode ? '#60a5fa' : '#1d4ed8';
+          } else if (caliberVal.includes('ULTRA')) {
+            caliberColor = darkMode ? '#4c1d95' : '#ede9fe';
+            caliberText = darkMode ? '#a78bfa' : '#6d28d9';
+          }
   
-          return <span className={`tbl-badge ${badgeClass}`}>{row.modality}</span>;
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-start' }}>
+              <span style={{ 
+                padding: '0.15rem 0.5rem', 
+                backgroundColor: caliberColor, 
+                color: caliberText, 
+                fontSize: '0.65rem', 
+                borderRadius: '999px', 
+                fontWeight: 700,
+                letterSpacing: '0.02em',
+                textTransform: 'uppercase'
+              }}>
+                {caliberVal.replace('_', ' ')}
+              </span>
+              <span className={`tbl-badge ${badgeClass}`}>{row.modality}</span>
+            </div>
+          );
         }
       },
       {
         header: 'Actions',
         accessor: 'actions',
         render: (row) => (
-          <div className="tbl-action-group">
-            <button 
-              className="tbl-action-btn view-btn" 
-              onClick={() => {
-                setViewFoundationModel(row);
-                setIsViewModalOpen(true);
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div className="tbl-action-group">
+              <button 
+                className="tbl-action-btn view-btn" 
+                onClick={() => {
+                  setViewFoundationModel(row);
+                  setIsViewModalOpen(true);
+                }}
+              >
+                Inspect
+              </button>
+              
+              {isAdmin && (
+                <button 
+                  className="tbl-action-btn edit-btn" 
+                  onClick={() => {
+                    setEditFoundationModel(row);
+                    setIsEditModalOpen(true);
+                  }}
+                >
+                  Modify
+                </button>
+              )}
+              
+              <button 
+                className="tbl-action-btn delete-btn" 
+                onClick={() => {
+                setDisableFoundationModel(row);
+                setIsDeleteModalOpen(true);
               }}
-            >
-              Inspect
-            </button>
-            <button 
-              className="tbl-action-btn edit-btn" 
-              onClick={() => {
-                setEditFoundationModel(row);
-                setIsEditModalOpen(true);
-              }}
-            >
-              Modify
-            </button>
-            <button 
-              className="tbl-action-btn delete-btn" 
-              onClick={() => {
-              setDisableFoundationModel(row);
-              setIsDeleteModalOpen(true);
-            }}
-            >
-              {row.isActive ? <a>Disable</a> : <a>Enable</a>}
-            </button>
+              >
+                {row.isActive ? <a>Disable</a> : <a>Enable</a>}
+              </button>
+            </div>
+
+            {!isAdmin && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.25rem', maxWidth: '240px' }}>
+                <p style={{ 
+                  margin: 0, fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280', 
+                  lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' 
+                }}>
+                  {(row as any).description || 'No description available for this model.'}
+                </p>
+                <span style={{ 
+                  alignSelf: 'flex-start', padding: '0.15rem 0.4rem', 
+                  backgroundColor: darkMode ? '#374151' : '#f3f4f6', 
+                  color: darkMode ? '#d1d5db' : '#4b5563', 
+                  fontSize: '0.65rem', borderRadius: '4px', fontWeight: 600,
+                  border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                  letterSpacing: '0.025em'
+                }}>
+                  {(row as any).region || 'GLOBAL'}
+                </span>
+              </div>
+            )}
           </div>
         )
       }
@@ -507,6 +571,13 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                 <option value="LUMA">Luma AI</option>
                 <option value="TWELVELABS">TwelveLabs</option>
                 <option value="NVIDIA">Nvidia</option>
+                <option value="AI21">AI21</option>
+                <option value="MINIMAX">MiniMax</option>
+                <option value="MOONSHOT">Moonshot AI</option>
+                <option value="QWEN">Qwen</option>
+                <option value="WRITER">Writer</option>
+                <option value="XAI">xAI</option>
+                <option value="ZAI">Z AI (Zhipu)</option>
               </select>
             </div>
 
