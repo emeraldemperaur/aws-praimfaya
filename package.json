@@ -47,7 +47,7 @@
     "@types/aws-lambda": "^8.10.161",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/mime-types": "^3.0.1",
-    "@types/node": "^24.13.2",
+    "@types/node": "^24.13.3",
     "@types/pdf-parse": "^1.1.5",
     "@types/q": "^1.5.8",
     "@types/qs": "^6.15.1",
