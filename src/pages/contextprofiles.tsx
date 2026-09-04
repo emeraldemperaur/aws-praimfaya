@@ -8,7 +8,7 @@ import DataTable from "../components/datatable";
 import BottomRightModal from "../components/bottomrightmodal";
 import ExtraLargeModal from "../components/extralargemodal";
 import FullScreenModal from "../components/fullscreenmodal";
-import { getModelIcon, MODEL_FAMILY_DESCRIPTIONS, ROLE_DESCRIPTIONS } from "../utils/voltaire";
+import { getModelIcon, MODEL_FAMILY_DESCRIPTIONS, ROLE_DESCRIPTIONS, getUiModality } from "../utils/voltaire";
 import type { UIContextProfile } from "../data/contextprofile";
 import { getUserEmail } from "../utils/asimov";
 
@@ -66,17 +66,23 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   }, [darkMode, contextProfiles.length]);
 
   useEffect(() => {
-    const fmSub = client.models.FoundationModel.observeQuery().subscribe({
+    const fmSub = client.models.FoundationModel.observeQuery({
+      selectionSet: ['id', 'name', 'apiIdentifier', 'provider', 'modality', 'isActive', 'caliber', 'region']
+    }).subscribe({
       next: (data: any) => setFoundationModels(data.items.filter((m: any) => m.isActive)),
       error: (err: any) => console.error("Error fetching models:", err)
     });
 
-    const vcSub = client.models.VectorCollection.observeQuery().subscribe({
+    const vcSub = client.models.VectorCollection.observeQuery({
+      selectionSet: ['id', 'name']
+    }).subscribe({
       next: (data: any) => setVectorCollections(data.items),
       error: (err: any) => console.error("Error fetching collections:", err)
     });
 
-    const wfSub = client.models.ContextWorkflow.observeQuery().subscribe({
+    const wfSub = client.models.ContextWorkflow.observeQuery({
+      selectionSet: ['id', 'name', 'archived']
+    }).subscribe({
       next: (data: any) => setWorkflows(data.items.filter((w: any) => !w.archived)),
       error: (err: any) => console.error("Error fetching workflows:", err)
     });
@@ -97,8 +103,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         'role', 'enableCodeInterpreter', 'enableWebSearch', 'supervisorId',
         'enableMitoMcp', 'enableApotheosisMcp', 'customMcpUrl', 
         'provisioningStatus', 'awsAgentId', 'awsAliasId', 'subagentEavesdrop',
-        'vectorCollection.*',
-        'foundationModel.*',
+        'vectorCollection.id', 'vectorCollection.name',
+        'foundationModel.id', 'foundationModel.name', 'foundationModel.apiIdentifier', 'foundationModel.modality',
         'terminals.*',
         'workflows.*',
         'collaborators.*'
@@ -185,6 +191,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       render: (row) => {
         const linkedModel = foundationModels.find(fm => fm.id === row.llmModelId);
         const apiIdentifier = linkedModel?.apiIdentifier || row.foundationModel?.apiIdentifier;
+        const modality = linkedModel?.modality || row.foundationModel?.modality; // FIX: Extract model modality securely
+        
         return (
           <div className="tbl-cell-user" style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: '300px' }}>
             <img src={getModelIcon(apiIdentifier)} alt={row.name} style={{ flexShrink: 0 }} />
@@ -240,7 +248,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                   width: '100%' 
                 }}
               >
-                {row.description || 'No description provided'}
+                {getUiModality(modality)}
               </span>
             </div>
           </div>
@@ -635,7 +643,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               <div style={{ marginBottom: '1rem' }}>
                 <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Foundation Model</span>
                 <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827', fontWeight: 500 }}>
-                  {viewContextProfile?.foundationModel?.name || 'Unknown Model'}
+                  {viewContextProfile?.foundationModel?.name || foundationModels.find(fm => fm.id === viewContextProfile?.llmModelId)?.name || 'Unknown Model'}
                 </span>
               </div>
 

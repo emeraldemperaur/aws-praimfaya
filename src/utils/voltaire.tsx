@@ -18,12 +18,12 @@ import zapierIcon from '../assets/zapier-icon-logo.png';
 import makeIcon from '../assets/make-icon-logo.png';
 import pipedreamIcon from '../assets/pipedream-icon.png';
 import miniMaxIcon from '../assets/minimax-icon.png';
-import ai21labsIcon from '../assets/ai21labs-icon.png';
+import ai21labsIcon from '../assets/ai21-labs-icon.png';
 import moonshotAIIcon from '../assets/moonshot-icon.png';
 import qwenIcon from '../assets/qwen-icon.png';
-import spaceXAIIcon from '../assets/spacexai-icon.png';
+import spaceXAIIcon from '../assets/grok-icon.png';
 import writerIcon from '../assets/writer-icon.png';
-import zaiIcon from '../assets/z-ai-icon.png';
+import zaiIcon from '../assets/zai-icon.png';
 
 export const SuccessIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-regular fa-circle-check"></i></a>;
 export const ErrorIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-solid fa-radiation"></i>&nbsp;</a>;
