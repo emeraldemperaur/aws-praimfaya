@@ -8,7 +8,7 @@ import DataTable from "../components/datatable";
 import BottomRightModal from "../components/bottomrightmodal";
 import ExtraLargeModal from "../components/extralargemodal";
 import FullScreenModal from "../components/fullscreenmodal";
-import { getModelIcon, MODEL_FAMILY_DESCRIPTIONS, ROLE_DESCRIPTIONS, getUiModality } from "../utils/voltaire";
+import { getModelIcon, MODEL_FAMILY_DESCRIPTIONS, ROLE_DESCRIPTIONS } from "../utils/voltaire";
 import type { UIContextProfile } from "../data/contextprofile";
 import { getUserEmail } from "../utils/asimov";
 
@@ -191,7 +191,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       render: (row) => {
         const linkedModel = foundationModels.find(fm => fm.id === row.llmModelId);
         const apiIdentifier = linkedModel?.apiIdentifier || row.foundationModel?.apiIdentifier;
-        const modality = linkedModel?.modality || row.foundationModel?.modality; // FIX: Extract model modality securely
         
         return (
           <div className="tbl-cell-user" style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: '300px' }}>
@@ -248,7 +247,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                   width: '100%' 
                 }}
               >
-                {getUiModality(modality)}
+                {row.description || 'No description provided'}
               </span>
             </div>
           </div>
