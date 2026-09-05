@@ -786,10 +786,10 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}>
-            {isTargetModelActiveForUser ? 'Disabling' : 'Enabling'} Foundation Model: <strong>{disableFoundationModel?.name}</strong> for your account. 
+            {isTargetModelActiveForUser ? 'Disabling' : 'Enabling'} Foundation Model: <strong>{disableFoundationModel?.name}</strong>. 
           </p>
           <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}> 
-            This will {isTargetModelActiveForUser ? 'prevent' : 'allow'} it {isTargetModelActiveForUser ? 'from being used' : 'to be used'} in your Context Profiles and personal API calls.
+            This will {isTargetModelActiveForUser ? 'prevent' : 'allow'} it {isTargetModelActiveForUser ? 'from being used' : 'to be used'} in your Context Profiles.
           </p>
           <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}> 
             Are you sure you want to proceed? 
