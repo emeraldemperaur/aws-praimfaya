@@ -13,69 +13,66 @@ export const handler = async (event: any) => {
     return { status: "FAILED", reason: "Missing table name" };
   }
 
-  console.log(`Starting Smart Foundation Models seed for table: ${tableName}`);
-  const now = new Date().toISOString();
+  console.log(`Executing UNCONDITIONAL PURGE & RESEED for table: ${tableName}`);
 
   try {
-    const existingItems: any[] = [];
     let LastEvaluatedKey: Record<string, any> | undefined;
+    let deletedCount = 0;
+
     do {
       const scanRes = await dynamodb.send(new ScanCommand({ 
         TableName: tableName,
         ExclusiveStartKey: LastEvaluatedKey
       }));
-      if (scanRes.Items) {
-        existingItems.push(...scanRes.Items);
+
+      if (scanRes.Items && scanRes.Items.length > 0) {
+        const deletePromises = scanRes.Items.map(item => 
+          dynamodb.send(new DeleteCommand({
+            TableName: tableName,
+            Key: { id: item.id }
+          }))
+        );
+        await Promise.all(deletePromises);
+        deletedCount += scanRes.Items.length;
       }
       LastEvaluatedKey = scanRes.LastEvaluatedKey;
     } while (LastEvaluatedKey);
-    const validSeedIds = SEED_MODELS.map(m => m.apiIdentifier);
-    const itemsToDelete = existingItems.filter(item => !validSeedIds.includes(item.id));
-    
-    if (itemsToDelete.length > 0) {
-      console.log(`Cleaning up ${itemsToDelete.length} obsolete/duplicate models...`);
-      for (const item of itemsToDelete) {
-        await dynamodb.send(new DeleteCommand({
-          TableName: tableName,
-          Key: { id: item.id }
-        }));
-      }
-    }
 
-    for (const model of SEED_MODELS) {
-      const deterministicId = model.apiIdentifier;
-      const existingRecord = existingItems.find(i => i.id === deterministicId);
+    console.log(`Successfully purged ${deletedCount} ghost records from DynamoDB.`);
+
+    const now = new Date().toISOString();
+    
+    const putPromises = SEED_MODELS.map(model => {
       const item = {
-        id: deterministicId,
+        id: model.apiIdentifier,
         __typename: 'FoundationModel',
         name: model.name,
         apiIdentifier: model.apiIdentifier,
         provider: model.provider,
         modality: model.modality,
         contextWindowTokens: model.contextWindowTokens,
-        isActive: existingRecord && existingRecord.isActive !== undefined 
-            ? existingRecord.isActive 
-            : model.isActive,
-            
+        isActive: model.isActive,
         description: model.description,
         caliber: model.caliber,
         region: model.region,
-        updatedBy: existingRecord ? existingRecord.updatedBy : 'SYSTEM_SEEDER',
-        createdAt: existingRecord ? existingRecord.createdAt : now,
+        updatedBy: 'SYSTEM_SEEDER',
+        createdAt: now,
         updatedAt: now,
       };
 
-      await dynamodb.send(new PutCommand({
+      return dynamodb.send(new PutCommand({
         TableName: tableName,
         Item: item,
       }));
-    }
+    });
 
-    console.log(`Smart Seeding completed. Upserted ${SEED_MODELS.length} models.`);
+    await Promise.all(putPromises);
+    console.log(`Seeding completed. Inserted ${SEED_MODELS.length} deduplicated models.`);
+    
     return { status: "SUCCESS" };
 
   } catch (error: any) {
-    console.error("Failed during seeding process:", error);
+    console.error("Fatal failure during seeding process:", error);
     return { status: "FAILED", reason: error.message };
   }
 };

@@ -299,6 +299,8 @@ const connectCtrRule = new events.Rule(cdk.Stack.of(postCallAnalysisLambda), 'Co
 });
 connectCtrRule.addTarget(new targets.LambdaFunction(postCallAnalysisLambda));
 
+const deployTime = Date.now().toString();
+
 const modelSeederCustomResource = new cr.AwsCustomResource(cdk.Stack.of(seederLambda), 'FoundationModelSeederResource', {
   onCreate: {
     service: 'Lambda',
@@ -306,6 +308,7 @@ const modelSeederCustomResource = new cr.AwsCustomResource(cdk.Stack.of(seederLa
     parameters: {
       FunctionName: seederLambda.functionName,
       InvocationType: 'RequestResponse',
+      Payload: JSON.stringify({ triggerTimestamp: deployTime })
     },
     physicalResourceId: cr.PhysicalResourceId.of('FoundationModelSeederTrigger_v1'),
   },
@@ -315,6 +318,7 @@ const modelSeederCustomResource = new cr.AwsCustomResource(cdk.Stack.of(seederLa
     parameters: {
       FunctionName: seederLambda.functionName,
       InvocationType: 'RequestResponse',
+      Payload: JSON.stringify({ triggerTimestamp: deployTime })
     },
     physicalResourceId: cr.PhysicalResourceId.of('FoundationModelSeederTrigger_v1'), 
   },
