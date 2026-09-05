@@ -217,6 +217,7 @@ const schema = a.schema({
       currentPeriodEnd: a.datetime(),
       computeCredits: a.integer().default(0), 
       maxCredits: a.integer().default(0),
+      disabledModelIds: a.string().array(),
     })
     .authorization(iamRBAC),
 

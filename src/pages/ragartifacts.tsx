@@ -63,17 +63,18 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     <div style={{ 
       padding: '2rem', 
       marginTop: '7.3rem', 
-      minHeight: 'calc(100vh - 7.3rem)', 
+      minHeight: 'calc(100vh - 7.3rem)',
+      boxSizing: 'border-box',
       backgroundColor: darkMode ? '#1b1c1d' : '#f9fafb',
-      color: darkMode ? '#f9fafb' : '#111827',
+      color: darkMode ? '#f9fafb' : '#0b0b45',
       fontFamily: 'Google Sans Code, monospace'
     }}>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingBottom: '1rem' }}>
         <div>
           <h1 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '2rem' }}>RAG Artifacts</h1>
-          <p style={{ margin: 0, fontSize: '0.85rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
-            Generated media, documents, and assets across all Vanguard Terminal sessions.
+          <p style={{ margin: 0, fontSize: '0.85rem', color: darkMode ? '#9ca3af' : '#6b7280', fontFamily: 'Bodoni Moda Variable' }}>
+            Generated media, documents, and assets across all Console Terminal sessions.
           </p>
         </div>
         
@@ -108,9 +109,17 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '4rem', opacity: 0.5 }}>Loading artifacts...</div>
+        <div style={{ textAlign: 'center', padding: '4rem', opacity: 0.5, fontFamily: 'Bodoni Moda Variable' }}>Loading artifacts...</div>
+      ) : artifacts.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '4rem', color: darkMode ? '#9ca3af' : '#6b7280', fontFamily: 'Bodoni Moda Variable' }}>
+          <i className="fa-solid fa-box-open" style={{ fontSize: '2rem', marginBottom: '1rem', opacity: 0.3, display: 'block' }}></i>
+          No session artifacts found.
+        </div>
       ) : filteredArtifacts.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '4rem', opacity: 0.5 }}>No artifacts found matching your criteria.</div>
+        <div style={{ textAlign: 'center', padding: '4rem', color: darkMode ? '#9ca3af' : '#6b7280', fontFamily: 'Bodoni Moda Variable' }}>
+          <i className="fa-solid fa-filter-circle-xmark" style={{ fontSize: '2rem', marginBottom: '1rem', opacity: 0.3, display: 'block' }}></i>
+          No artifacts found matching your criteria.
+        </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
           {filteredArtifacts.map((art) => (
@@ -125,7 +134,7 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
             >
               
               <div style={{ height: '180px', backgroundColor: darkMode ? '#111827' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, position: 'relative' }}>
-                <span style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', backgroundColor: 'rgba(0,0,0,0.6)', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 'bold' }}>
+                <span style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', backgroundColor: 'rgba(0,0,0,0.6)', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 'bold', zIndex: 10 }}>
                   <i className={`fa-solid ${getIconForType(art.fileType)}`}></i> {art.fileType}
                 </span>
 

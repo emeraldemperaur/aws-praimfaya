@@ -8,38 +8,62 @@ import ExtraLargeModal from "../components/extralargemodal";
 import { getModelIcon, getUiModality } from "../utils/voltaire";
 import { generateClient } from "aws-amplify/api";
 import type { UIFoundationModel } from "../data/foundationmodel";
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
 import { getUserEmail } from "../utils/asimov";
 
 const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
+  const client = generateClient() as any;
+  const foundationModelsClient = client.models.FoundationModel;
+  
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  
   const [viewFoundationModel, setViewFoundationModel] = useState<UIFoundationModel | null>(null);
   const [editFoundationModel, setEditFoundationModel] = useState<UIFoundationModel | null>(null);
   const [editFoundationModelData, setEditFoundationModelData] = useState<Partial<UIFoundationModel>>({});
   const [disableFoundationModel, setDisableFoundationModel] = useState<UIFoundationModel | null>(null);
-  const foundationModelsClient = (generateClient() as any).models.FoundationModel;
+  
   const [foundationModels, setFoundationModels] = useState<UIFoundationModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+
+  // User Profile State for Personal Model Toggles
+  const [userProfileId, setUserProfileId] = useState<string | null>(null);
+  const [disabledModelIds, setDisabledModelIds] = useState<string[]>([]);
 
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
   }, [darkMode, foundationModels.length]);
 
   useEffect(() => {
-    const checkPermissions = async () => {
+    const checkPermissionsAndProfile = async () => {
       try {
         const session = await fetchAuthSession();
         const groups = session.tokens?.accessToken?.payload['cognito:groups'] as string[] || [];
         const isUserAdmin = groups.some(group => ['superadmin', 'root', 'admin', 'heda'].includes(group.toLowerCase()));
         setIsAdmin(isUserAdmin);
+
+        const { userId } = await getCurrentUser();
+        
+        const profileSub = client.models.UserProfile.observeQuery({
+          filter: { cognitoUserId: { eq: userId } }
+        }).subscribe({
+          next: (data: any) => {
+            if (data.items.length > 0) {
+              setUserProfileId(data.items[0].id);
+              setDisabledModelIds(data.items[0].disabledModelIds || []);
+            }
+          },
+          error: (err: any) => console.error("Error fetching user profile:", err)
+        });
+
+        return () => profileSub.unsubscribe();
       } catch (err) {
         console.error("Failed to fetch user session", err);
       }
     };
-    checkPermissions();
+    checkPermissionsAndProfile();
   }, []);
 
   useEffect(() => {
@@ -171,64 +195,68 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
       {
         header: 'Actions',
         accessor: 'actions',
-        render: (row) => (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <div className="tbl-action-group">
-              <button 
-                className="tbl-action-btn view-btn" 
-                onClick={() => {
-                  setViewFoundationModel(row);
-                  setIsViewModalOpen(true);
-                }}
-              >
-                Inspect
-              </button>
-              
-              {isAdmin && (
+        render: (row) => {
+          const isUserActive = row.id ? !disabledModelIds.includes(row.id) : false;
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div className="tbl-action-group">
                 <button 
-                  className="tbl-action-btn edit-btn" 
+                  className="tbl-action-btn view-btn" 
                   onClick={() => {
-                    setEditFoundationModel(row);
-                    setIsEditModalOpen(true);
+                    setViewFoundationModel(row);
+                    setIsViewModalOpen(true);
                   }}
                 >
-                  Modify
+                  Inspect
                 </button>
-              )}
-              
-              <button 
-                className="tbl-action-btn delete-btn" 
-                onClick={() => {
-                setDisableFoundationModel(row);
-                setIsDeleteModalOpen(true);
-              }}
-              >
-                {row.isActive ? <a>Disable</a> : <a>Enable</a>}
-              </button>
-            </div>
-
-            {!isAdmin && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.25rem', maxWidth: '240px' }}>
-                <p style={{ 
-                  margin: 0, fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280', 
-                  lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'break-word', textAlign: 'justify'
-                }}>
-                  {(row as any).description || 'No description available for this model.'}
-                </p>
-                <span style={{ 
-                  alignSelf: 'flex-start', padding: '0.15rem 0.4rem', 
-                  backgroundColor: darkMode ? '#374151' : '#f3f4f6', 
-                  color: darkMode ? '#d1d5db' : '#4b5563', 
-                  fontSize: '0.65rem', borderRadius: '3px', fontWeight: 600,
-                  border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
-                  letterSpacing: '0.025em'
-                }}>
-                  {(row as any).region || 'GLOBAL'}
-                </span>
+                
+                {isAdmin && (
+                  <button 
+                    className="tbl-action-btn edit-btn" 
+                    onClick={() => {
+                      setEditFoundationModel(row);
+                      setIsEditModalOpen(true);
+                    }}
+                  >
+                    Modify
+                  </button>
+                )}
+                
+                <button 
+                  className="tbl-action-btn delete-btn" 
+                  onClick={() => {
+                  setDisableFoundationModel(row);
+                  setIsDeleteModalOpen(true);
+                }}
+                >
+                  {isUserActive ? <a>Disable</a> : <a>Enable</a>}
+                </button>
               </div>
-            )}
-          </div>
-        )
+
+              {!isAdmin && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.25rem', maxWidth: '240px' }}>
+                  <p style={{ 
+                    margin: 0, fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280', 
+                    lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'break-word', textAlign: 'justify'
+                  }}>
+                    {(row as any).description || 'No description available for this model.'}
+                  </p>
+                  <span style={{ 
+                    alignSelf: 'flex-start', padding: '0.15rem 0.4rem', 
+                    backgroundColor: darkMode ? '#374151' : '#f3f4f6', 
+                    color: darkMode ? '#d1d5db' : '#4b5563', 
+                    fontSize: '0.65rem', borderRadius: '3px', fontWeight: 600,
+                    border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    letterSpacing: '0.025em'
+                  }}>
+                    {(row as any).region || 'GLOBAL'}
+                  </span>
+                </div>
+              )}
+            </div>
+          )
+        }
       }
     ];
   
@@ -272,21 +300,26 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
   };
 
   const handleDisableFoundationModel = async () => {
-    if (!disableFoundationModel?.id) return;
+    if (!disableFoundationModel?.id || !userProfileId) return;
+    
     try {
-      const { data: updatedModel, errors } = await foundationModelsClient.update({
-        id: disableFoundationModel.id,
-        isActive: !disableFoundationModel.isActive,
-        updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User'
+      const isCurrentlyDisabled = disabledModelIds.includes(disableFoundationModel.id);
+      
+      const updatedDisabledIds = isCurrentlyDisabled
+        ? disabledModelIds.filter(id => id !== disableFoundationModel.id)
+        : [...disabledModelIds, disableFoundationModel.id];
+
+      const { errors } = await client.models.UserProfile.update({
+        id: userProfileId,
+        disabledModelIds: updatedDisabledIds
       });
+      
       if (errors) throw new Error(errors[0].message);
-      setFoundationModels(prev => prev.map(item => 
-        item.id === updatedModel.id ? { ...item, ...updatedModel } : item
-      ));
+      
       setDisableFoundationModel(null);
       setIsDeleteModalOpen(false);
     } catch (error) {
-      console.error("Failed to toggle Foundation Model status:", error);
+      console.error("Failed to toggle Foundation Model status for user:", error);
     }
   };  
 
@@ -310,6 +343,9 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
     display: 'block', marginBottom: '0.5rem', fontWeight: 500,
     fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151'
   };
+
+  const isModelActiveForUser = viewFoundationModel?.id ? !disabledModelIds.includes(viewFoundationModel.id) : false;
+  const isTargetModelActiveForUser = disableFoundationModel?.id ? !disabledModelIds.includes(disableFoundationModel.id) : false;
 
   return (
     <>
@@ -362,7 +398,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                 <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem' }}>
                   {viewFoundationModel?.name}
                 </h3>
-                {viewFoundationModel?.isActive ? (
+                {isModelActiveForUser ? (
                   <span style={{ padding: '0.15rem 0.5rem', backgroundColor: darkMode ? '#064e3b' : '#dcfce7', color: darkMode ? '#34d399' : '#166534', fontSize: '0.7rem', borderRadius: '999px', fontWeight: 600 }}>ACTIVE</span>
                 ) : (
                   <span style={{ padding: '0.15rem 0.5rem', backgroundColor: darkMode ? '#7f1d1d' : '#fee2e2', color: darkMode ? '#f87171' : '#991b1b', fontSize: '0.7rem', borderRadius: '999px', fontWeight: 600 }}>INACTIVE</span>
@@ -529,10 +565,10 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                 />
                 <div>
                   <span style={{ display: 'block', fontWeight: 500, color: darkMode ? '#f9fafb' : '#111827' }}>
-                    Model is Active
+                    Model is Active Globally
                   </span>
                   <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
-                    Unchecking this disables the model across all Context Profiles.
+                    Unchecking this disables the model platform-wide for all users.
                   </span>
                 </div>
               </label>
@@ -666,7 +702,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
         icon={<i className="bx bx-power-off" />}
-        title={`${disableFoundationModel?.isActive ? 'Disable' : 'Enable'} Foundation Model`}
+        title={`${isTargetModelActiveForUser ? 'Disable' : 'Enable'} Foundation Model`}
         darkMode={darkMode}
         
         footer={
@@ -696,10 +732,10 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}>
-            {disableFoundationModel?.isActive ? 'Disabling' : 'Enabling'} Foundation Model: <strong>{disableFoundationModel?.name}</strong> 
+            {isTargetModelActiveForUser ? 'Disabling' : 'Enabling'} Foundation Model: <strong>{disableFoundationModel?.name}</strong> for your account. 
           </p>
           <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}> 
-            This will {disableFoundationModel?.isActive ? 'prevent' : 'allow'} it {disableFoundationModel?.isActive ? 'from being used' : 'to be used'} in Context Profiles and any associated API calls.
+            This will {isTargetModelActiveForUser ? 'prevent' : 'allow'} it {isTargetModelActiveForUser ? 'from being used' : 'to be used'} in your Context Profiles and personal API calls.
           </p>
           <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}> 
             Are you sure you want to proceed? 

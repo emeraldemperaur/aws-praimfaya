@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { generateClient } from 'aws-amplify/api';
+import SearchRibbon from '../components/searchribbon'; // <-- 1. Import the standardized component
 
 const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = '' }) => {
   const client = generateClient() as any;
@@ -33,8 +34,23 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
   const totalCreditsBurned = filteredRecords.reduce((sum, rec) => sum + (rec.creditsUsed || 0), 0);
   const totalTokens = filteredRecords.reduce((sum, rec) => sum + (rec.inputTokens || 0) + (rec.outputTokens || 0), 0);
 
+  // 2. Define the dropdown options for the SearchRibbon
+  const filterOptions = [
+    { label: 'All Actions', value: 'ALL' },
+    { label: 'LLM Chat / Inference', value: 'LLM_INFERENCE' },
+    { label: 'Agentic Tools / Media', value: 'TOOL_EXECUTION' }
+  ];
+
   return (
-    <div style={{ padding: '2rem', marginTop: '7.3rem', minHeight: 'calc(100vh - 7.3rem)', backgroundColor: darkMode ? '#1b1c1d' : '#f9fafb', color: darkMode ? '#f9fafb' : '#111827', fontFamily: 'Google Sans Code, monospace' }}>
+    <div style={{ 
+      padding: '2rem', 
+      marginTop: '7.3rem', 
+      minHeight: 'calc(100vh - 7.3rem)', 
+      boxSizing: 'border-box',
+      backgroundColor: darkMode ? '#1b1c1d' : '#f9fafb', 
+      color: darkMode ? '#f9fafb' : '#0b0b45', 
+      fontFamily: 'Google Sans Code, monospace' 
+    }}>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingBottom: '1rem' }}>
         <div>
@@ -56,27 +72,22 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-        <input 
-          type="text" 
-          placeholder="Filter by Session ID or Title..." 
-          value={sessionFilter}
-          onChange={(e) => setSessionFilter(e.target.value)}
-          style={{ padding: '0.5rem 1rem', borderRadius: '4px', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, color: darkMode ? '#f9fafb' : '#111827' }}
+      {/* 3. Drop in the unified SearchRibbon component */}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <SearchRibbon 
+          darkMode={darkMode}
+          recordCount={filteredRecords.length}
+          recordLabel="Telemetry Records"
+          searchTerm={sessionFilter}
+          onSearchChange={setSessionFilter}
+          selectedFilter={actionFilter}
+          onFilterChange={setActionFilter}
+          filterOptions={filterOptions}
         />
-        <select 
-          value={actionFilter} 
-          onChange={(e) => setActionFilter(e.target.value)}
-          style={{ padding: '0.5rem 1rem', borderRadius: '4px', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, color: darkMode ? '#f9fafb' : '#111827' }}
-        >
-          <option value="ALL">All Actions</option>
-          <option value="LLM_INFERENCE">LLM Chat / Inference</option>
-          <option value="TOOL_EXECUTION">Agentic Tools / Media</option>
-        </select>
       </div>
 
       <div style={{ backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', fontFamily: 'Bodoni Moda Variable' }}>
           <thead>
             <tr style={{ backgroundColor: darkMode ? '#111827' : '#f3f4f6', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, textAlign: 'left' }}>
               <th style={{ padding: '1rem' }}>Date</th>
@@ -89,7 +100,18 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>Loading telemetry...</td></tr>
+              <tr>
+                <td colSpan={isAdmin ? 6 : 5} style={{ padding: '2rem', textAlign: 'center', opacity: 0.5, fontFamily: 'Bodoni Moda Variable' }}>
+                  Loading telemetry...
+                </td>
+              </tr>
+            ) : filteredRecords.length === 0 ? (
+              <tr>
+                <td colSpan={isAdmin ? 6 : 5} style={{ padding: '4rem 2rem', textAlign: 'center', color: darkMode ? '#9ca3af' : '#6b7280', fontFamily: 'Bodoni Moda Variable' }}>
+                  <i className="fa-solid fa-chart-line" style={{ fontSize: '2rem', marginBottom: '1rem', opacity: 0.3, display: 'block' }}></i>
+                  No Usage Metrics Data Found
+                </td>
+              </tr>
             ) : filteredRecords.map((rec) => (
               <tr key={rec.id} style={{ borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
                 <td style={{ padding: '1rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>{new Date(rec.createdAt).toLocaleString()}</td>
@@ -108,7 +130,7 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
                   </span>
                 </td>
                 <td style={{ padding: '1rem' }}>{rec.actionType === 'TOOL_EXECUTION' ? rec.toolName : rec.modelId}</td>
-                <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 'bold', color: '#fca5a5' }}>-{rec.creditsUsed.toLocaleString()}</td>
+                <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 'bold', color: '#fca5a5' }}>-{rec.creditsUsed?.toLocaleString() || 0}</td>
               </tr>
             ))}
           </tbody>
