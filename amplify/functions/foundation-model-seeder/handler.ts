@@ -17,10 +17,8 @@ export const handler = async (event: any) => {
   const now = new Date().toISOString();
 
   try {
-    // 1. Fetch all existing records
     const existingItems: any[] = [];
     let LastEvaluatedKey: Record<string, any> | undefined;
-    
     do {
       const scanRes = await dynamodb.send(new ScanCommand({ 
         TableName: tableName,
@@ -31,8 +29,6 @@ export const handler = async (event: any) => {
       }
       LastEvaluatedKey = scanRes.LastEvaluatedKey;
     } while (LastEvaluatedKey);
-
-    // 2. Cleanup Phase: Delete legacy/duplicate items that are NOT in the SEED_MODELS list
     const validSeedIds = SEED_MODELS.map(m => m.apiIdentifier);
     const itemsToDelete = existingItems.filter(item => !validSeedIds.includes(item.id));
     

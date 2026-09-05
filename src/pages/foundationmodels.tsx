@@ -38,6 +38,8 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
   }, [darkMode, foundationModels.length]);
 
   useEffect(() => {
+    let profileSub: any;
+
     const checkPermissionsAndProfile = async () => {
       try {
         const session = await fetchAuthSession();
@@ -45,30 +47,61 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
         const isUserAdmin = groups.some(group => ['superadmin', 'root', 'admin', 'heda'].includes(group.toLowerCase()));
         setIsAdmin(isUserAdmin);
         const { userId } = await getCurrentUser();
-        const cognitoSub = session.tokens?.accessToken?.payload?.sub as string;
-        const profileSub = client.models.UserProfile.observeQuery({
-          filter: { 
-            or: [
-              { cognitoUserId: { eq: userId } },
-              { cognitoUserId: { eq: cognitoSub } }
-            ]
-          }
-        }).subscribe({
-          next: (data: any) => {
-            if (data.items.length > 0) {
-              setUserProfileId(data.items[0].id);
-              setDisabledModelIds(data.items[0].disabledModelIds || []);
-            }
-          },
-          error: (err: any) => console.error("Error fetching user profile:", err)
+        console.log(`[Auth] Checking UserProfile for userId: ${userId}`);
+        const { data: existingProfiles } = await client.models.UserProfile.list({
+          filter: { cognitoUserId: { eq: userId } }
         });
+        let activeProfileId = null;
+        if (existingProfiles && existingProfiles.length > 0) {
+          activeProfileId = existingProfiles[0].id;
+          setUserProfileId(activeProfileId);
+          setDisabledModelIds(existingProfiles[0].disabledModelIds || []);
+        } else {
+          console.warn("[Auth] No UserProfile found. Initializing JIT Profile...");
+          try {
+            const { data: newProfile, errors } = await client.models.UserProfile.create({
+              cognitoUserId: userId,
+              subscriptionStatus: 'NONE',
+              computeCredits: 0,
+              maxCredits: 0
+            });
+            
+            if (errors) throw new Error(errors[0].message);
+            
+            if (newProfile) {
+              activeProfileId = newProfile.id;
+              setUserProfileId(activeProfileId);
+              setDisabledModelIds([]);
+              console.log(`[Auth] JIT Profile initialized with ID: ${activeProfileId}`);
+            }
+          } catch (createErr) {
+            console.error("FATAL: Failed to auto-provision user profile:", createErr);
+          }
+        }
 
-        return () => profileSub.unsubscribe();
+        if (activeProfileId) {
+          profileSub = client.models.UserProfile.observeQuery({
+            filter: { id: { eq: activeProfileId } }
+          }).subscribe({
+            next: (data: any) => {
+              if (data.items.length > 0) {
+                setDisabledModelIds(data.items[0].disabledModelIds || []);
+              }
+            },
+            error: (err: any) => console.error("Error observing user profile:", err)
+          });
+        }
+
       } catch (err) {
-        console.error("Failed to fetch user session", err);
+        console.error("Failed to fetch user session or profile data:", err);
       }
     };
+
     checkPermissionsAndProfile();
+
+    return () => {
+      if (profileSub) profileSub.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -348,7 +381,6 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
         ? disabledModelIds.filter(id => id !== disableFoundationModel?.id)
         : [...disabledModelIds, disableFoundationModel.id];
 
-      // Optimistic UI Update
       setDisabledModelIds(updatedDisabledIds);
       setDisableFoundationModel(null);
       setIsDeleteModalOpen(false);
@@ -413,7 +445,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                 isLoading={isLoading}
                 initialSort={{ key: 'name', direction: 'asc' }}
                 pagination={true}
-                defaultPageSize={6}
+                defaultPageSize={4}
                 pageSizeOptions={[6, 10, 25]}
             />
       </div>
