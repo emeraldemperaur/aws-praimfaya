@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import TitleRibbon from "../components/titleribbon";
+import SearchRibbon from "../components/searchribbon";
 import type { ColumnDef } from "../components/datatable";
 import DataTable from "../components/datatable";
 import BottomRightModal from "../components/bottomrightmodal";
@@ -27,8 +28,8 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
   const [foundationModels, setFoundationModels] = useState<UIFoundationModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-
-  // User Profile State for Personal Model Toggles
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchBy, setSearchBy] = useState('name');
   const [userProfileId, setUserProfileId] = useState<string | null>(null);
   const [disabledModelIds, setDisabledModelIds] = useState<string[]>([]);
 
@@ -43,11 +44,15 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
         const groups = session.tokens?.accessToken?.payload['cognito:groups'] as string[] || [];
         const isUserAdmin = groups.some(group => ['superadmin', 'root', 'admin', 'heda'].includes(group.toLowerCase()));
         setIsAdmin(isUserAdmin);
-
         const { userId } = await getCurrentUser();
-        
+        const cognitoSub = session.tokens?.accessToken?.payload?.sub as string;
         const profileSub = client.models.UserProfile.observeQuery({
-          filter: { cognitoUserId: { eq: userId } }
+          filter: { 
+            or: [
+              { cognitoUserId: { eq: userId } },
+              { cognitoUserId: { eq: cognitoSub } }
+            ]
+          }
         }).subscribe({
           next: (data: any) => {
             if (data.items.length > 0) {
@@ -100,6 +105,34 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
       });
     }
   }, [editFoundationModel]);
+
+  const filterOptions = [
+    { label: 'Name', value: 'name' },
+    { label: 'Provider', value: 'provider' },
+    { label: 'Modality', value: 'modality' },
+    { label: 'Context Window', value: 'contextWindowTokens' },
+    { label: 'Description', value: 'description' },
+    { label: 'Caliber', value: 'caliber' },
+    { label: 'Region', value: 'region' }
+  ];
+
+  const filteredModels = useMemo(() => {
+    if (!searchTerm.trim()) return foundationModels;
+    const lowerTerm = searchTerm.toLowerCase();
+
+    return foundationModels.filter(model => {
+      switch (searchBy) {
+        case 'name': return model.name?.toLowerCase().includes(lowerTerm);
+        case 'provider': return model.provider?.toLowerCase().includes(lowerTerm);
+        case 'modality': return model.modality?.toLowerCase().includes(lowerTerm);
+        case 'contextWindowTokens': return model.contextWindowTokens?.toString().includes(lowerTerm);
+        case 'description': return (model as any).description?.toLowerCase().includes(lowerTerm);
+        case 'caliber': return (model as any).caliber?.toLowerCase().includes(lowerTerm);
+        case 'region': return (model as any).region?.toLowerCase().includes(lowerTerm);
+        default: return true;
+      }
+    });
+  }, [foundationModels, searchTerm, searchBy]);
 
   const columns: ColumnDef<UIFoundationModel>[] = [
       {
@@ -196,7 +229,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
         header: 'Actions',
         accessor: 'actions',
         render: (row) => {
-          const isUserActive = row.id ? !disabledModelIds.includes(row.id) : false;
+          const isUserActive = row.id ? !disabledModelIds.includes(row.id) : true;
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -295,19 +328,30 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
       setIsEditModalOpen(false);
       setEditFoundationModel(null);
     } catch (error) {
-      console.error("Failed to update Foundation Model:", error);
+      console.error("Failed to update Foundation Model globally:", error);
+      alert("Failed to update the model. Check console for details.");
     }
   };
 
   const handleDisableFoundationModel = async () => {
-    if (!disableFoundationModel?.id || !userProfileId) return;
+    if (!disableFoundationModel?.id) return;
+
+    if (!userProfileId) {
+      alert("Personal profile record not found in the database. Cannot save model preferences.");
+      return;
+    }
     
     try {
       const isCurrentlyDisabled = disabledModelIds.includes(disableFoundationModel.id);
       
       const updatedDisabledIds = isCurrentlyDisabled
-        ? disabledModelIds.filter(id => id !== disableFoundationModel.id)
+        ? disabledModelIds.filter(id => id !== disableFoundationModel?.id)
         : [...disabledModelIds, disableFoundationModel.id];
+
+      // Optimistic UI Update
+      setDisabledModelIds(updatedDisabledIds);
+      setDisableFoundationModel(null);
+      setIsDeleteModalOpen(false);
 
       const { errors } = await client.models.UserProfile.update({
         id: userProfileId,
@@ -316,10 +360,10 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
       
       if (errors) throw new Error(errors[0].message);
       
-      setDisableFoundationModel(null);
-      setIsDeleteModalOpen(false);
     } catch (error) {
       console.error("Failed to toggle Foundation Model status for user:", error);
+      setDisabledModelIds(disabledModelIds);
+      alert("Failed to save changes. Your connection may have been interrupted.");
     }
   };  
 
@@ -344,16 +388,26 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
     fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151'
   };
 
-  const isModelActiveForUser = viewFoundationModel?.id ? !disabledModelIds.includes(viewFoundationModel.id) : false;
-  const isTargetModelActiveForUser = disableFoundationModel?.id ? !disabledModelIds.includes(disableFoundationModel.id) : false;
+  const isModelActiveForUser = viewFoundationModel?.id ? !disabledModelIds.includes(viewFoundationModel.id) : true;
+  const isTargetModelActiveForUser = disableFoundationModel?.id ? !disabledModelIds.includes(disableFoundationModel.id) : true;
 
   return (
     <>
       <TitleRibbon title="Foundation Models" darkMode={darkMode} typewriterFX textAlignment="right"/>
-      <div style={{ padding: '2rem' }}>
+      <SearchRibbon 
+        darkMode={darkMode}
+        recordCount={filteredModels.length}
+        recordLabel="Foundation Models"
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        selectedFilter={searchBy}
+        onFilterChange={setSearchBy}
+        filterOptions={filterOptions}
+      />
+      <div style={{ padding: '2rem', boxSizing: 'border-box', maxWidth: '100%' }}>
             <DataTable 
                 columns={columns} 
-                data={foundationModels} 
+                data={filteredModels} 
                 darkMode={darkMode} 
                 selectable={false}
                 isLoading={isLoading}
@@ -630,7 +684,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                 <option value="QWEN">Qwen</option>
                 <option value="WRITER">Writer</option>
                 <option value="XAI">xAI</option>
-                <option value="ZAI">Z AI (Zhipu)</option>
+                <option value="ZAI">Z AI</option>
               </select>
             </div>
 
