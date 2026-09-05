@@ -4,6 +4,7 @@ import { createCheckoutSession } from '../functions/stripe-checkout/resource';
 import { grantPromoCredits } from '../functions/admin-promo/resource';
 import { chatHandler } from '../functions/chat-handler/resource';
 import { syncKnowledgeBase } from '../functions/sync-kyb/resource';
+import { pollBedrock } from '../functions/poll-bedrock/resource';
 
 const headerRBAC = (allow: any) => [
   allow.owner(),
@@ -264,6 +265,12 @@ const schema = a.schema({
       allow.groups(['superadmin', 'root', 'admin', 'heda'])
     ])
     .handler(a.handler.function(syncKnowledgeBase)),
+
+  pollBedrockAsyncJob: a.query()
+    .arguments({ invocationArn: a.string().required() })
+    .returns(a.string())
+    .handler(a.handler.function(pollBedrock))
+    .authorization((allow) => [allow.authenticated()]),
 
   
 

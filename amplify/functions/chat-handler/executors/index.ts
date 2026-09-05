@@ -18,6 +18,8 @@ import { executeEnterpriseVoiceAgent } from './voice-tools';
 import { executeFormstackAgent } from './formstack-tools';
 import { executeAttachmentReader } from './attachment-tools';
 import { executeJotformAgent } from './jotform-tools';
+import { executeVanguardQA } from './qa-executor-tools';
+import { executeLumaVideoPresentation } from './presentation-tools';
 
 
 export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
@@ -70,4 +72,7 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
     'raspberry_pi_fleet_agent': executeRaspberryPiFleet,
     'mito_mcp_agent': executeMitoMCP,
     'apotheosis_mcp_agent': executeApotheosisMCP,
+    'execute_qa_agent_task': executeVanguardQA,
+    'generate_luma_video_presentation': executeLumaVideoPresentation
+
 };

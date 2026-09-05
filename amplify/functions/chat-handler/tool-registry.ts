@@ -1177,7 +1177,90 @@ export const NATIVE_TOOLS_REGISTRY = [
                 }
             }
         }
+    },
+    // --- Enterprise QA Automation ---
+    {
+        toolSpec: {
+            name: "execute_qa_agent_task",
+            description: "Executes cross-platform browser or mobile automation QA tasks via Selenium Grid or Appium Hub. Features intent-driven self-healing selectors and automatically reports execution summaries to Jira.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        taskId: { type: "string", description: "A unique identifier for this specific test execution run." },
+                        jiraTicketKey: { type: "string", description: "Optional Jira ticket ID (e.g., PROJ-1042). If provided, a summary of the test results will be posted as a comment to this ticket." },
+                        platform: { type: "string", enum: ["WEB_CHROME", "WEB_FIREFOX", "MOBILE_ANDROID", "MOBILE_IOS"], description: "The target runtime engine and driver strategy for the test." },
+                        gridUrl: { type: "string", description: "The Selenium Grid endpoint or Appium Hub URL (e.g., http://grid.qa.internal:4444/wd/hub)." },
+                        targetUrlOrApp: { type: "string", description: "The initial Web URL to open (for web) or the package/bundle URL (for mobile Appium)." },
+                        timeoutMs: { type: "number", description: "Optional override for element wait timeouts in milliseconds. Defaults to 15000." },
+                        actions: {
+                            type: "array",
+                            description: "An ordered list of sequential actions to perform in the automation session.",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    id: { type: "string", description: "Unique step ID for reporting (e.g., 'step-1-login')." },
+                                    type: { type: "string", enum: ["CLICK", "TYPE", "NAVIGATE", "ASSERT_TEXT", "CAPTURE_SCREENSHOT"], description: "The type of DOM or driver action to perform." },
+                                    selectorPrimary: { type: "string", description: "The primary CSS, XPath, or Accessibility ID selector to locate the target element." },
+                                    selectorFallbacks: { type: "array", items: { type: "string" }, description: "An array of backup selectors. The self-healing engine will attempt these if the primary selector fails or mutates." },
+                                    semanticLabel: { type: "string", description: "Human-readable label (e.g., 'Checkout Button'). Used by the self-healing engine to dynamically guess XPath attributes (like aria-label) if all exact selectors fail." },
+                                    value: { type: "string", description: "The text input for 'TYPE' actions, the target URL for 'NAVIGATE', or the expected string for 'ASSERT_TEXT'." }
+                                },
+                                required: ["id", "type"]
+                            }
+                        }
+                    },
+                    required: ["taskId", "platform", "gridUrl", "targetUrlOrApp", "actions"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+        name: "generate_luma_video_presentation",
+        description: "Generates a fully autonomous, cinematic HD video presentation using Amazon Bedrock Luma Ray v2. Features fluid slide transitions, generative video backgrounds, programmatic text overlays, and AI voiceovers.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    topicDescription: { 
+                        type: "string", 
+                        description: "The core content, narrative, and data to base the presentation on." 
+                    },
+                    slideCount: { 
+                        type: "number", 
+                        description: "The number of scenes/slides in the video." 
+                    },
+                    industryTheme: { 
+                        type: "string", 
+                        enum: ["FINANCE_CORPORATE", "TECH_STARTUP", "MARKETING_CREATIVE", "ENTERTAINMENT_VIVID"], 
+                        description: "The aesthetic design system for the video's generated backgrounds." 
+                    },
+                    voiceoverStyle: { 
+                        type: "string", 
+                        enum: ["NONE", "PROFESSIONAL_MALE", "PROFESSIONAL_FEMALE", "ENERGETIC_PITCH"], 
+                        description: "Generates an AI voiceover from the speaker notes and syncs it to the video." 
+                    },
+                    slides: {
+                        type: "array",
+                        description: "The exact content and visual instructions for each slide in the video sequence.",
+                        items: {
+                            type: "object",
+                            properties: {
+                                sceneVisualPrompt: { type: "string", description: "Luma Text-to-Video prompt for the slide's background (e.g., 'A slow pan across a futuristic server room')." },
+                                overlayText: { type: "string", description: "The crisp text to overlay programmatically on top of the video." },
+                                speakerScript: { type: "string", description: "The exact script the AI voiceover should read during this slide." }
+                            },
+                            required: ["sceneVisualPrompt", "overlayText"]
+                        }
+                    }
+                },
+                required: ["topicDescription", "industryTheme", "slides"]
+            }
+                    }
+                }
     }
+    
 ];
 
 export const isValidUrl = (urlString: string) => {

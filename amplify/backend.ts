@@ -34,6 +34,7 @@ import { lexFulfillment } from './functions/lex-fulfillment/resource';
 import { postCallAnalysis } from './functions/post-call-analysis/resource';
 import { foundationModelSeeder } from './functions/foundation-model-seeder/resource';
 import { syncKnowledgeBase } from './functions/sync-kyb/resource';
+import { pollBedrock } from './functions/poll-bedrock/resource';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -56,7 +57,8 @@ const backend = defineBackend({
   lexFulfillment,
   postCallAnalysis,
   foundationModelSeeder,
-  syncKnowledgeBase 
+  syncKnowledgeBase,
+  pollBedrock
 });
 
 const customStack = backend.createStack('BedrockAIStack');
@@ -90,6 +92,7 @@ const lexFulfillmentLambda = backend.lexFulfillment.resources.lambda as lambda.F
 const postCallAnalysisLambda = backend.postCallAnalysis.resources.lambda as lambda.Function;
 const seederLambda = backend.foundationModelSeeder.resources.lambda as lambda.Function;
 const syncKbLambda = backend.syncKnowledgeBase.resources.lambda as lambda.Function;
+const pollBedrockLambda = backend.pollBedrock.resources.lambda as lambda.Function;
 
 const streamDlq = new sqs.Queue(customStack, 'DynamoStreamDLQ', {
   retentionPeriod: Duration.days(14),
@@ -446,6 +449,11 @@ mediaLambda.addPermission('AllowBedrockAgentInvoke', {
   principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
   action: 'lambda:InvokeFunction',
 });
+
+pollBedrockLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['bedrock:GetAsyncInvoke'],
+  resources: ['*']
+}));
 
 // Billing Configuration
 checkoutLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || 'price_1UB4nDI2Coxc9y6EopiOCY2v');
