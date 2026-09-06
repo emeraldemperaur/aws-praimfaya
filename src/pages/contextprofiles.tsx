@@ -881,9 +881,9 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       >
         <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2.5rem', height: '100%' }} className="glass-scrollbar">
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingRight: '1rem', borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, overflowY: 'auto', minWidth: 0, overflowX: 'hidden' }}>
+          <div className="glass-scrollbar" style={{  display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingRight: '1rem', borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, overflowY: 'auto', minWidth: 0, overflowX: 'hidden' }}>
             
-            <div style={{ marginBottom: '0.5rem' }}>
+            <div className="glass-scrollbar" style={{ marginBottom: '0.5rem' }}>
               <label style={labelStyle}>Agentic Role</label>
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                 {['STANDARD', 'SUPERVISOR', 'COLLABORATOR'].map(role => (
@@ -982,7 +982,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
 
             <div>
               <label style={labelStyle}>Description</label>
-              <textarea 
+              <textarea className="glass-scrollbar" 
                 name="description" value={newContextProfileData.description || ''} onChange={handleNewTextChange} placeholder="Internal notes about what this profile is used for..."
                 rows={3} style={{ ...inputStyle, resize: 'vertical', textAlign:'justify' }}
               />
@@ -1197,7 +1197,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       >
         <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2.5rem', height: '100%' }}>
           
-          <div style={{ 
+          <div className="glass-scrollbar" style={{ 
             display: 'flex', 
             flexDirection: 'column', 
             gap: '1.5rem', 
@@ -1285,7 +1285,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
 
             <div>
               <label style={labelStyle}>Description</label>
-              <textarea name="description" value={editContextProfileData.description || ''} onChange={handleEditTextChange} rows={3} style={{ ...inputStyle, resize: 'vertical', textAlign: 'justify' }} />
+              <textarea className="glass-scrollbar" name="description" value={editContextProfileData.description || ''} onChange={handleEditTextChange} rows={3} style={{ ...inputStyle, resize: 'vertical', textAlign: 'justify' }} />
             </div>
 
             {editContextProfile && (

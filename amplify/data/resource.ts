@@ -11,6 +11,12 @@ const headerRBAC = (allow: any) => [
   allow.groups(['superadmin', 'root', 'admin', 'heda']),
 ];
 
+const authReadRBAC = (allow: any) => [
+      allow.authenticated().to(['read']),
+      allow.owner(),
+      allow.groups(['superadmin', 'root', 'admin', 'heda']),,
+];
+
 const iamRBAC = (allow: any) => [
   allow.owner(),
   allow.groups(['superadmin', 'root', 'admin', 'heda']),
@@ -119,7 +125,7 @@ const schema = a.schema({
       vectorFactor: a.integer(),
       profiles: a.hasMany('ContextProfileWorkflow', 'contextWorkflowId'),
     })
-    .authorization(headerRBAC),
+    .authorization(authReadRBAC),
 
   ContextProfileWorkflow: a
     .model({
@@ -206,7 +212,7 @@ const schema = a.schema({
       profiles: a.hasMany('ContextProfile', 'llmModelId'),
       updatedBy: a.string(),
     })
-    .authorization(headerRBAC),
+    .authorization(authReadRBAC),
   
   UserProfile: a
     .model({
