@@ -13,6 +13,7 @@ import type { UIContextProfile } from "../data/contextprofile";
 import { getUserEmail } from "../utils/asimov";
 import { HaikuDropdown } from "../components/haikudropdown";
 import { NATIVE_TOOLS_TEMPLATES } from "../utils/prometheus";
+import { getCurrentUser } from 'aws-amplify/auth';
 
 const DEFAULT_PROFILE_STATE = {
   name: '',
@@ -33,7 +34,6 @@ const DEFAULT_PROFILE_STATE = {
   subagentEavesdrop: false
 };
 
-// Highly efficient O(1) lookup Set for STANDARD_ONLY tool prompts
 const STANDARD_ONLY_PROMPTS = new Set(
   NATIVE_TOOLS_TEMPLATES
     .filter(tool => tool.modelAvailability === 'STANDARD_ONLY')
@@ -69,10 +69,71 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   const [foundationModels, setFoundationModels] = useState<any[]>([]);
   const [vectorCollections, setVectorCollections] = useState<any[]>([]);
   const [workflows, setWorkflows] = useState<any[]>([]);
+
+  const [disabledModelIds, setDisabledModelIds] = useState<string[]>([]);
   
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
   }, [darkMode, contextProfiles.length]);
+
+  useEffect(() => {
+    let profileSub: any;
+
+    const checkProfileAndSubscriptions = async () => {
+      try {
+        const { userId } = await getCurrentUser();
+        
+        const { data: existingProfiles } = await client.models.UserProfile.list({
+          filter: { cognitoUserId: { eq: userId } }
+        });
+
+        let activeProfileId = null;
+
+        if (existingProfiles && existingProfiles.length > 0) {
+          activeProfileId = existingProfiles[0].id;
+          setDisabledModelIds(existingProfiles[0].disabledModelIds || []);
+        } else {
+          try {
+            const { data: newProfile, errors } = await client.models.UserProfile.create({
+              cognitoUserId: userId,
+              subscriptionStatus: 'NONE',
+              computeCredits: 0,
+              maxCredits: 0
+            });
+            if (errors) throw new Error(errors[0].message);
+            
+            if (newProfile) {
+              activeProfileId = newProfile.id;
+              setDisabledModelIds([]);
+            }
+          } catch (err) {
+            console.error("Failed to auto-provision user profile:", err);
+          }
+        }
+
+        if (activeProfileId) {
+          profileSub = client.models.UserProfile.observeQuery({
+            filter: { id: { eq: activeProfileId } }
+          }).subscribe({
+            next: (data: any) => {
+              if (data.items.length > 0) {
+                setDisabledModelIds(data.items[0].disabledModelIds || []);
+              }
+            },
+            error: (err: any) => console.error("Error observing user profile:", err)
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch user profile data:", err);
+      }
+    };
+
+    checkProfileAndSubscriptions();
+
+    return () => {
+      if (profileSub) profileSub.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     const fmSub = client.models.FoundationModel.observeQuery({
@@ -155,6 +216,10 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       setSelectedCollaboratorIds(Array.isArray(editContextProfile.collaborators) ? editContextProfile.collaborators.map((c: any) => c.id) : []);
     }
   }, [editContextProfile]);
+
+  const activeFoundationModels = useMemo(() => {
+    return foundationModels.filter(model => !disabledModelIds.includes(model.id));
+  }, [foundationModels, disabledModelIds]);
 
   const filterOptions = [
     { label: 'Name', value: 'name' },
@@ -338,7 +403,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     
     setNewContextProfileData((prev) => {
       const updates: Partial<UIContextProfile> = { [name]: value };
-      
       if (name === 'role' && (value === 'SUPERVISOR' || value === 'COLLABORATOR')) {
         if (prev.systemPrompt && STANDARD_ONLY_PROMPTS.has(prev.systemPrompt.trim())) {
           updates.systemPrompt = '';
@@ -434,7 +498,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     setEditContextProfileData((prev) => {
       const updates: Partial<UIContextProfile> = { [name]: value };
       
-      // Auto-clear incompatible prompts when upgrading role from STANDARD
       if (name === 'role' && (value === 'SUPERVISOR' || value === 'COLLABORATOR')) {
         if (prev.systemPrompt && STANDARD_ONLY_PROMPTS.has(prev.systemPrompt.trim())) {
           updates.systemPrompt = '';
@@ -887,7 +950,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               <label style={labelStyle}>LLM Engine <span style={{ color: '#ef4444' }}>*</span></label>
               <select name="llmModelId" value={newContextProfileData.llmModelId || ''} onChange={handleNewTextChange} style={inputStyle}>
                 <option value="" disabled>Select a Foundation Model...</option>
-                {foundationModels.map((model) => (
+                {activeFoundationModels.map((model) => (
                   <option key={model.id} value={model.apiIdentifier}>{model.name}</option>
                 ))}
               </select>
@@ -1190,7 +1253,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               <label style={labelStyle}>LLM Engine <span style={{ color: '#ef4444' }}>*</span></label>
               <select name="llmModelId" value={editContextProfileData.llmModelId || ''} onChange={handleEditTextChange} style={inputStyle}>
                 <option value="">Select a Foundation Model...</option>
-                {foundationModels.map((model) => (
+                {activeFoundationModels.map((model) => (
                   <option key={model.id} value={model.apiIdentifier}>{model.name}</option>
                 ))}
               </select>
@@ -1443,7 +1506,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
             Deleting Context Profile: <strong>{deleteContextProfile?.name}</strong> from database records. 
           </p>
 
-          {/* --- ACTIVE INTEGRATIONS WARNING --- */}
           {deleteContextProfile?.terminals && deleteContextProfile.terminals.length > 0 && (
             <div style={{ 
               padding: '0.75rem', 
