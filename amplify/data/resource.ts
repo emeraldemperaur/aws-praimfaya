@@ -14,7 +14,7 @@ const headerRBAC = (allow: any) => [
 const authReadRBAC = (allow: any) => [
       allow.authenticated().to(['read']),
       allow.owner(),
-      allow.groups(['superadmin', 'root', 'admin', 'heda']),,
+      allow.groups(['superadmin', 'root', 'admin', 'heda']),
 ];
 
 const iamRBAC = (allow: any) => [
