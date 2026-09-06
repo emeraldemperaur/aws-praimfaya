@@ -951,7 +951,7 @@ export const NATIVE_TOOLS_REGISTRY = [
     // --- Enterprise Smart Home Management ---
     {
     toolSpec: {
-        name: 'google_home_agent',
+        name: 'alphabet_home_agent',
         description: "Manages Google Home / Nest devices via the Smart Device Management (SDM) API. Can list structures/devices and execute commands.",
         inputSchema: {
             json: {
@@ -998,7 +998,7 @@ export const NATIVE_TOOLS_REGISTRY = [
     },
     {
     toolSpec: {
-        name: 'amazon_alexa_agent',
+        name: 'alexa_agent',
         description: "Controls Amazon Alexa devices via the Smart Home Event Gateway. Note: Device discovery is unsupported; user must provide exact Endpoint ID.",
         inputSchema: {
             json: {

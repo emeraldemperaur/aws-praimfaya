@@ -11,6 +11,8 @@ import FullScreenModal from "../components/fullscreenmodal";
 import { getModelIcon, MODEL_FAMILY_DESCRIPTIONS, ROLE_DESCRIPTIONS } from "../utils/voltaire";
 import type { UIContextProfile } from "../data/contextprofile";
 import { getUserEmail } from "../utils/asimov";
+import { HaikuDropdown } from "../components/haikudropdown";
+import { NATIVE_TOOLS_TEMPLATES } from "../utils/prometheus";
 
 const DEFAULT_PROFILE_STATE = {
   name: '',
@@ -30,6 +32,13 @@ const DEFAULT_PROFILE_STATE = {
   mcpAuthToken: '',
   subagentEavesdrop: false
 };
+
+// Highly efficient O(1) lookup Set for STANDARD_ONLY tool prompts
+const STANDARD_ONLY_PROMPTS = new Set(
+  NATIVE_TOOLS_TEMPLATES
+    .filter(tool => tool.modelAvailability === 'STANDARD_ONLY')
+    .map(tool => tool.systemPrompt.trim())
+);
 
 const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   const client = generateClient() as any;
@@ -326,7 +335,17 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
 
   const handleNewTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setNewContextProfileData((prev) => ({ ...prev, [name]: value }));
+    
+    setNewContextProfileData((prev) => {
+      const updates: Partial<UIContextProfile> = { [name]: value };
+      
+      if (name === 'role' && (value === 'SUPERVISOR' || value === 'COLLABORATOR')) {
+        if (prev.systemPrompt && STANDARD_ONLY_PROMPTS.has(prev.systemPrompt.trim())) {
+          updates.systemPrompt = '';
+        }
+      }
+      return { ...prev, ...updates };
+    });
   };
 
   const handleNewNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -411,7 +430,18 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
 
   const handleEditTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setEditContextProfileData(prev => ({ ...prev, [name]: value }));
+    
+    setEditContextProfileData((prev) => {
+      const updates: Partial<UIContextProfile> = { [name]: value };
+      
+      // Auto-clear incompatible prompts when upgrading role from STANDARD
+      if (name === 'role' && (value === 'SUPERVISOR' || value === 'COLLABORATOR')) {
+        if (prev.systemPrompt && STANDARD_ONLY_PROMPTS.has(prev.systemPrompt.trim())) {
+          updates.systemPrompt = '';
+        }
+      }
+      return { ...prev, ...updates };
+    });
   };
 
   const handleEditNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -540,6 +570,21 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
 
   return(
     <>
+      <style>{`
+        .glass-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .glass-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .glass-scrollbar::-webkit-scrollbar-thumb {
+          background-color: ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'};
+          border-radius: 10px;
+        }
+        .glass-scrollbar::-webkit-scrollbar-thumb:hover {
+          background-color: ${darkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'};
+        }
+      `}</style>
       <TitleRibbon title="Context Profiles" darkMode={darkMode} typewriterFX textAlignment="right"/>
       <SearchRibbon 
         darkMode={darkMode}
@@ -685,7 +730,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               </p>
             </div>
 
-            <div style={{ 
+            <div className="glass-scrollbar" style={{ 
               flexGrow: 1, 
               backgroundColor: darkMode ? '#111827' : '#ffffff', 
               border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
@@ -697,7 +742,9 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               overflowY: 'auto',
               whiteSpace: 'pre-wrap',
               fontFamily: 'monospace',
-              maxHeight: '200px'
+              maxHeight: '200px',
+              scrollbarWidth: 'thin',
+              scrollbarColor: `${darkMode ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'} transparent`
             }}>
               {viewContextProfile?.systemPrompt || 'No prompt defined.'}
             </div>
@@ -769,7 +816,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
           </div>
         }
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2.5rem', height: '100%' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2.5rem', height: '100%' }} className="glass-scrollbar">
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingRight: '1rem', borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, overflowY: 'auto', minWidth: 0, overflowX: 'hidden' }}>
             
@@ -874,20 +921,31 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               <label style={labelStyle}>Description</label>
               <textarea 
                 name="description" value={newContextProfileData.description || ''} onChange={handleNewTextChange} placeholder="Internal notes about what this profile is used for..."
-                rows={3} style={{ ...inputStyle, resize: 'vertical' }}
+                rows={3} style={{ ...inputStyle, resize: 'vertical', textAlign:'justify' }}
               />
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', minWidth: 0, overflowX: 'hidden', paddingRight: '0.5rem', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', minWidth: 0, overflowX: 'hidden', paddingRight: '0.5rem', overflowY: 'auto' }} className="glass-scrollbar">
             
             <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>System Prompt <span style={{ color: '#ef4444' }}>*</span></h3>
+                <HaikuDropdown 
+                  darkMode={darkMode} 
+                  role={newContextProfileData.role || 'STANDARD'}
+                  onSelect={(prompt) => {
+                    setNewContextProfileData(prev => ({
+                      ...prev,
+                      systemPrompt: prev.systemPrompt ? `${prompt}\n\n${prev.systemPrompt}` : prompt
+                    }));
+                  }} 
+                />
               </div>
               <textarea 
                 name="systemPrompt" value={newContextProfileData.systemPrompt} onChange={handleNewTextChange} placeholder="You are a helpful AI assistant..."
-                style={{ ...inputStyle, minHeight: '150px', resize: 'vertical', lineHeight: 1.6, fontSize: '0.95rem' }}
+                className="glass-scrollbar" style={{ ...inputStyle, minHeight: '150px', resize: 'vertical', lineHeight: 1.6, fontSize: '0.95rem', scrollbarWidth: 'thin', textAlign: 'justify',
+                  scrollbarColor: `${darkMode ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'} transparent` }}
               />
             </div>
 
@@ -1051,7 +1109,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', width: '100%' }}>
             <button 
               onClick={() => setIsEditModalOpen(false)}
-              style={{ padding: '0.75rem 1.5rem', cursor: 'pointer', backgroundColor: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px' }}
+              style={{ fontFamily: 'Bodoni Moda Variable, sans-serif', padding: '0.75rem 1.5rem', cursor: 'pointer', backgroundColor: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px' }}
             >
               Cancel
             </button>
@@ -1065,7 +1123,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                 border: 'none', 
                 borderRadius: '4px',
                 cursor: isEditValid ? 'pointer' : 'not-allowed',
-                opacity: isEditValid ? 1 : 0.5
+                opacity: isEditValid ? 1 : 0.5,
+                fontFamily: 'Bodoni Moda Variable, sans-serif',
               }}
             >
               Save Changes
@@ -1163,7 +1222,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
 
             <div>
               <label style={labelStyle}>Description</label>
-              <textarea name="description" value={editContextProfileData.description || ''} onChange={handleEditTextChange} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+              <textarea name="description" value={editContextProfileData.description || ''} onChange={handleEditTextChange} rows={3} style={{ ...inputStyle, resize: 'vertical', textAlign: 'justify' }} />
             </div>
 
             {editContextProfile && (
@@ -1174,15 +1233,26 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', minWidth: 0, overflowX: 'hidden', paddingRight: '0.5rem', overflowY: 'auto' }}> 
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', minWidth: 0, overflowX: 'hidden', paddingRight: '0.5rem', overflowY: 'auto' }} className="glass-scrollbar"> 
             
             <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>System Prompt <span style={{ color: '#ef4444' }}>*</span></h3>
+                <HaikuDropdown 
+                  darkMode={darkMode} 
+                  role={editContextProfileData.role || 'STANDARD'}
+                  onSelect={(prompt) => {
+                    setEditContextProfileData(prev => ({
+                      ...prev,
+                      systemPrompt: prev.systemPrompt ? `${prompt}\n\n${prev.systemPrompt}` : prompt
+                    }));
+                  }} 
+                />
               </div>
               <textarea 
                 name="systemPrompt" value={editContextProfileData.systemPrompt || ''} onChange={handleEditTextChange} placeholder="You are a helpful AI assistant..."
-                style={{ ...inputStyle, minHeight: '150px', resize: 'vertical', lineHeight: 1.6, fontSize: '0.95rem' }}
+                className="glass-scrollbar" style={{ ...inputStyle, minHeight: '150px', resize: 'vertical', lineHeight: 1.6, fontSize: '0.95rem', scrollbarWidth: 'thin', textAlign: 'justify', 
+                scrollbarColor: `${darkMode ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'} transparent` }}
               />
             </div>
 

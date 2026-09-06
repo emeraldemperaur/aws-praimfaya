@@ -32,7 +32,6 @@ const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = {
     "generate_document_agent": 100
 };
 
-
 const formatE164 = (phone: string, defaultCountry: string = 'US'): string => {
     if (!phone) return '';
     if (phone.trim().startsWith('+')) return '+' + phone.replace(/[^0-9]/g, '');
@@ -81,7 +80,106 @@ export const handler = async (event: any) => {
             }
         }
 
-        if (functionName === 'generate_audio') {
+      
+        if (functionName === 'generate_luma_video_presentation') {
+            const topicDescription = getParam('topicDescription') || 'Cinematic Presentation';
+            const industryTheme = getParam('industryTheme') || 'Corporate';
+            const voiceoverStyle = getParam('voiceoverStyle') || 'NONE';
+            
+            const slidesRaw = getParam('slides');
+            if (!slidesRaw) throw new Error("Missing required 'slides' parameter array.");
+            
+            let slides: any[] = [];
+            try {
+                slides = typeof slidesRaw === 'string' ? JSON.parse(slidesRaw) : slidesRaw;
+            } catch (e) {
+                throw new Error("Invalid 'slides' payload. Must be a valid JSON array.");
+            }
+
+            const baseSystemFee = 20;
+            const baseSlideCost = 80;
+            const baseVoiceCost = (voiceoverStyle && voiceoverStyle !== 'NONE') ? 5 : 0;
+            const rawWholesaleCost = baseSystemFee + (slides.length * baseSlideCost) + (slides.length * baseVoiceCost);
+            
+            const dynamicComputeCost = Math.ceil(rawWholesaleCost * 3); 
+
+            const userRes = await dynamodb.send(new GetCommand({ TableName: USER_PROFILES_TABLE, Key: { cognitoUserId: userId } }));
+            const availableCredits = userRes.Item?.computeCredits ?? 0;
+
+            if (availableCredits < dynamicComputeCost) {
+                responseText = `INSUFFICIENT_CREDITS: Executing a ${slides.length}-slide cinematic presentation requires ${dynamicComputeCost} compute credits. You have ${availableCredits}.`;
+                return buildActionGroupResponse(actionGroup, functionName, responseText);
+            }
+
+            const activeSessionId = sessionAttrs.terminalId || event.sessionId || `session_${Date.now()}`;
+            const jobId = `vanguard_deck_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            const s3DestinationPrefix = `s3://${MEDIA_BUCKET}/luma-presentations/${jobId}`;
+
+            const dispatchedJobs = [];
+
+            for (let i = 0; i < slides.length; i++) {
+                const slide = slides[i];
+                const slideNumber = i + 1;
+                const safeVisualPrompt = slide.sceneVisualPrompt ? slide.sceneVisualPrompt.substring(0, 350) : 'Cinematic presentation background';
+                const optimizedPrompt = `${safeVisualPrompt}. Aesthetic: ${industryTheme}. High quality, cinematic lighting, photorealistic.`;
+                
+                const command = new StartAsyncInvokeCommand({
+                    modelId: "luma.ray-v2:0",
+                    modelInput: {
+                        prompt: optimizedPrompt,
+                        aspect_ratio: "16:9",
+                        resolution: "720p",
+                        duration: "5s"
+                    },
+                    outputDataConfig: {
+                        s3OutputDataConfig: {
+                            s3Uri: `${s3DestinationPrefix}/slide_${slideNumber}/`
+                        }
+                    }
+                });
+
+                const response = await bedrockRuntime.send(command);
+
+                dispatchedJobs.push({
+                    slideIndex: slideNumber,
+                    bedrockInvocationArn: response.invocationArn,
+                    s3ExpectedOutput: `https://${MEDIA_BUCKET}.s3.${process.env.AWS_REGION || 'us-west-2'}.amazonaws.com/luma-presentations/${jobId}/slide_${slideNumber}/output.mp4`, 
+                    overlayText: slide.overlayText,
+                    speakerScript: slide.speakerScript
+                });
+
+                await new Promise(resolve => setTimeout(resolve, 250)); // Strict Bedrock Luma rate-limit protection
+            }
+
+            const primaryArtifactUrl = `https://${MEDIA_BUCKET}.s3.${process.env.AWS_REGION || 'us-west-2'}.amazonaws.com/luma-presentations/${jobId}/slide_1/output.mp4`;
+
+            await recordRAGArtifact(event, primaryArtifactUrl, 'VIDEO');
+            
+            await recordUsageTransaction(userId, dynamicComputeCost, {
+                sessionId: activeSessionId,
+                sessionTitle: sessionAttrs.terminalTitle || topicDescription.slice(0, 50),
+                actionType: 'TOOL_EXECUTION',
+                modelId: 'luma.ray-v2:0',
+                toolName: functionName,
+            });
+
+            responseText = JSON.stringify({
+                status: "Success",
+                message: `Successfully dispatched ${slides.length} scenes to Amazon Bedrock Luma Ray-2.`,
+                computeDeduction: dynamicComputeCost,
+                remainingUserCredits: availableCredits - dynamicComputeCost,
+                compilationPipeline: {
+                    orchestrator: "Vanguard_Bedrock_Compiler",
+                    theme: industryTheme,
+                    tasks: dispatchedJobs
+                },
+                uiDirective: "POLL_BEDROCK_STATUS" 
+            });
+
+        // ==========================================
+        // STATIC COST TOOLS
+        // ==========================================
+        } else if (functionName === 'generate_audio') {
             const text = getParam('text');
             const voiceId = getParam('voiceId') || 'Matthew';
             if (!text) throw new Error("Missing required 'text' parameter.");
