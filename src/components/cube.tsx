@@ -23,6 +23,8 @@ export const CubeIcon: React.FC<CubeIconProps> = ({
   const activeFaceBg = darkMode ? '#1b1c1d' : '#ffffff';
 
   const styles = {
+    width: w,
+    height: h,
     '--container-width': w,
     '--container-height': h,
     '--edge-color': activeEdgeColor,

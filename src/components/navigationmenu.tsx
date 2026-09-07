@@ -11,6 +11,7 @@ import transactionsIcon from '../assets/rag-transactions-icon.png';
 import systemOverviewIcon from '../assets/system-overview-icon.png';
 import '../styles/navigator.scss';
 import { getUserEmail } from '../utils/asimov';
+import { CubeIcon } from './cube';
 
 const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void, darkMode: boolean}) => {
     const [isDocumentation, setIsDocumentation] = useState<[boolean, string]>([false, '']);
@@ -125,11 +126,6 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
         };
     };
 
-    //const staticDropLinkStyle = {
-    //    color: darkMode ? '#ffffff' : '#0B0B45',
-    //    textDecoration: 'none'
-    //};
-
     const titleStyle = {
         color: 'inherit',
     };
@@ -153,8 +149,25 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
         >
             <div className="ux-container">
                 <div className="nav-start">
-                <NavLink className="logo" to="/" onClick={closeDropDowns}>
-                    <div style={{textDecoration: 'none', color: darkMode ? '#ffffff' : '#0B0B45'}} className="menu-logo">Pr<span style={{fontWeight: 200}}>ai</span>mfaya</div> 
+                <NavLink 
+                    className="logo" 
+                    to="/" 
+                    onClick={closeDropDowns} 
+                    style={{ 
+                        display: 'flex', 
+                        flexDirection: 'row', 
+                        flexWrap: 'nowrap', 
+                        alignItems: 'center', 
+                        gap: '0.75rem', 
+                        textDecoration: 'none' 
+                    }}
+                >
+                    <div style={{ marginBottom: '13px' }}>
+                        <CubeIcon width={30} height={30} darkMode={darkMode} edgeColor={darkMode ? '#ffffff' : 'black'} animationDuration="2s" />
+                    </div>
+                    <div style={{ textDecoration: 'none', color: darkMode ? '#ffffff' : '#0B0B45', margin: 0, padding: 0, whiteSpace: 'nowrap' }} className="menu-logo">
+                        &nbsp;Pr<span style={{fontWeight: 200}}>ai</span>mfaya
+                    </div> 
                 </NavLink>
                 <nav className={`ux-menu ${isMobileMenuOpen ? 'show' : ''}`} style={{background: darkMode ? '#1b1c1d' : '#ffffff'}}>
                     <ul className={darkMode ? 'ux-menu-bar ux-menu-bar-dark' : 'ux-menu-bar'}>

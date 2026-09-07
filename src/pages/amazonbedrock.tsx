@@ -8,7 +8,7 @@ const AmazonBedrockUI = ({ darkMode }: { darkMode: boolean }) => {
 
   return (
     <>
-    <TitleRibbon title="Amazon Bedrock" darkMode={darkMode} typewriterFX textAlignment="right"/>      
+    <TitleRibbon title="Amazon Bedrock" darkMode={darkMode} typewriterFX textAlignment="right"/>   
     </>
   );
 };

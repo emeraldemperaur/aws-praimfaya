@@ -8,8 +8,9 @@
 }
 
 .cube-container {
-  width: var(--container-width);
-  height: var(--container-height);
+  /* Fallback sizes just in case CSS variables load late */
+  width: var(--container-width, 250px);
+  height: var(--container-height, 250px);
   position: relative;
   overflow: visible;
   --s: calc(var(--container-width) / 5);
@@ -22,12 +23,16 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  /* Ensures the 3D space isn't flattened by the translate */
+  transform-style: preserve-3d; 
 }
 
 .cube-container .cube {
   width: var(--s);
   height: var(--s);
   position: absolute;
+  top: 0;  /* Strict Anchoring */
+  left: 0; /* Strict Anchoring */
   z-index: 2;
   transform: rotateX(-36deg) rotateY(45deg);
   transform-style: preserve-3d;
@@ -37,6 +42,8 @@
   width: calc(var(--s) * 2);
   height: calc(var(--s) * 2);
   position: absolute;
+  top: 0;  /* Strict Anchoring */
+  left: 0; /* Strict Anchoring */
   background: var(--face-bg);
   border: calc(var(--s) * 0.12) solid var(--edge-color);
   transition: background 0.3s ease;
@@ -44,6 +51,7 @@
 
 .cube-container .cube_count_1 {
   z-index: 2;
+  top: 0; /* Added missing anchor */
   left: var(--s);
   animation: cube-icon-spin var(--anim-duration) 1s ease infinite;
 }
@@ -120,7 +128,6 @@
 .cube-container .cube__face--bottom { 
   transform: rotateX(-90deg) translateZ(var(--s)); 
 }
-
 
 @keyframes cube-icon-spin {
   0%   { transform: rotateX(-36deg) rotateY(45deg) rotateZ(0); }
