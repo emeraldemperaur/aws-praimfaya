@@ -18,6 +18,7 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
 
   const client = generateClient() as any;
   const [contextProfiles, setContextProfiles] = useState<any[]>([]);
+  const [foundationModels, setFoundationModels] = useState<any[]>([]);
   const sessionNavigator = useNavigate();
 
   useEffect(() => {
@@ -25,10 +26,17 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
   }, [darkMode]);
 
   useEffect(() => {
-    const sub = client.models.ContextProfile.observeQuery({
+    const fmSub = client.models.FoundationModel.observeQuery({
+      selectionSet: ['id', 'name', 'apiIdentifier', 'provider']
+    }).subscribe({
+      next: (data: any) => setFoundationModels(data.items),
+      error: (err: any) => console.error("Error fetching foundation models:", err)
+    });
+
+    const cpSub = client.models.ContextProfile.observeQuery({
       selectionSet: [
         'id', 'name', 'description', 'llmModelId', 'temperature', 
-        'systemPrompt', 'isActive', 'vectorCollection.*'
+        'systemPrompt', 'isActive', 'vectorCollection.*', 'foundationModel.*'
       ]
     }).subscribe({
       next: (data: any) => {
@@ -36,12 +44,21 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
       },
       error: (err: any) => console.error("Error fetching context profiles:", err)
     });
-    return () => sub.unsubscribe();
+
+    return () => {
+      fmSub.unsubscribe();
+      cpSub.unsubscribe();
+    };
   }, []);
 
   const selectedProfile = useMemo(() => {
     return contextProfiles.find(p => p.id === newConsoleTerminalData.contextProfileId);
   }, [newConsoleTerminalData.contextProfileId, contextProfiles]);
+
+  const linkedModel = useMemo(() => {
+    if (!selectedProfile) return null;
+    return foundationModels.find(fm => fm.id === selectedProfile.llmModelId || fm.apiIdentifier === selectedProfile.llmModelId) || selectedProfile.foundationModel;
+  }, [selectedProfile, foundationModels]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -198,7 +215,7 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
                   <div>
                     <span style={{ display: 'block', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Model</span>
                     <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '0.25rem 0.5rem', backgroundColor: darkMode ? '#374151' : '#e5e7eb', borderRadius: '0.25rem', fontSize: '0.875rem', color: darkMode ? '#d1d5db' : '#374151' }}>
-                      {selectedProfile.llmModelId}
+                      {linkedModel ? `${linkedModel.provider ? `${linkedModel.provider} • ` : ''}${linkedModel.name || selectedProfile.llmModelId}` : selectedProfile.llmModelId}
                     </span>
                   </div>
                   <div>
