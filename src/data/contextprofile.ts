@@ -60,6 +60,7 @@ export interface UIContextProfile {
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string | null;
+  owner?: string | null;
   vectorCollection?: {
     id?: string;
     name: string;

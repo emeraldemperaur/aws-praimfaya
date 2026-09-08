@@ -11,6 +11,7 @@ import { generateClient } from "aws-amplify/api";
 import type { UIFoundationModel } from "../data/foundationmodel";
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
 import { getUserEmail } from "../utils/asimov";
+import type { UIContextProfile } from "../data/contextprofile";
 
 const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
   const client = generateClient() as any;
@@ -31,6 +32,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchBy, setSearchBy] = useState('name');
   const [userProfileId, setUserProfileId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [disabledModelIds, setDisabledModelIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -47,6 +49,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
         const isUserAdmin = groups.some(group => ['superadmin', 'root', 'admin', 'heda'].includes(group.toLowerCase()));
         setIsAdmin(isUserAdmin);
         const { userId } = await getCurrentUser();
+        setUserEmail(await getUserEmail());
         console.log(`[Auth] Checking UserProfile for userId: ${userId}`);
         const { data: existingProfiles } = await client.models.UserProfile.list({
           filter: { cognitoUserId: { eq: userId } }
@@ -186,12 +189,17 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
         header: 'Context Window',
         accessor: 'contextWindowTokens',
         sortable: true,
-        render: (row) => (
+        render: (row) => {
+            const userProfilesCount = row.profiles?.filter(
+            (p: UIContextProfile) => p.owner === userProfileId || p.createdBy === userEmail
+          ).length || 0;
+          return (
           <div className="tbl-cell-stacked">
-            <span className="primary-text">{row.profiles?.length || 0} Profiles</span>
+            <span className="primary-text">{userProfilesCount} Profiles</span>
             <span className="secondary-text">{row.contextWindowTokens?.toLocaleString() || 0} Tokens</span>
           </div>
-        )
+          )
+        }
       },
       {
         header: 'Axioms',
