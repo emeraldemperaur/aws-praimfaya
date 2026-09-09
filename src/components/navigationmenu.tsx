@@ -163,7 +163,7 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
                     }}
                 >
                     <div style={{ marginBottom: '13px' }}>
-                        <CubeIcon width={30} height={30} darkMode={darkMode} edgeColor={darkMode ? '#ffffff' : 'black'} animationDuration="2s" />
+                        <CubeIcon width={30} height={30} darkMode={darkMode} edgeColor={darkMode ? '#ffffff' : '#0B0B45'} animationDuration="2s" />
                     </div>
                     <div style={{ textDecoration: 'none', color: darkMode ? '#ffffff' : '#0B0B45', margin: 0, padding: 0, whiteSpace: 'nowrap' }} className="menu-logo">
                         &nbsp;Pr<span style={{fontWeight: 200}}>ai</span>mfaya
