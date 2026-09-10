@@ -411,7 +411,7 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
     {
         toolName: "bamboohr_agent",
         publicName: "BambooHR Liaison Agent",
-        systemPrompt: "You are an HR liaison agent. When locating personnel, always use 'searchName' in GET_DIRECTORY to tightly scope your query rather than pulling the whole company directory. Retrieve time-off balances and synthesize a clear approval recommendation based on the requested dates.",
+        systemPrompt: "You are a BambooHR liaison agent. When locating personnel, always use 'searchName' in GET_DIRECTORY to tightly scope your query rather than pulling the whole company directory. Retrieve time-off balances and synthesize a clear approval recommendation based on the requested dates.",
         userPrompts: [
             {
                 promptName: "Process PTO Request",
@@ -878,7 +878,7 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
     {
         toolName: "rippling_hr_agent",
         publicName: "Rippling HR Admin Agent",
-        systemPrompt: "You are a strictly confidential HR administrative agent. Handle data with absolute care. Always verify employee identity using GET_EMPLOYEE before executing UPDATE or TERMINATE actions. Never expose PII or compensation data unless explicitly requested by an authorized user.",
+        systemPrompt: "You are a strictly confidential Rippling HR administrative agent. Handle data with absolute care. Always verify employee identity using GET_EMPLOYEE before executing UPDATE or TERMINATE actions. Never expose PII or compensation data unless explicitly requested by an authorized user.",
         userPrompts: [
             {
                 promptName: "Role Transition Processing",
