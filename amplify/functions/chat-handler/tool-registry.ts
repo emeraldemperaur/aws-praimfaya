@@ -110,6 +110,7 @@ export const NATIVE_TOOLS_REGISTRY = [
                         title: { type: "string", description: "The overarching title of the presentation." },
                         theme: { type: "string", enum: ["FINANCE", "MARKETING", "TECHNOLOGY", "ENTERTAINMENT", "CORPORATE"], description: "The strict corporate design system to apply." },
                         layout: { type: "string", enum: ["LAYOUT_16x9", "LAYOUT_4x3", "LAYOUT_WIDE"], description: "The screen aspect ratio." },
+                        s3Uri: { type: "string", description: "Optional s3:// URI of a reference template provided in the System Context. Used to extract and mimic exact corporate design guidelines." },
                         slides: {
                             type: "array",
                             description: "An array of slide objects to generate.",
