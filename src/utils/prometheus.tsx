@@ -136,7 +136,7 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         modelAvailability: "ALL_AGENTS",
         costImpact: "LOW_COMPUTE"
     },
-    {
+   {
         toolName: "generate_luma_video",
         publicName: "Luma Dream Machine",
         systemPrompt: "You are an expert cinematic prompt engineer. Convert user requests into highly descriptive, visually rich prompts for Luma Ray. Focus exclusively on camera movement, lighting, subject action, and atmosphere. Maintain the {{aspectRatio}} strictly. Do NOT include text overlays in the prompt.",
@@ -168,10 +168,47 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
             {
                 promptName: "Expand Aspect Ratio",
                 userPrompt: "Generate a sweeping, ultra-widescreen {{aspect_ratio_e.g._21:9}} video that dramatically establishes the visual scope of {{scene_concept_e.g._a_lone_astronaut_standing_on_a_desolate_alien_dune}}. Emphasize the vastness of the environment using a {{camera_motion_e.g._slow_pull-back_crane_shot}}."
+            },
+            {
+                promptName: "Generate Instagram Reel",
+                userPrompt: "Generate a high-engagement, vertical {{aspect_ratio_e.g._9:16}} video sequence tailored for an Instagram Reel campaign. Focus on a visually striking hook featuring {{scene_hook_e.g._a_vibrant_sneaker_stepping_into_a_neon_puddle_in_slow_motion}}. Utilize a {{camera_motion_e.g._rapid_whip-pan_transition}} and {{lighting_mood_e.g._high-contrast_studio_lighting}} to maximize immediate viewer retention."
+            },
+            {
+                promptName: "Animate Image",
+                userPrompt: "Extract the source image asset at {{s3_uri}} from context to serve as the initial keyframe. Transform the static shot into a breathtaking, fluid video sequence by seamlessly animating {{motion_subject_e.g._flowing_waterfall_mist_and_swirling_fog}}. Apply a {{camera_motion_e.g._slow_cinematic_push-in_with_subtle_parallax}} and enhance atmosphere with {{lighting_effects_e.g._dramatic_volumetric_sunbeams_shifting_through_clouds}} while strictly maintaining the original subject composition."
             }
         ],
         modelAvailability: "ALL_AGENTS",
         costImpact: "ULTRA_COMPUTE"
+    },
+    {
+        toolName: "generate_powerpoint_agent",
+        publicName: "Enterprise Powerpoint Creator",
+        systemPrompt: "You are a Fractional Chief Operating Officer and Expert Presentation Architect. Construct dense, highly professional PowerPoint payloads. Workflow: (1) Evaluate the core objective. (2) Structurally map the narrative arc (Introduction, Body, Data/Analysis, Conclusion). (3) Write precise speaker notes for each slide. (4) Map aesthetic coordinates (x, y, w, h) for all texts, shapes, and images to ensure clean, vivid layouts. Apply fluid slide transitions, element animations, and use the appropriate corporate theme constraint.",
+        userPrompts: [
+            {
+                promptName: "Executive Pitch Deck",
+                userPrompt: "Synthesize the provided business plan for '{{company_or_product_name}}' into a high-impact, 10-slide Executive Pitch Deck. Use the '{{theme_e.g._TECHNOLOGY}}' theme. Ensure every slide includes deep speaker notes, utilizes fluid 'zoom' transitions, and incorporates animated graphic shapes (e.g., interconnected nodes or process arrows) to visually map the go-to-market strategy."
+            },
+            {
+                promptName: "Financial Quarterly Review",
+                userPrompt: "Parse the attached {{data_source_e.g._Q3_financial_data}} and construct an authoritative Quarterly Business Review (QBR) presentation. Use the '{{theme_e.g._FINANCE}}' corporate template. Build vivid data layouts using shapes and aligned text blocks to highlight EBITDA and revenue margins. Apply 'fade' transitions between slides and strict executive cheat-sheets in the slide notes."
+            },
+            {
+                promptName: "Marketing Campaign Kickoff",
+                userPrompt: "Generate a vibrant presentation to kick off the upcoming '{{campaign_name}}' marketing campaign. Use the '{{theme_e.g._MARKETING}}' aesthetic. Coordinate the slides to include space for generated image URLs, apply 'fly' animations to the core messaging texts from the left, and ensure the narrative flows perfectly from target audience identification to expected ROI."
+            },
+            {
+                promptName: "Agile Project Roadmap",
+                userPrompt: "Translate the following engineering objectives into a structured Agile Project Management roadmap presentation. Use the '{{theme_e.g._CORPORATE}}' theme. Map out sprint milestones using horizontally aligned shapes (e.g., rightArrows and rects) across the slides to create a visual Gantt chart effect, apply 'push' transitions, and provide technical speaker notes."
+            },
+            {
+                promptName: "Brand-Compliant Corporate Deck",
+                userPrompt: "Analyze the attached corporate presentation template at {{s3_uri}}. Extract the strict design guidelines, including exact hex colors, typography hierarchy, and spatial layouts. Then, generate a highly professional {{slide_count_e.g._15}}-slide presentation on {{presentation_topic}} that flawlessly adheres to this reference architecture. Ensure all shapes, text alignments, and '{{transition_type_e.g._fade}}' animations match the enterprise brand identity exactly, and include comprehensive speaker notes for the presenter."
+            }
+        ],
+        modelAvailability: "ALL_AGENTS",
+        costImpact: "HIGH_COMPUTE"
     },
     {
         toolName: "generate_document_agent",
@@ -971,6 +1008,35 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         ],
         modelAvailability: "STANDARD_ONLY",
         costImpact: "MEDIUM_COMPUTE"
+    },
+    {
+        toolName: "shopify_admin_agent",
+        publicName: "Shopify Store Administrator",
+        systemPrompt: "You are an expert E-Commerce Operations Executive and Shopify Administrator. Execute actions systematically: (1) Verify target endpoints and parameters. (2) For complex store analysis, perform a GET_FINANCIAL_INSIGHTS action first. (3) When creating or mutating products, price rules, or customer records, validate payloads against Shopify Admin REST specifications. (4) Summarize financial outputs clearly with actionable operational recommendations.",
+        userPrompts: [
+            {
+                promptName: "Executive Store Financial Health",
+                userPrompt: "Execute a GET_FINANCIAL_INSIGHTS action for store domain '{{shop_domain_e.g._store.myshopify.com}}' over the past {{timeframe_days_e.g._30}} days. Synthesize gross revenue, Average Order Value (AOV), fulfillment backlog ratio, and top product performers into an executive briefing."
+            },
+            {
+                promptName: "Create Flash Sale Discount",
+                userPrompt: "Execute a POST request to the 'price_rules.json' endpoint on '{{shop_domain_e.g._store.myshopify.com}}'. Create a Price Rule titled '{{discount_code_title_e.g._FLASH20}}' granting a {{percentage_e.g._20%}} discount on all products, valid from {{start_date}} to {{end_date}}."
+            },
+            {
+                promptName: "Inventory Restock & Audit",
+                userPrompt: "Execute a GET action to the 'inventory_levels.json' endpoint on '{{shop_domain}}'. Identify all inventory items where available stock is below {{low_stock_threshold_e.g._10}} units, and generate a structured reorder list for supplier procurement."
+            },
+            {
+                promptName: "Unfulfilled Order Audit & Processing",
+                userPrompt: "Query the 'orders.json' endpoint on '{{shop_domain}}' with queryParams '{{query_params_e.g._status:open,fulfillment_status:unfulfilled}}'. Group stagnant unfulfilled orders by age, flag items delayed by more than {{delay_days_e.g._3}} days, and synthesize a resolution strategy."
+            },
+            {
+                promptName: "Automated Webhook Security Provisioning",
+                userPrompt: "Provision real-time event notifications on '{{shop_domain}}'. Execute a POST request to 'webhooks.json' to register a webhook listening to topic '{{topic_e.g._orders/create}}' and routing payloads securely to endpoint '{{webhook_callback_url}}'."
+            }
+        ],
+        modelAvailability: "STANDARD_ONLY",
+        costImpact: "HIGH_COMPUTE"
     },
     {
         toolName: "slack_collaboration_agent",

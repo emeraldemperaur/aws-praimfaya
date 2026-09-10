@@ -70,6 +70,8 @@ import extractPdfIcon from '../assets/pdf-icon.png';
 import docGeneratorIcon from '../assets/doc-generator-icon.png';
 import attachmentAnalyzerIcon from '../assets/file-scanner-icon.png';
 import enterpriseImageIcon from '../assets/image-icon.png';
+import powerPointIcon from '../assets/powerpoint-icon.png';
+import shopifyIcon from '../assets/shopify-icon.png';
 
 export const SuccessIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-regular fa-circle-check"></i></a>;
 export const ErrorIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-solid fa-radiation"></i>&nbsp;</a>;
@@ -265,6 +267,8 @@ export const getModelIcon = (identifier?: string | null): string => {
   if (id.includes('jotform_agile_agent') || id.includes('Jotform Data Capture Agent')) return jotformIcon;
   if (id.includes('read_user_attachment') || id.includes('File Attachment Analyzer')) return attachmentAnalyzerIcon;
   if (id.includes('execute_vanguard_qa') || id.includes('Selenium Grid QA Agent')) return seleniumIcon;
+  if (id.includes('generate_powerpoint_agent') || id.includes('Enterprise Powerpoint Creator')) return powerPointIcon;
+  if (id.includes('shopify_admin_agent') || id.includes('Shopify Store Administrator')) return shopifyIcon;
 
 
   

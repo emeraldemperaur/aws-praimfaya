@@ -359,6 +359,25 @@ const EphemeralCredentialsModal: React.FC<EphemeralCredentialsModalProps> = ({
             />
           )}
 
+          {activeAuthPrompt === 'shopify' && (
+            <>
+              <input 
+                type="text" 
+                placeholder="Shopify Store Domain (e.g. store.myshopify.com)" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, shopifyDomain: e.target.value })} 
+                required 
+                style={inputStyle} 
+              />
+              <SecretInput 
+                placeholder="Shopify Admin Access Token (shpat_...)" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, shopifyAccessToken: e.target.value })} 
+                required 
+                style={inputStyle} 
+                darkMode={darkMode} 
+              />
+            </>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
             <button 
               type="button" 

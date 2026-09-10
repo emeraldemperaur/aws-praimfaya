@@ -233,14 +233,39 @@ export const executeLumaVideo = async ({
 }: ToolExecutionContext) => {
     try {
         const bucketName = getMediaBucketName(env);
-        const { prompt, aspectRatio } = toolInput;
+        const { prompt, aspectRatio, s3Uri } = toolInput;
 
-        if (!prompt) return { error: "Prompt parameter is required for video generation." };
+        if (!prompt && !s3Uri) {
+            return { error: "A prompt or source image (s3Uri) is required for video generation." };
+        }
+
+        let modelInput: any = { aspect_ratio: aspectRatio || '16:9' };
+        if (prompt) modelInput.prompt = prompt;
+        if (s3Uri && s3Uri.startsWith('s3://')) {
+            const uriParts = s3Uri.replace('s3://', '').split('/');
+            const srcBucket = uriParts.shift()!;
+            const srcKey = uriParts.join('/');
+
+            const s3Res = await clients.s3.send(new GetObjectCommand({ Bucket: srcBucket, Key: srcKey }));
+            const byteArr = await s3Res.Body?.transformToByteArray();
+            
+            if (!byteArr) throw new Error("Failed to read source image from S3 for Luma video generation.");
+
+            const base64Image = Buffer.from(byteArr).toString('base64');
+            const mimeType = srcKey.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+            
+            modelInput.keyframes = {
+                frame0: {
+                    type: "image",
+                    url: `data:${mimeType};base64,${base64Image}`
+                }
+            };
+        }
 
         const videoKeyPrefix = `video-renders/luma-${Date.now()}`;
         const asyncJob = await clients.bedrockRuntime.send(new StartAsyncInvokeCommand({
             modelId: "luma.ray-v2:0",
-            modelInput: { prompt: prompt, aspect_ratio: aspectRatio || '16:9' },
+            modelInput: modelInput,
             outputDataConfig: {
                 s3OutputDataConfig: { s3Uri: `s3://${bucketName}/${videoKeyPrefix}` }
             }

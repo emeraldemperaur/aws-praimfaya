@@ -110,4 +110,6 @@ export interface EphemeralSecrets {
   sanityToken?: string;
   formstackToken?: string;
   jotformToken?: string;
+  shopifyDomain?: string;
+  shopifyAccessToken?: string;
 }

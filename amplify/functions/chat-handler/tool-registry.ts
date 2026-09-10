@@ -19,8 +19,27 @@ export const NATIVE_TOOLS_REGISTRY = [
     { 
         toolSpec: { 
             name: "generate_luma_video", 
-            description: "Generates realistic video content using Luma Dream Machine / Ray.", 
-            inputSchema: { json: { type: "object", properties: { prompt: { type: "string" }, aspectRatio: { type: "string", enum: ["16:9", "9:16", "1:1"] } }, required: ["prompt"] } } 
+            description: "Generates realistic video content using Luma Dream Machine / Ray. Supports Text-to-Video and Image-to-Video.", 
+            inputSchema: { 
+                json: { 
+                    type: "object", 
+                    properties: { 
+                        prompt: { 
+                            type: "string",
+                            description: "The text description of the video to generate. Optional if an s3Uri is provided."
+                        }, 
+                        aspectRatio: { 
+                            type: "string", 
+                            enum: ["16:9", "9:16", "1:1"],
+                            description: "The aspect ratio of the generated video."
+                        },
+                        s3Uri: { 
+                            type: "string", 
+                            description: "The strict s3:// URI of the source image provided in the System Context to be used as the starting frame for Image-to-Video generation." 
+                        }
+                    } 
+                } 
+            } 
         } 
     },
     { 
@@ -80,8 +99,80 @@ export const NATIVE_TOOLS_REGISTRY = [
             }
         }
     },
+    {
+        toolSpec: {
+            name: "generate_powerpoint_agent",
+            description: "Generates high-fidelity, multi-slide enterprise PowerPoint (.pptx) presentations. Supports Microsoft Office, LibreOffice, and Google Slides. Constructs pitch decks, financial reviews, project plans, and operational reports complete with fluid animations, layout schemas, shapes, images, and embedded speaker notes.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        title: { type: "string", description: "The overarching title of the presentation." },
+                        theme: { type: "string", enum: ["FINANCE", "MARKETING", "TECHNOLOGY", "ENTERTAINMENT", "CORPORATE"], description: "The strict corporate design system to apply." },
+                        layout: { type: "string", enum: ["LAYOUT_16x9", "LAYOUT_4x3", "LAYOUT_WIDE"], description: "The screen aspect ratio." },
+                        slides: {
+                            type: "array",
+                            description: "An array of slide objects to generate.",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    backgroundColor: { type: "string", description: "Optional HEX color (e.g. 'FFFFFF')." },
+                                    notes: { type: "string", description: "Speaker notes or cheat sheet for the presenter for this specific slide." },
+                                    transition: {
+                                        type: "object",
+                                        description: "Fluid slide transition animation.",
+                                        properties: {
+                                            type: { type: "string", enum: ["fade", "push", "cover", "uncover", "zoom"] },
+                                            speed: { type: "string", enum: ["fast", "med", "slow"] }
+                                        }
+                                    },
+                                    elements: {
+                                        type: "array",
+                                        description: "The visual elements (Text, Shapes, Images) placed on the slide using x/y/w/h inch coordinates.",
+                                        items: {
+                                            type: "object",
+                                            properties: {
+                                                type: { type: "string", enum: ["TEXT", "IMAGE", "SHAPE"] },
+                                                content: { type: "string", description: "The text body, or the image URL if type is IMAGE." },
+                                                shapeType: { type: "string", description: "If type is SHAPE, specify (e.g. 'rect', 'ellipse', 'rightArrow', 'star5', 'globe')." },
+                                                options: {
+                                                    type: "object",
+                                                    description: "Positioning and styling constraints.",
+                                                    properties: {
+                                                        x: { type: "number", description: "X position in inches (e.g., 0.5)." },
+                                                        y: { type: "number", description: "Y position in inches (e.g., 1.5)." },
+                                                        w: { type: "number", description: "Width in inches (e.g., 8)." },
+                                                        h: { type: "number", description: "Height in inches (e.g., 2)." },
+                                                        fontSize: { type: "number" },
+                                                        color: { type: "string", description: "Hex color." },
+                                                        bold: { type: "boolean" },
+                                                        align: { type: "string", enum: ["left", "center", "right"] },
+                                                        fill: { type: "object", properties: { color: { type: "string" } } },
+                                                        animation: {
+                                                            type: "object",
+                                                            description: "Element-level entrance animation.",
+                                                            properties: {
+                                                                type: { type: "string", enum: ["fade", "fly"] },
+                                                                direction: { type: "string", enum: ["left", "right", "top", "bottom"] }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            required: ["type", "options"]
+                                        }
+                                    }
+                                },
+                                required: ["elements"]
+                            }
+                        }
+                    },
+                    required: ["title", "theme", "slides"]
+                }
+            }
+        }
+    },
     
-
     // --- Data & Pipeline Engineering ---
     {
     toolSpec: {
@@ -763,6 +854,50 @@ export const NATIVE_TOOLS_REGISTRY = [
                     }, 
                     required: ["action"] 
                 } 
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "shopify_admin_agent",
+            description: "Enterprise Shopify Administrator agent. Directly interface with the Shopify Admin REST API to query or mutate Products, Orders, Customers, Inventory, Discounts, Gift Cards, Billing, Marketing Events, Webhooks, Payments, and Store Properties. Includes automated financial and operational analytics synthesis.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: {
+                            type: "string",
+                            enum: ["EXECUTE_REST_ACTION", "GET_FINANCIAL_INSIGHTS"],
+                            description: "Select 'GET_FINANCIAL_INSIGHTS' for executive store health synthesis, or 'EXECUTE_REST_ACTION' for raw API operations."
+                        },
+                        method: {
+                            type: "string",
+                            enum: ["GET", "POST", "PUT", "DELETE"],
+                            description: "HTTP method for REST action. Default is GET."
+                        },
+                        endpoint: {
+                            type: "string",
+                            description: "The relative Shopify Admin REST resource path (e.g., 'products.json', 'orders/1001/fulfillments.json', 'price_rules.json', 'webhooks.json')."
+                        },
+                        queryParams: {
+                            type: "object",
+                            description: "URL query parameters (e.g., { limit: 50, status: 'open', price_min: 100 })."
+                        },
+                        payload: {
+                            type: "object",
+                            description: "The JSON payload for POST or PUT requests (e.g., { product: { title: 'New Item', variants: [...] } })."
+                        },
+                        shopDomain: {
+                            type: "string",
+                            description: "Optional override for target Shopify store domain if not supplied via ephemeral credentials."
+                        },
+                        timeframeDays: {
+                            type: "number",
+                            description: "Lookback period in days for financial analysis. Default is 30."
+                        }
+                    },
+                    required: ["action"]
+                }
             }
         }
     },
