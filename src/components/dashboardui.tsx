@@ -1,33 +1,69 @@
-import { useState } from 'react';
-import { signOut } from 'aws-amplify/auth';
+import { useState, useEffect } from 'react';
+import { signOut, fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
 import { useNavigate } from 'react-router-dom';
 import { usePraimfaya } from '../contexts';
 import '../styles/dashboard.scss'; 
+import NeumorphicToggle from './neumorphictoggle';
+
+const client = generateClient() as any;
 
 const menuItems = [
     { id: 'overview', icon: 'bx bx-grid-alt', label: 'System Overview' },
-    { id: 'analytics', icon: 'bx bx-line-chart', label: 'AI Analytics' },
+    { id: 'analytics', icon: 'bx bx-dollar-circle', label: 'Compute Credits' },
     { id: 'nodes', icon: 'bx bx-network-chart', label: 'Agent Nodes' },
-    { id: 'transactions', icon: 'bx bx-transfer', label: 'RAG Transactions' },
+    { id: 'transactions', icon: 'bx bx-brain', label: 'Knowledge Loci' },
     { id: 'settings', icon: 'bx bx-cog', label: 'Account Settings' }
 ];
 
 const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
+    
+    const [isAdminRole, setIsAdminRole] = useState(false);
+    const [isAdminView, setIsAdminView] = useState(false);
+    const [planDisplayName, setPlanDisplayName] = useState('No Subscription');
 
     const navigator = useNavigate();
-  const { userLogout } = usePraimfaya(); 
+    const { userLogout } = usePraimfaya(); 
 
-  const handleUserLogout = async () => {
-    try {
-      await signOut();
-      userLogout();
-      navigator('/'); 
-    } catch (error) {
-      console.error('Error signing out: ', error);
-    }
-  };
+    useEffect(() => {
+        const hydrateUserContext = async () => {
+            try {
+                const session = await fetchAuthSession();
+                const groups = (session.tokens?.accessToken?.payload['cognito:groups'] as string[]) || [];
+                const adminGroups = ['superadmin', 'root', 'admin', 'heda'];
+                const hasAdminPrivileges = adminGroups.some(group => groups.includes(group));
+                setIsAdminRole(hasAdminPrivileges);
+                setIsAdminView(hasAdminPrivileges);
+                const user = await getCurrentUser();
+                const { data: profiles } = await client.models.UserProfile.list({
+                    filter: { cognitoUserId: { eq: user.userId } }
+                });
+
+                if (profiles && profiles.length > 0) {
+                    const plan = profiles[0].planName;
+                    if (plan === 'VANGUARD') setPlanDisplayName('Vanguard Pro');
+                    else if (plan === 'VANGUARD_ELITE') setPlanDisplayName('Vanguard Elite');
+                    else setPlanDisplayName('No Subscription');
+                }
+            } catch (error) {
+                console.error("Failed to hydrate user context:", error);
+            }
+        };
+
+        hydrateUserContext();
+    }, []);
+
+    const handleUserLogout = async () => {
+        try {
+            await signOut();
+            userLogout();
+            navigator('/'); 
+        } catch (error) {
+            console.error('Error signing out: ', error);
+        }
+    };
 
     const renderContent = () => {
         switch (activeTab) {
@@ -75,10 +111,51 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
             
             <aside className={`ft-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
                 <div className="sidebar-header">
-                    <div className="logo-placeholder">
+                    <div className="logo-placeholder" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        
                         <div className="logo-icon"><i className="bx bx-cube-alt"></i></div>
-                        <span className="logo-text">Polaris <em>OS</em></span>
+                        
+                        <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            opacity: isCollapsed ? 0 : 1, 
+                            maxWidth: isCollapsed ? 0 : '200px', 
+                            overflow: 'hidden', 
+                            transition: 'all 0.3s ease',
+                            pointerEvents: isCollapsed ? 'none' : 'auto',
+                            whiteSpace: 'nowrap' 
+                        }}>
+                            {isAdminRole && (
+                                <>
+                                <NeumorphicToggle 
+                                    darkMode={darkMode}
+                                    checked={isAdminView} 
+                                    onChange={(e) => setIsAdminView(e.target.checked)} 
+                                />
+                                <span 
+                                    style={{ fontFamily: 'Bodoni Moda Variable', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.13em', fontSize: '0.93rem' }} 
+                                    className="logo-text"
+                                >
+                                    {isAdminView ? 'Admin' : 'User'}
+                                </span>
+                                </>
+                            )}
+                             {!isAdminRole && (
+                                <>
+                                <span 
+                                    style={{ fontFamily: 'Bodoni Moda Variable', textTransform: 'uppercase', fontWeight: 300, letterSpacing: '0.13em', fontSize: '0.69rem' }} 
+                                    className="logo-text"
+                                >
+                                    {planDisplayName}
+                                </span>
+                                </>
+                            )}
+                            
+                        </div>
+
                     </div>
+
                     <button 
                         className="ft-toggle-btn" 
                         onClick={() => setIsCollapsed(!isCollapsed)}

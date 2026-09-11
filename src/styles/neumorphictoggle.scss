@@ -1,0 +1,94 @@
+$baseW: 4.4rem;
+$baseH: $baseW / 2;
+
+.neu-toggle-container {
+  display: inline-block;
+  vertical-align: middle;
+
+  .neu-toggle-input {
+    display: none;
+
+    &:checked + .neu-toggle-label {
+      .neu-toggle-knob {
+        transform: translateX($baseH);
+      }
+      .neu-toggle-path {
+        stroke: #06402B;
+        stroke-dasharray: 25;
+        stroke-dashoffset: 25;
+      }
+    }
+  }
+
+  .neu-toggle-label {
+    position: relative;
+    display: inline-block;
+    width: $baseW;
+    height: $baseH;
+    cursor: pointer;
+    transform: translate3d(0, 0, 0);
+    -webkit-tap-highlight-color: transparent;
+
+    &::before {
+      position: relative;
+      top: 1px;
+      left: 1px;
+      display: block;
+      width: 100%;
+      height: 100%;
+      border-radius: $baseH;
+      box-shadow: -2px -4px 6px 0px rgba(255, 255, 255, 0.6) inset, 
+                  2px 4px 6px 0px rgba(136, 165, 191, .6) inset;
+      content: "";
+      transition: all 0.3s ease;
+    }
+
+    .neu-toggle-knob {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: $baseH;
+      height: $baseH;
+      border-radius: 50%;
+      background: linear-gradient(90deg, #ffffff 0%, #d9e7ff 100%);
+      box-shadow: -2px -4px 6px 0px rgba(255, 255, 255, 0.6), 
+                  2px 4px 6px 0px rgba(136, 165, 191, .6);
+      transition: all 0.3s ease;
+    }
+
+    .neu-toggle-svg {
+      fill: none;
+      transform: scale(2);
+    }
+
+    .neu-toggle-path {
+      transition: all 0.3s linear;
+      stroke: #800020;
+      stroke-dasharray: 24;
+      stroke-dashoffset: 0;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+    }
+  }
+
+  
+  &.dark {
+    .neu-toggle-label {
+      &::before {
+        box-shadow: -2px -4px 6px 0px rgba(255, 255, 255, 0.05) inset, 
+                    2px 4px 6px 0px rgba(0, 0, 0, 0.5) inset;
+        background: #1f2937; /* Base dark gray */
+      }
+
+      .neu-toggle-knob {
+        background: linear-gradient(90deg, #374151 0%, #1f2937 100%);
+        box-shadow: -2px -4px 6px 0px rgba(255, 255, 255, 0.05), 
+                    2px 4px 6px 0px rgba(0, 0, 0, 0.5);
+      }
+    }
+  }
+}
