@@ -67,7 +67,7 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
     backgroundColor: darkMode ? '#1f2937' : '#ffffff',
     color: darkMode ? '#f9fafb' : '#111827',
     marginTop: '0.5rem',
-    fontFamily: 'inherit',
+    fontFamily: 'Google Sans Code',
     boxSizing: 'border-box' as const
   };
 

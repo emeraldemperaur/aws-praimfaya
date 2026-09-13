@@ -84,7 +84,7 @@ const SearchRibbon: React.FC<SearchRibbonProps> = ({
             font-size: 0.95rem;
             outline: none;
             width: 250px;
-            font-family: 'Bodoni Moda Variable';
+            font-family: 'Google Sans Code';
           }
 
           .ribbon-search-input::placeholder {
@@ -111,7 +111,7 @@ const SearchRibbon: React.FC<SearchRibbonProps> = ({
             background-repeat: no-repeat;
             background-position: right 8px center;
             padding-right: 32px;
-            font-family: "Bodoni Moda Variable", serif;
+            font-family: 'Google Sans Code', serif;
           }
 
           .ribbon-dropdown option {

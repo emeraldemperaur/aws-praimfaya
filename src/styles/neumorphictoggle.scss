@@ -1,5 +1,5 @@
 $baseW: 4.4rem;
-$baseH: $baseW / 2;
+$baseH: calc($baseW / 2);
 
 .neu-toggle-container {
   display: inline-block;

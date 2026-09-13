@@ -619,7 +619,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
     backgroundColor: darkMode ? '#1f2937' : '#ffffff',
     color: darkMode ? '#f9fafb' : '#111827',
-    fontFamily: 'inherit',
+    fontFamily: 'Google Sans Code',
     boxSizing: 'border-box' 
   };
 
@@ -941,7 +941,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               <label style={labelStyle}>Profile Name <span style={{ color: '#ef4444' }}>*</span></label>
               <input 
                 type="text" name="name" value={newContextProfileData.name} onChange={handleNewTextChange} placeholder="e.g., Customer Support Agent"
-                style={{ ...inputStyle, borderColor: isNameDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db') }}
+                style={{ ...inputStyle, borderColor: isNameDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db'), fontFamily: 'Google Sans Code' }}
               />
               {isNameDuplicate && <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>A profile with this name already exists.</p>}
             </div>
@@ -1352,7 +1352,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                     </select>
                   </div>
                   <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <input type="checkbox" name="enableCodeInterpreter" checked={editContextProfileData.enableCodeInterpreter!} onChange={handleEditToggleChange} style={{ cursor: 'pointer' }} />
+                    <input type="checkbox" name="enableCodeInterpreter" checked={editContextProfileData.enableCodeInterpreter ?? false} onChange={handleEditToggleChange} style={{ cursor: 'pointer' }} />
                     <span style={{ fontSize: '0.875rem', color: darkMode ? '#f9fafb' : '#111827' }}>Code Interpreter</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

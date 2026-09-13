@@ -1,0 +1,78 @@
+.knowledge-loci-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    width: 100%;
+
+    /* Grid Layouts strictly constrained with minmax */
+    .kl-row {
+        display: grid;
+        gap: 1.5rem;
+    }
+
+    /* Line 1: 50% / 50% split */
+    .kl-line-1 { 
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); 
+    }
+
+    /* Line 2: 50% / 50% split */
+    .kl-line-2 { 
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); 
+    }
+
+    @media (max-width: 1024px) {
+        .kl-row { 
+            grid-template-columns: 1fr !important; 
+        }
+    }
+
+    /* Card & Container Utilities */
+    .kl-card-header {
+        margin-bottom: 1.5rem;
+        width: 100%;
+        
+        h3 {
+            font-family: 'Bodoni Moda Variable', serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #111827;
+            margin: 0;
+        }
+
+        .kl-subtitle {
+            display: block;
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-top: 0.35rem;
+        }
+    }
+
+    .kl-d3-card {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 1.5rem;
+
+        svg {
+            width: 100%;
+            max-height: 250px;
+        }
+    }
+
+    .kl-no-data {
+        font-family: 'Google Sans Code', monospace;
+        font-size: 0.9rem;
+        color: #9ca3af;
+        font-style: italic;
+        padding: 2rem;
+        align-self: center;
+    }
+}
+
+/* Dark Theme Overrides */
+.dark-theme .knowledge-loci-grid {
+    .kl-card-header h3 { 
+        color: #f9fafb; 
+    }
+}

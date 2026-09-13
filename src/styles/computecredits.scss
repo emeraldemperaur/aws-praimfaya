@@ -1,0 +1,102 @@
+.compute-credits-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    width: 100%;
+
+    .cc-row {
+        display: grid;
+        gap: 1.5rem;
+    }
+
+    .cc-line-1 { 
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); 
+    }
+
+    .cc-line-2 { 
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); 
+    }
+
+    .cc-line-3 { 
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); 
+    }
+
+    @media (max-width: 1024px) {
+        .cc-row { 
+            grid-template-columns: 1fr !important; 
+        }
+    }
+
+    /* Card & Container Utilities */
+    .cc-card-header {
+        margin-bottom: 1rem;
+        
+        h3 {
+            font-family: 'Bodoni Moda Variable', serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #111827;
+            margin: 0;
+        }
+
+        .cc-subtitle {
+            display: block;
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-top: 0.25rem;
+        }
+    }
+
+    .cc-d3-container {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-top: 1rem;
+        
+        svg {
+            width: 100%;
+            max-height: 250px;
+        }
+    }
+
+    .cc-line-chart-container svg {
+        max-height: 300px;
+    }
+
+    .cc-d3-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        
+        .cc-label {
+            font-family: 'Bodoni Moda Variable', serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #111827;
+        }
+
+        svg {
+            max-height: 200px;
+            width: 100%;
+        }
+    }
+
+    .cc-no-data {
+        font-family: 'Google Sans Code', monospace;
+        font-size: 0.9rem;
+        color: #9ca3af;
+        font-style: italic;
+        padding: 2rem;
+    }
+}
+
+.dark-theme .compute-credits-grid {
+    .cc-card-header h3, 
+    .cc-d3-card .cc-label { 
+        color: #f9fafb; 
+    }
+}

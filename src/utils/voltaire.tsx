@@ -175,7 +175,7 @@ export const inputStyle = (darkMode: boolean): React.CSSProperties => (  {
     border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
     backgroundColor: darkMode ? '#1f2937' : '#ffffff',
     color: darkMode ? '#f9fafb' : '#111827',
-    fontFamily: 'inherit',
+    fontFamily: 'Google Sans Code',
     boxSizing: 'border-box' 
   });
 

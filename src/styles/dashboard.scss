@@ -18,7 +18,7 @@ $shadow-dark: 0 4px 6px -1px rgba(0,0,0,0.2);
 
 // Brand & Functional Colors
 $primary-color: #0d1b2a;   // Deep Oxford Blue (Fintech staple)
-$accent-color: #2563eb;    // Vibrant Royal Blue for active states
+$accent-color: #0b0b45;    // Vibrant Royal Blue for active states
 $success: #10b981;
 $pending: #f59e0b;
 $transition-speed: 0.3s;
@@ -50,7 +50,7 @@ $transition-speed: 0.3s;
     .ft-nav-item {
       color: $text-muted-dark;
       &:hover { background-color: rgba(255,255,255,0.03); color: $text-main-dark; }
-      &.active { background-color: rgba(37, 99, 235, 0.15); color: #60a5fa; border-left-color: #60a5fa; }
+      &.active { background-color: rgba(37, 99, 235, 0.15); color: #ffffff; border-left-color: #ffffff; }
     }
   }
 }

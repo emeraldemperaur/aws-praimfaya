@@ -224,6 +224,12 @@ const schema = a.schema({
       computeCredits: a.integer().default(0), 
       maxCredits: a.integer().default(0),
       disabledModelIds: a.string().array(),
+      firstName: a.string(),
+      lastName: a.string(),
+      timeZone: a.string(),
+      mcpDiscovery: a.boolean().default(false),
+      nocturnalAgents: a.boolean().default(false),
+      integrations: a.json(),
     })
     .authorization(iamRBAC),
 
