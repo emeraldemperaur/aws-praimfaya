@@ -612,7 +612,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
 
       <FullScreenModal
         isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)}
-        title={`Emend Terminal Session: ${editConsoleTerminal?.id || ''}`} darkMode={darkMode}
+        title={`Emend Terminal Session: ${editConsoleTerminal?.title || ''}`} darkMode={darkMode}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', width: '100%' }}>
             <button onClick={() => setIsEditModalOpen(false)} style={{ padding: '0.75rem 1.5rem', cursor: 'pointer', backgroundColor: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, fontFamily: 'Bodoni Moda Variable, serif', color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px' }}>Cancel</button>
