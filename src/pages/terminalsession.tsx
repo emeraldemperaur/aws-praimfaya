@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm';
 import EphemeralCredentialsModal from '../components/ephemeralcredentialsmodal';
 import type { EphemeralSecrets } from '../data/consoleterminal';
 import { JotformEmbed } from '../components/jotformportal';
-import { HaikusDropdown } from '../components/haikusdropdown'; // <-- Added Import
+import { HaikusDropdown } from '../components/haikusdropdown';
 
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -511,14 +511,119 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           <div ref={scrollRef} />
         </div>
 
-        {/* --- INCORPORATED HAIKUS DROPDOWN & FORM WRAPPER --- */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem', flexShrink: 0 }}>
           
-          <div style={{ alignSelf: 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', alignSelf: 'flex-start' }}>
             <HaikusDropdown 
               darkMode={darkMode} 
               onSelect={(promptStr) => setInputMessage(promptStr)} 
             />
+            
+            <button
+              type="button"
+              title="Attach Document or Media"
+              onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
+              style={{
+                background: darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+                borderRadius: '8px',
+                color: darkMode ? '#f9fafb' : '#111827',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.85rem',
+                width: '32px',
+                height: '32px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <i className="fa-solid fa-paperclip"></i>
+            </button>
+
+            <button
+              type="button"
+              title="Open Artifacts Drawer"
+              onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
+              style={{
+                background: darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+                borderRadius: '8px',
+                color: darkMode ? '#f9fafb' : '#111827',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.85rem',
+                width: '32px',
+                height: '32px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <i className="fa-solid fa-cubes"></i>
+            </button>
+
+           <button
+              type="button"
+              title="View Vector Collection"
+              onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
+              style={{
+                background: darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+                borderRadius: '8px',
+                color: darkMode ? '#f9fafb' : '#111827',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.85rem',
+                width: '32px',
+                height: '32px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <svg  xmlns="http://www.w3.org/2000/svg" width="24" height="24"  
+                    fill="currentColor" viewBox="0 0 24 24" >
+                    <path d="m21.45 6.11-6-3c-.26-.13-.56-.14-.83-.03l-12 5C2.25 8.24 2 8.6 2 9v8c0 .38.21.73.55.89l6 3c.14.07.29.11.45.11.13 0 .26-.03.38-.08l12-5c.37-.16.62-.52.62-.92V7c0-.38-.21-.73-.55-.89M14.96 5.1l3.64 1.82-9.56 3.98L5.4 9.08zM10 12.67l2-.83v5.83l-2 .83zM14 11l2-.83V16l-2 .83zm-10-.38 4 2v5.76l-4-2zm14 4.55V9.34l2-.83v5.83z"></path>
+                    </svg>
+            </button>
+            <button
+              type="button"
+              title="View Automation Workflows"
+              onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
+              style={{
+                background: darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+                borderRadius: '8px',
+                color: darkMode ? '#f9fafb' : '#111827',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.85rem',
+                width: '32px',
+                height: '32px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <i className="fa-solid fa-circle-nodes"></i>
+            </button>
           </div>
 
           <form onSubmit={(e) => handleExecutePrompt(e)} style={{ display: 'flex', gap: '1rem' }}>
