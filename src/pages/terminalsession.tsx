@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm';
 import EphemeralCredentialsModal from '../components/ephemeralcredentialsmodal';
 import type { EphemeralSecrets } from '../data/consoleterminal';
 import { JotformEmbed } from '../components/jotformportal';
-
+import { HaikusDropdown } from '../components/haikusdropdown'; // <-- Added Import
 
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -184,7 +184,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       const avatarName = isUser ? (session.userId?.split('@')[0] || 'Anonymous') : (session.contextProfile?.name || 'Vanguard AI');
       const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      // Strip auth tags from transcript
       const cleanContent = (msg.content || '').replace(/<vanguard_auth_request>.*?<\/vanguard_auth_request>/g, '').trim();
 
       markdown += `### ${avatarName} _(${time})_\n\n`;
@@ -511,41 +510,54 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           <div ref={scrollRef} />
         </div>
 
-        <form onSubmit={(e) => handleExecutePrompt(e)} style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexShrink: 0 }}>
-          <input
-            type="text"
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            placeholder={
-              session?.status === 'ARCHIVED' 
-                ? "This session is archived and read-only." 
-                : `Ask ${session?.contextProfile?.name || 'Praimfaya'} a question or query your knowledge base...`
-            }
-            disabled={isAiTyping || session?.status === 'ARCHIVED'}
-            style={{
-              flex: 1, padding: '0.85rem 1.25rem', borderRadius: '0.375rem', fontSize: '0.925rem',
-              border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
-              backgroundColor: session?.status === 'ARCHIVED' ? (darkMode ? '#111827' : '#f3f4f6') : (darkMode ? '#1f2937' : '#ffffff'),
-              color: darkMode ? '#f9fafb' : '#111827',
-              cursor: session?.status === 'ARCHIVED' ? 'not-allowed' : 'text',
-              fontFamily: 'Bodoni Moda Variable',
-              minWidth: 0 
-            }}
-          />
-          <button
-            type="submit"
-            disabled={isAiTyping || !inputMessage.trim() || session?.status === 'ARCHIVED'}
-            style={{
-              padding: '0.85rem 2.25rem', backgroundColor: '#800020', color: 'white', border: 'none', borderRadius: '0.375rem',
-              fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.09em', fontFamily: 'Google Sans Code',
-              cursor: (isAiTyping || !inputMessage.trim() || session?.status === 'ARCHIVED') ? 'not-allowed' : 'pointer',
-              opacity: (isAiTyping || !inputMessage.trim() || session?.status === 'ARCHIVED') ? 0.5 : 1,
-              whiteSpace: 'nowrap'
-            }}
-          >
-            Synthesize <i className="fa-solid fa-comment-nodes"></i>
-          </button>
-        </form>
+        {/* --- INCORPORATED HAIKUS DROPDOWN & FORM WRAPPER --- */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem', flexShrink: 0 }}>
+          
+          <div style={{ alignSelf: 'flex-start' }}>
+            <HaikusDropdown 
+              darkMode={darkMode} 
+              onSelect={(promptStr) => setInputMessage(promptStr)} 
+            />
+          </div>
+
+          <form onSubmit={(e) => handleExecutePrompt(e)} style={{ display: 'flex', gap: '1rem' }}>
+            <input
+              type="text"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              placeholder={
+                session?.status === 'ARCHIVED' 
+                  ? "This session is archived and read-only." 
+                  : `Ask ${session?.contextProfile?.name || 'Praimfaya'} a question or query your knowledge base...`
+              }
+              disabled={isAiTyping || session?.status === 'ARCHIVED'}
+              style={{
+                flex: 1, padding: '0.85rem 1.25rem', borderRadius: '0.375rem', fontSize: '0.925rem',
+                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                backgroundColor: session?.status === 'ARCHIVED' ? (darkMode ? '#111827' : '#f3f4f6') : (darkMode ? '#1f2937' : '#ffffff'),
+                color: darkMode ? '#f9fafb' : '#111827',
+                cursor: session?.status === 'ARCHIVED' ? 'not-allowed' : 'text',
+                fontFamily: 'Google Sans Code',
+                minWidth: 0 
+              }}
+            />
+            <button
+              type="submit"
+              title="Submit"
+              disabled={isAiTyping || !inputMessage.trim() || session?.status === 'ARCHIVED'}
+              style={{
+                padding: '0.85rem 2.25rem', backgroundColor: '#800020', color: 'white', border: 'none', borderRadius: '0.375rem',
+                fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.09em', fontFamily: 'Google Sans Code',
+                cursor: (isAiTyping || !inputMessage.trim() || session?.status === 'ARCHIVED') ? 'not-allowed' : 'pointer',
+                opacity: (isAiTyping || !inputMessage.trim() || session?.status === 'ARCHIVED') ? 0.5 : 1,
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <i className="fa-regular fa-paper-plane"></i>
+            </button>
+          </form>
+
+        </div>
       </div>
 
       {activeAuthPrompt && (
