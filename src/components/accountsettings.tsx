@@ -94,6 +94,7 @@ const getInitials = (name: string) => {
 
 const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode }) => {
     const [profileId, setProfileId] = useState<string | null>(null);
+    const [cognitoUserId, setCognitoUserId] = useState<string | null>(null);
     const [profile, setProfile] = useState({
         firstName: '',
         lastName: '',
@@ -116,6 +117,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
         const fetchUserProfile = async () => {
             try {
                 const user = await getCurrentUser();
+                setCognitoUserId(user.userId);
                 const { data: profiles } = await client.models.UserProfile.list({
                     filter: { cognitoUserId: { eq: user.userId } }
                 });
@@ -154,16 +156,28 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
     });
 
     const handleSaveProfile = async () => {
-        if (!profileId) return;
         try {
-            await client.models.UserProfile.update({
-                id: profileId,
-                firstName: profile.firstName,
-                lastName: profile.lastName,
-                timeZone: profile.timeZone,
-                mcpDiscovery: profile.mcpDiscovery,
-                nocturnalAgents: profile.nocturnalAgents
-            });
+            if (profileId) {
+                await client.models.UserProfile.update({
+                    id: profileId,
+                    firstName: profile.firstName,
+                    lastName: profile.lastName,
+                    timeZone: profile.timeZone,
+                    mcpDiscovery: profile.mcpDiscovery,
+                    nocturnalAgents: profile.nocturnalAgents
+                });
+            } else if (cognitoUserId) {
+                const response = await client.models.UserProfile.create({
+                    cognitoUserId: cognitoUserId,
+                    email: profile.email,
+                    firstName: profile.firstName,
+                    lastName: profile.lastName,
+                    timeZone: profile.timeZone,
+                    mcpDiscovery: profile.mcpDiscovery,
+                    nocturnalAgents: profile.nocturnalAgents
+                });
+                setProfileId(response.data.id);
+            }
             alert('Account Profile saved successfully.');
         } catch (error) {
             console.error("Failed to update profile: ", error);
@@ -172,12 +186,25 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
     };
 
     const saveIntegrationsToDB = async (updatedIntegrations: IntegrationsMap) => {
-        if (!profileId) return;
         try {
-            await client.models.UserProfile.update({
-                id: profileId,
-                integrations: updatedIntegrations
-            });
+            const payload = JSON.stringify(updatedIntegrations); 
+
+            if (profileId) {
+                await client.models.UserProfile.update({
+                    id: profileId,
+                    integrations: payload
+                });
+            } else if (cognitoUserId) {
+                const response = await client.models.UserProfile.create({
+                    cognitoUserId: cognitoUserId,
+                    email: profile.email,
+                    timeZone: profile.timeZone,
+                    mcpDiscovery: profile.mcpDiscovery,
+                    nocturnalAgents: profile.nocturnalAgents,
+                    integrations: payload
+                });
+                setProfileId(response.data.id);
+            }
         } catch (error) {
             console.error("Failed to save integrations: ", error);
         }
@@ -376,7 +403,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
             <div className="as-integrations-section">
                 <div className="as-integrations-header">
                     <h2>Integration Credentials</h2>
-                    <button className="as-btn-icon-large pulse" onClick={() => setIsBottomModalOpen(true)} title="Add Integration" style={{ backgroundColor: '#0B0B45', boxShadow: '0 4px 12px rgba(47, 48, 48, 0.4)', marginBottom: '0.96rem' }}>
+                    <button className="as-btn-icon-large pulse" onClick={() => setIsBottomModalOpen(true)} title="Add Integration" style={{ backgroundColor: '#0B0B45', boxShadow: '0 4px 12px rgba(47, 48, 48, 0.4)', marginBottom: '0.00rem' }}>
                         <i className="bx bx-plus"></i>
                     </button>
                 </div>
