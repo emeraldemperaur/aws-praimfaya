@@ -14,7 +14,6 @@ import type { UIConsoleTerminal } from "../data/consoleterminal";
 import { fetchUserAttributes, getCurrentUser } from 'aws-amplify/auth';
 import { getUserEmail } from "../utils/asimov";
 
-
 const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchBy, setSearchBy] = useState('title');
@@ -47,9 +46,21 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   const [contextProfiles, setContextProfiles] = useState<any[]>([]); 
   const [foundationModels, setFoundationModels] = useState<any[]>([]);
 
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
   }, [darkMode]);
+
+  useEffect(() => {
+    const fetchUserEmail = async () => {
+      if (getUserEmail) {
+        const email = await getUserEmail();
+        setCurrentUserEmail(email || 'Unknown User');
+      }
+    };
+    fetchUserEmail();
+  }, []);
 
   useEffect(() => {
     const terminalsSub = client.models.ConsoleTerminal.observeQuery({
@@ -172,7 +183,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
             className="tbl-action-btn view-btn" 
             onClick={() => {
               if (row.status === 'ACTIVE') {
-                navigator(`/console-terminal/session/${row.id}`);
+                navigator(`/console-terminals/session/${row.id}`);
               } else {
                 setVisibleTranscriptCount(20); // Reset count on open
                 setViewConsoleTerminal(row);
@@ -203,9 +214,31 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
       setNewConsoleTerminalData(prev => ({ ...prev, [name]: value }));
   };
 
+  // --- Validation Logic ---
+  const safeUserEmail = (currentUserEmail || '').trim().toLowerCase();
+
+  // --- Create Validation ---
   const normalizedNewTitle = newConsoleTerminalData.title?.trim().toLowerCase() || '';
-  const isTitleDuplicate = normalizedNewTitle !== '' && consoleTerminals.some(terminal => terminal.title.toLowerCase() === normalizedNewTitle);
+  const isTitleDuplicate = normalizedNewTitle !== '' && consoleTerminals.some(terminal => {
+    const isSameTitle = terminal.title.toLowerCase() === normalizedNewTitle;
+    const terminalOwner = (terminal.userId || '').trim().toLowerCase();
+    const isSameUser = terminalOwner ? terminalOwner === safeUserEmail : true;
+    return isSameTitle && isSameUser;
+  });
+
   const isNewConsoleTerminalValid = newConsoleTerminalData.title?.trim() !== '' && newConsoleTerminalData.contextProfileId !== '' && !isTitleDuplicate;
+
+  // --- Edit Validation ---
+  const normalizedEditTitle = editTerminalConsoleData.title?.trim().toLowerCase() || '';
+  const isEditTitleDuplicate = normalizedEditTitle !== '' && consoleTerminals.some(terminal => {
+    const isSameTitle = terminal.title.toLowerCase() === normalizedEditTitle;
+    const isNotSelf = terminal.id !== editConsoleTerminal?.id;
+    const terminalOwner = (terminal.userId || '').trim().toLowerCase();
+    const isSameUser = terminalOwner ? terminalOwner === safeUserEmail : true;
+    return isSameTitle && isNotSelf && isSameUser;
+  });
+
+  const isEditValid = editTerminalConsoleData.title.trim() !== '' && !isEditTitleDuplicate;
 
   const handleStartSession = async () => {
     if (!selectedProfile) return;
@@ -226,7 +259,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
       
       setNewConsoleTerminalData({ title: '', contextProfileId: '', status: 'ACTIVE' });
       setIsCreateModalOpen(false);
-      navigator(`/console-terminal/session/${newTerminal.id}`);
+      navigator(`/console-terminals/session/${newTerminal.id}`);
     } catch (error) {
       console.error('Failed to create terminal session', error);
     }
@@ -237,16 +270,18 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
     setEditTerminalConsoleData(prev => ({ ...prev, [name]: value as any }));
   };
 
-  const isEditValid = editTerminalConsoleData.title.trim() !== '';
-
   const handleEditSubmit = async () => {
     if (!editConsoleTerminal?.id) return;
+    if (isEditTitleDuplicate) {
+      alert("A Terminal Session with this title already exists.");
+      return;
+    }
+    
     try {
       const { errors } = await client.models.ConsoleTerminal.update({
         id: editConsoleTerminal.id,
         title: editTerminalConsoleData.title,
         status: editTerminalConsoleData.status,
-        updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User'
       });
       if (errors) throw new Error(errors[0].message);
       setIsEditModalOpen(false);
@@ -589,7 +624,14 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
           <div style={{ flex: '0 0 350px', display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingRight: '1.5rem', borderRight: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, overflowY: 'auto', overflowX: 'hidden' }}>
             <div>
               <label style={labelStyle(darkMode)}>Session Title <span style={{ color: '#ef4444' }}>*</span></label>
-              <input type="text" name="title" value={editTerminalConsoleData.title} onChange={handleEditChange} style={inputStyle(darkMode)} />
+              <input 
+                type="text" 
+                name="title" 
+                value={editTerminalConsoleData.title} 
+                onChange={handleEditChange} 
+                style={{ ...inputStyle(darkMode), borderColor: isEditTitleDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db') }} 
+              />
+              {isEditTitleDuplicate && <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>A session with this title already exists.</p>}
             </div>
             <div>
               <label style={labelStyle(darkMode)}>Session Status</label>
@@ -623,7 +665,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
 
               {editTerminalConsoleData.status === 'ACTIVE' && (
                 <div style={{ marginTop: 'auto', paddingTop: '2rem' }}>
-                  <button onClick={() => { navigator(`/console-terminal/session/${editConsoleTerminal?.id}`); }} style={{ width: '100%', padding: '1rem', backgroundColor: darkMode ? '#374151' : '#ffffff', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '0.5rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontFamily: 'Bodoni Moda Variable, serif', fontWeight: 800, letterSpacing: '0.13em', fontSize: '0.875rem', transition: 'all 0.2s ease' }}>
+                  <button onClick={() => { navigator(`/console-terminals/session/${editConsoleTerminal?.id}`); }} style={{ width: '100%', padding: '1rem', backgroundColor: darkMode ? '#374151' : '#ffffff', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '0.5rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontFamily: 'Bodoni Moda Variable, serif', fontWeight: 800, letterSpacing: '0.13em', fontSize: '0.875rem', transition: 'all 0.2s ease' }}>
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: '1.25rem', height: '1.25rem' }}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
                     Resume Conversation
                   </button>

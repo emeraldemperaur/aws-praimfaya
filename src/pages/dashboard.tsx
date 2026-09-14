@@ -6,7 +6,7 @@ import { inputStyle, labelStyle } from "../utils/voltaire";
 import { useNavigate } from "react-router-dom";
 import { generateClient } from "aws-amplify/api";
 import { getCurrentUser } from 'aws-amplify/auth';
-
+import { getUserEmail } from "../utils/asimov";
 
 const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -19,11 +19,24 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
   const client = generateClient() as any;
   const [contextProfiles, setContextProfiles] = useState<any[]>([]);
   const [foundationModels, setFoundationModels] = useState<any[]>([]);
+  const [existingTerminals, setExistingTerminals] = useState<any[]>([]);
   const sessionNavigator = useNavigate();
+
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
 
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
   }, [darkMode]);
+
+  useEffect(() => {
+    const fetchUserEmail = async () => {
+      if (getUserEmail) {
+        const email = await getUserEmail();
+        setCurrentUserEmail(email || 'Unknown User');
+      }
+    };
+    fetchUserEmail();
+  }, []);
 
   useEffect(() => {
     const fmSub = client.models.FoundationModel.observeQuery({
@@ -45,9 +58,17 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
       error: (err: any) => console.error("Error fetching context profiles:", err)
     });
 
+    const terminalSub = client.models.ConsoleTerminal.observeQuery({
+      selectionSet: ['id', 'title', 'userId']
+    }).subscribe({
+      next: (data: any) => setExistingTerminals(data.items),
+      error: (err: any) => console.error("Error fetching terminals for validation:", err)
+    });
+
     return () => {
       fmSub.unsubscribe();
       cpSub.unsubscribe();
+      terminalSub.unsubscribe();
     };
   }, []);
 
@@ -65,19 +86,36 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
     setNewConsoleTerminalData(prev => ({ ...prev, [name]: value }));
   };
 
-  const isNewConsoleTerminalValid = newConsoleTerminalData.title.trim() !== '' && newConsoleTerminalData.contextProfileId !== '';
+  // --- Validation Logic ---
+  const safeUserEmail = (currentUserEmail || '').trim().toLowerCase();
+
+  const normalizedNewTitle = newConsoleTerminalData.title?.trim().toLowerCase() || '';
+  const isTitleDuplicate = normalizedNewTitle !== '' && existingTerminals.some(terminal => {
+    const isSameTitle = terminal.title.toLowerCase() === normalizedNewTitle;
+    const terminalOwner = (terminal.userId || '').trim().toLowerCase();
+    const isSameUser = terminalOwner ? terminalOwner === safeUserEmail : true;
+    return isSameTitle && isSameUser;
+  });
+
+  const isNewConsoleTerminalValid = newConsoleTerminalData.title.trim() !== '' && 
+                                    newConsoleTerminalData.contextProfileId !== '' &&
+                                    !isTitleDuplicate;
 
   const handleStartSession = async () => {
     if (!selectedProfile) return;
+    if (isTitleDuplicate) {
+      alert("A Terminal Session with this title already exists.");
+      return;
+    }
 
     try {
       const { username, userId } = await getCurrentUser();
       const { data: newTerminal, errors } = await client.models.ConsoleTerminal.create({
-        title: newConsoleTerminalData.title,
+        title: newConsoleTerminalData.title.trim(),
         contextProfileId: newConsoleTerminalData.contextProfileId,
         status: 'ACTIVE',
         totalTokensUsed: 0,
-        userId: userId || username || 'Anonymous'
+        userId: currentUserEmail || userId || username || 'Anonymous'
       });
 
       if (errors) throw new Error(errors[0].message);
@@ -158,11 +196,20 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
                 value={newConsoleTerminalData.title}
                 onChange={handleInputChange}
                 placeholder="e.g., Debugging DynamoDB Schema"
-                style={inputStyle(darkMode)}
+                style={{
+                  ...inputStyle(darkMode),
+                  borderColor: isTitleDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
+                }}
               />
-              <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
-                A descriptive title to help you find this chat in your history.
-              </p>
+              {isTitleDuplicate ? (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>
+                  A session with this title already exists.
+                </p>
+              ) : (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
+                  A descriptive title to help you find this chat in your history.
+                </p>
+              )}
             </div>
 
             <div>

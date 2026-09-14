@@ -310,7 +310,7 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
                         </div>
                     </li>
                     <li>
-                        <NavLink style={navLinkStyle} to="console-terminal" onClick={() => closeDropDowns()}>
+                        <NavLink style={navLinkStyle} to="console-terminals" onClick={() => closeDropDowns()}>
                          <button style={{ fontSize: '1.2rem', color: 'inherit' }} className="ux-nav-link ux-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="raison-detre">
                                 Console Terminals
                         </button></NavLink>

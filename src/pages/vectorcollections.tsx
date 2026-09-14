@@ -40,9 +40,21 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
   const vectorCollectionsClient = client.models.VectorCollection;
   const [vectorCollections, setVectorCollections] = useState<UIVectorCollection[]>([]);
 
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
   }, [darkMode, vectorCollections.length]);
+
+  useEffect(() => {
+    const fetchUserEmail = async () => {
+      if (getUserEmail) {
+        const email = await getUserEmail();
+        setCurrentUserEmail(email || 'Unknown User');
+      }
+    };
+    fetchUserEmail();
+  }, []);
 
   useEffect(() => {
     const sub = vectorCollectionsClient.observeQuery({
@@ -54,6 +66,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
         'vectorDimension', 
         'createdAt', 
         'updatedAt', 
+        'createdBy',
         'profiles.*', 
         'documents.*'
       ]
@@ -189,12 +202,38 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
     setNewCollectionData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setEditVectorCollectionData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // --- Validation Logic ---
+  const safeUserEmail = (currentUserEmail || '').trim().toLowerCase();
+
+  // --- Create Validation ---
   const normalizedNewName = newCollectionData.name?.trim().toLowerCase() || '';
-  const isNameDuplicate = normalizedNewName !== '' && vectorCollections.some(
-    collection => collection.name.toLowerCase() === normalizedNewName
-  );
+  const isNameDuplicate = normalizedNewName !== '' && vectorCollections.some(collection => {
+    const isSameName = collection.name?.trim().toLowerCase() === normalizedNewName;
+    const collectionOwner = (collection.createdBy || '').trim().toLowerCase();
+    
+    const isSameUser = collectionOwner ? collectionOwner === safeUserEmail : true; 
+    return isSameName && isSameUser;
+  });
 
   const isCollectionValid = newCollectionData.name?.trim() !== '' && !isNameDuplicate;
+
+  // --- Edit Validation ---
+  const normalizedEditName = editVectorCollectionData.name?.trim().toLowerCase() || '';
+  const isEditNameDuplicate = normalizedEditName !== '' && vectorCollections.some(collection => {
+    const isSameName = collection.name?.trim().toLowerCase() === normalizedEditName;
+    const isNotSelf = collection.id !== editVectorCollection?.id;
+    const collectionOwner = (collection.createdBy || '').trim().toLowerCase();
+    
+    const isSameUser = collectionOwner ? collectionOwner === safeUserEmail : true;
+    return isSameName && isNotSelf && isSameUser;
+  });
+
+  const isEditValid = editVectorCollectionData.name?.trim() !== '' && !isEditNameDuplicate;
 
   const handleCreateSubmit = async () => {
     if (isNameDuplicate) {
@@ -208,7 +247,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
         description: newCollectionData.description?.trim() || null,
         embeddingModel: newCollectionData.embeddingModel!,
         vectorDimension: newCollectionData.vectorDimension!,
-        createdBy: getUserEmail ? await getUserEmail() : 'Unknown User',
+        createdBy: currentUserEmail,
       });
       if (errors) throw new Error(errors[0].message);
       setVectorCollections(prev => {
@@ -223,15 +262,13 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
     }
   };
 
-  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setEditVectorCollectionData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const isEditValid = editVectorCollectionData.name?.trim() !== '';
-
   const handleEditSubmit = async () => {
     if (!editVectorCollection?.id) return;
+    if (isEditNameDuplicate) {
+      alert("A Vector Collection with this name already exists. Please choose a unique name.");
+      return;
+    }
+    
     try {
       const { data: updatedCollection, errors } = await vectorCollectionsClient.update({
         id: editVectorCollection.id,
@@ -239,7 +276,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
         description: editVectorCollectionData.description?.trim() || null,
         embeddingModel: editVectorCollectionData.embeddingModel!,
         vectorDimension: editVectorCollectionData.vectorDimension!,
-        updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User',
+        updatedBy: currentUserEmail,
       });
 
       if (errors) throw new Error(errors[0].message);
@@ -515,7 +552,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                 name="name"
                 value={newCollectionData.name}
                 onChange={handleCreateInputChange}
-                className="input-typography"
+                
                 placeholder="e.g., Enterprise Asset Data 2026"
                 style={{
                   ...inputStyle,
@@ -534,7 +571,6 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
               <textarea 
                 name="description"
                 value={newCollectionData.description || ''}
-                className="input-typography"
                 onChange={handleCreateInputChange}
                 placeholder="Briefly describe the contents of this vector collection"
                 rows={5}
@@ -608,8 +644,16 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                 value={editVectorCollectionData.name || ''}
                 onChange={handleEditInputChange}
                 className="input-typography"
-                style={inputStyle}
+                style={{
+                  ...inputStyle,
+                  borderColor: isEditNameDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db')
+                }}
               />
+              {isEditNameDuplicate && (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>
+                  A pool container with this name already exists.
+                </p>
+              )}
             </div>
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: darkMode ? '#ccc' : '#333' }}>Description</label>

@@ -118,10 +118,10 @@ function App() {
             <Route path='amazon-bedrock' element={
               isAuthenticated ? <AmazonBedrockUI darkMode={darkMode}/> : <Navigate to="/" replace />
             }/>
-            <Route path='console-terminal' element={
+            <Route path='console-terminals' element={
               isAuthenticated ? <TerminalConsoleUI darkMode={darkMode}/> : <Navigate to="/" replace />
             }/> 
-            <Route path='console-terminal/session/:sessionId' element={
+            <Route path='console-terminals/session/:sessionId' element={
               isAuthenticated ? <TerminalSessionUI darkMode={darkMode}/> : <Navigate to="/" replace />
             }/>
             <Route path='user-profile' element={

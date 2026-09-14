@@ -9,6 +9,7 @@ import FullScreenModal from "../components/fullscreenmodal";
 import BottomRightModal from "../components/bottomrightmodal";
 import type { UIAutomationWorkflow } from "../data/automationworkflows";
 import { generateClient } from "aws-amplify/api";
+import { getUserEmail } from "../utils/asimov";
 
 const isValidURL = (urlString?: string | null): boolean => {
   if (!urlString) return false;
@@ -58,6 +59,8 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   
   const [newWorkflowData, setNewWorkflowData] = useState<Partial<UIAutomationWorkflow>>(initialWorkflowState);
   const [editWorkflowData, setEditWorkflowData] = useState<Partial<UIAutomationWorkflow>>({});
+  
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
 
   const inputStyle = {
     width: '100%',
@@ -81,6 +84,16 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
   }, [darkMode]);
+
+  useEffect(() => {
+    const fetchUserEmail = async () => {
+      if (getUserEmail) {
+        const email = await getUserEmail();
+        setCurrentUserEmail(email || 'Unknown User');
+      }
+    };
+    fetchUserEmail();
+  }, []);
 
   useEffect(() => {
     const subscription = contextWorkflowsClient.observeQuery({
@@ -124,7 +137,18 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
     });
   }, [automationWorkflows, searchTerm, searchBy]);
 
-  const isNameDuplicate = automationWorkflows.some(w => w.name.toLowerCase() === newWorkflowData.name?.toLowerCase());
+  // --- Validation Logic ---
+  const safeUserEmail = (currentUserEmail || '').trim().toLowerCase();
+
+  // --- Create Validation ---
+  const normalizedNewName = newWorkflowData.name?.trim().toLowerCase() || '';
+  const isNameDuplicate = normalizedNewName !== '' && automationWorkflows.some(w => {
+    const isSameName = w.name?.trim().toLowerCase() === normalizedNewName;
+    const workflowOwner = (w.createdBy || '').trim().toLowerCase();
+    const isSameUser = workflowOwner ? workflowOwner === safeUserEmail : true;
+    return isSameName && isSameUser;
+  });
+
   const isValidTrigger = isValidURL(newWorkflowData.triggerURL);
   const isValidCallback = !newWorkflowData.callbackURL || isValidURL(newWorkflowData.callbackURL);
   
@@ -134,6 +158,27 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
     isValidTrigger && 
     isValidCallback && 
     !isNameDuplicate
+  );
+
+  // --- Edit Validation ---
+  const normalizedEditName = editWorkflowData.name?.trim().toLowerCase() || '';
+  const isEditNameDuplicate = normalizedEditName !== '' && automationWorkflows.some(w => {
+    const isSameName = w.name?.trim().toLowerCase() === normalizedEditName;
+    const isNotSelf = w.id !== editWorkflowData?.id;
+    const workflowOwner = (w.createdBy || '').trim().toLowerCase();
+    const isSameUser = workflowOwner ? workflowOwner === safeUserEmail : true;
+    return isSameName && isNotSelf && isSameUser;
+  });
+
+  const isEditValidTrigger = isValidURL(editWorkflowData.triggerURL);
+  const isEditValidCallback = !editWorkflowData.callbackURL || isValidURL(editWorkflowData.callbackURL);
+
+  const isEditValid = !!(
+    editWorkflowData.name && 
+    editWorkflowData.tool && 
+    isEditValidTrigger && 
+    isEditValidCallback && 
+    !isEditNameDuplicate
   );
 
   const handleCreateTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -168,6 +213,10 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   };
 
   const handleCreateSubmit = async () => {
+    if (isNameDuplicate) {
+      alert("An Automation Workflow with this name already exists. Please choose a unique name.");
+      return;
+    }
     if (!isWorkflowValid) return;
     
     const cleanInputs = newWorkflowData.inputParameters?.filter(p => p.variable.trim() !== '') || [];
@@ -185,7 +234,8 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
         inputParameters: cleanInputs,
         outputVariables: cleanOutputs,
         requiresAuth: newWorkflowData.requiresAuth || false,
-        authHeader: newWorkflowData.requiresAuth ? (newWorkflowData.authHeader?.trim() || null) : null
+        authHeader: newWorkflowData.requiresAuth ? (newWorkflowData.authHeader?.trim() || null) : null,
+        createdBy: currentUserEmail
       });
       setIsCreateModalOpen(false);
       setNewWorkflowData(initialWorkflowState);
@@ -193,18 +243,6 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
       console.error("Error creating workflow:", err);
     }
   };
-
-  const isEditNameDuplicate = automationWorkflows.some(w => w.id !== editWorkflowData.id && w.name.toLowerCase() === editWorkflowData.name?.toLowerCase());
-  const isEditValidTrigger = isValidURL(editWorkflowData.triggerURL);
-  const isEditValidCallback = !editWorkflowData.callbackURL || isValidURL(editWorkflowData.callbackURL);
-
-  const isEditValid = !!(
-    editWorkflowData.name && 
-    editWorkflowData.tool && 
-    isEditValidTrigger && 
-    isEditValidCallback && 
-    !isEditNameDuplicate
-  );
 
   const handleEditTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setEditWorkflowData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -238,7 +276,12 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   };
 
   const handleEditSubmit = async () => {
-    if (!isEditValid || !editWorkflowData.id) return;
+    if (!editWorkflowData.id) return;
+    if (isEditNameDuplicate) {
+      alert("An Automation Workflow with this name already exists. Please choose a unique name.");
+      return;
+    }
+    if (!isEditValid) return;
     
     const cleanInputs = editWorkflowData.inputParameters?.filter(p => p.variable.trim() !== '') || [];
     const cleanOutputs = editWorkflowData.outputVariables?.filter(p => p.variable.trim() !== '') || [];
@@ -256,7 +299,8 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
         inputParameters: cleanInputs,
         outputVariables: cleanOutputs,
         requiresAuth: editWorkflowData.requiresAuth || false,
-        authHeader: editWorkflowData.requiresAuth ? (editWorkflowData.authHeader?.trim() || null) : null
+        authHeader: editWorkflowData.requiresAuth ? (editWorkflowData.authHeader?.trim() || null) : null,
+        updatedBy: currentUserEmail
       });
       setIsEditModalOpen(false);
     } catch (err) {
@@ -790,7 +834,11 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
             </div>
             <div>
               <label style={labelStyle}>Workflow Name <span style={{ color: '#ef4444' }}>*</span></label>
-              <input type="text" name="name" value={editWorkflowData.name || ''} onChange={handleEditTextChange} style={inputStyle} />
+              <input 
+                type="text" name="name" value={editWorkflowData.name || ''} onChange={handleEditTextChange} 
+                style={{ ...inputStyle, borderColor: isEditNameDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db') }} 
+              />
+              {isEditNameDuplicate && <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>A workflow with this name already exists.</p>}
             </div>
             <div>
               <label style={labelStyle}>Platform Tool <span style={{ color: '#ef4444' }}>*</span></label>

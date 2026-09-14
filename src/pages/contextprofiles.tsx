@@ -71,10 +71,21 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   const [workflows, setWorkflows] = useState<any[]>([]);
 
   const [disabledModelIds, setDisabledModelIds] = useState<string[]>([]);
-  
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
   }, [darkMode, contextProfiles.length]);
+
+  useEffect(() => {
+    const fetchUserEmail = async () => {
+      if (getUserEmail) {
+        const email = await getUserEmail();
+        setCurrentUserEmail(email || 'Unknown User');
+      }
+    };
+    fetchUserEmail();
+  }, []);
 
   useEffect(() => {
     let profileSub: any;
@@ -169,7 +180,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       selectionSet: [
         'id', 'name', 'description', 'systemPrompt', 
         'vectorCollectionId', 'llmModelId', 'temperature', 
-        'isActive', 'createdAt', 'updatedAt', 
+        'isActive', 'createdAt', 'updatedAt', 'createdBy', // <-- Added 'createdBy' here to fix the validation bug
         'role', 'enableCodeInterpreter', 'enableWebSearch', 'supervisorId',
         'enableMitoMcp', 'enableApotheosisMcp', 'customMcpUrl', 
         'provisioningStatus', 'awsAgentId', 'awsAliasId', 'subagentEavesdrop',
@@ -422,15 +433,36 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     setNewContextProfileData((prev) => ({ ...prev, [name]: checked }));
   };
 
+  const safeUserEmail = (currentUserEmail || '').trim().toLowerCase();
   const normalizedNewName = newContextProfileData.name?.trim().toLowerCase() || '';
-  const isNameDuplicate = normalizedNewName !== '' && contextProfiles.some(
-    profile => profile.name.toLowerCase() === normalizedNewName
-  );
+  const isNameDuplicate = normalizedNewName !== '' && contextProfiles.some(profile => {
+    const isSameName = profile.name?.trim().toLowerCase() === normalizedNewName;
+    const profileOwner = (profile.createdBy || '').trim().toLowerCase();
+    const isSameUser = profileOwner ? profileOwner === safeUserEmail : true; 
+    
+    return isSameName && isSameUser;
+  });
 
   const isContextProfileValid = newContextProfileData.name?.trim() !== '' && 
                         newContextProfileData.systemPrompt?.trim() !== '' && 
                         newContextProfileData.llmModelId?.trim() !== '' &&
                         !isNameDuplicate;
+
+  const normalizedEditName = editContextProfileData.name?.trim().toLowerCase() || '';
+  const isEditNameDuplicate = normalizedEditName !== '' && contextProfiles.some(profile => {
+    const isSameName = profile.name?.trim().toLowerCase() === normalizedEditName;
+    const isNotSelf = profile.id !== editContextProfile?.id;
+    const profileOwner = (profile.createdBy || '').trim().toLowerCase();
+    
+    const isSameUser = profileOwner ? profileOwner === safeUserEmail : true;
+    
+    return isSameName && isNotSelf && isSameUser;
+  });
+
+  const isEditValid = editContextProfileData.name?.trim() !== '' && 
+                        editContextProfileData.systemPrompt?.trim() !== '' && 
+                        editContextProfileData.llmModelId?.trim() !== '' &&
+                        !isEditNameDuplicate;
 
   const handleCreateSubmit = async () => {
     if (isNameDuplicate) {
@@ -456,7 +488,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         mcpAuthToken: (newContextProfileData.role !== 'SUPERVISOR' && newContextProfileData.mcpRequiresAuth) ? (newContextProfileData.mcpAuthToken?.trim() || null) : null,
         subagentEavesdrop: newContextProfileData.role === 'COLLABORATOR' ? (newContextProfileData.subagentEavesdrop || false) : false,
         provisioningStatus: 'UNPROVISIONED', 
-        createdBy: getUserEmail ? await getUserEmail() : 'Unknown User',
+        createdBy: currentUserEmail,
       });
       
       if (errors) throw new Error(errors[0].message);
@@ -517,12 +549,12 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     setEditContextProfileData(prev => ({ ...prev, [name]: checked }));
   };
 
-  const isEditValid = editContextProfileData.name?.trim() !== '' && 
-                      editContextProfileData.systemPrompt?.trim() !== '' && 
-                      editContextProfileData.llmModelId?.trim() !== '';
-
   const handleEditSubmit = async () => {
     if (!editContextProfile?.id) return;
+    if (isEditNameDuplicate) {
+      alert("A Context Profile with this name already exists. Please choose a unique name.");
+      return;
+    }
     try {
       const { data: updatedProfile, errors } = await contextProfilesClient.update({
         id: editContextProfile.id,
@@ -542,7 +574,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         mcpRequiresAuth: editContextProfileData.role !== 'SUPERVISOR' ? (editContextProfileData.mcpRequiresAuth || false) : false,
         mcpAuthToken: (editContextProfileData.role !== 'SUPERVISOR' && editContextProfileData.mcpRequiresAuth) ? (editContextProfileData.mcpAuthToken?.trim() || null) : null,
         provisioningStatus: editContextProfileData.role !== 'STANDARD' ? 'UNPROVISIONED' : null,
-        updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User',
+        updatedBy: currentUserEmail,
       });
       if (errors) throw new Error(errors[0].message);
 
@@ -1246,7 +1278,11 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
 
             <div>
               <label style={labelStyle}>Profile Name <span style={{ color: '#ef4444' }}>*</span></label>
-              <input type="text" name="name" value={editContextProfileData.name || ''} onChange={handleEditTextChange} style={inputStyle} />
+              <input 
+                type="text" name="name" value={editContextProfileData.name || ''} onChange={handleEditTextChange} 
+                style={{ ...inputStyle, borderColor: isEditNameDuplicate ? '#ef4444' : (darkMode ? '#374151' : '#d1d5db'), fontFamily: 'Google Sans Code' }} 
+              />
+              {isEditNameDuplicate && <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>A profile with this name already exists.</p>}
             </div>
 
             <div>
