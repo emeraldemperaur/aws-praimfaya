@@ -212,7 +212,7 @@ const NavigationMenu = ({darkModeToggle, darkMode} : {darkModeToggle: () => void
                             <NavLink className="ux-dropdown-link" style={dropLinkStyle} to="/dashboard/agent-nodes" onClick={() => closeDropDowns()}>
                                 <img style={{width: '40px', height: '40px'}} src={cpuIcon} className="icon" alt="CPU" />
                                 <div>
-                                <span className="ux-dropdown-link-title" style={titleStyle}>Agent Nodes</span>
+                                <span className="ux-dropdown-link-title" style={titleStyle}>Agent Activity</span>
                                 <p>Monitor performance metrics of active agents</p>
                                 </div>
                             </NavLink>

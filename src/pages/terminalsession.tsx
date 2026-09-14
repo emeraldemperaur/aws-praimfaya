@@ -214,6 +214,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   if (isLoading) {
     return (
       <div style={{ display: 'flex', height: '80vh', alignItems: 'center', justifyContent: 'center', color: darkMode ? '#fff' : '#000', fontFamily: 'Google Sans Code, monospace' }}>
+      
         <div style={{ textAlign: 'center' }}>
           <h3>INITIALIZING RAG SESSION...</h3>
           <p style={{ opacity: 0.5, fontSize: '0.85rem' }}>Mapping Context Profiles and allocating parallel tensor buffers.</p>

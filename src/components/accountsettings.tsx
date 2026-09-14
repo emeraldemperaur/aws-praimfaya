@@ -570,7 +570,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
                                 </div>
 
                                 <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-                                    <button className="as-btn-outline" style={{ background: 'transparent', border: '1px solid #0B0B45', color: '#0B0B45', padding: '0.75rem 1.5rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }} onClick={() => {
+                                    <button className="as-btn-outline" style={{ background: 'transparent', border: `1px solid ${darkMode ? '#ffffff' : '#0B0B45'}`, color: `${darkMode ? '#ffffff' : '#0B0B45'}`, padding: '0.75rem 1.5rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontFamily: 'Bodoni Moda Variable' }} onClick={() => {
                                         setIntegrations(prev => {
                                             const updated = [...prev[editingToolId as string]];
                                             updated.push({ priority: false });
