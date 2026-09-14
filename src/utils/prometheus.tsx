@@ -577,6 +577,31 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         costImpact: "MEDIUM_COMPUTE"
     },
     {
+        toolName: "etrade_financial_agent",
+        publicName: "E*TRADE Financial Agent",
+        systemPrompt: "You are an agentic E*TRADE financial manager. Always follow strict multi-step execution logic for trading operations: 1) If 'accountIdKey' is missing, execute LIST_ACCOUNTS first. 2) Before placing any order, query real-time quotes using GET_QUOTE and check available buying power using GET_ACCOUNT_BALANCE. 3) MANDATORY SAFETY RULE: Always execute PREVIEW_ORDER before calling PLACE_ORDER to verify order impact, estimated commissions, and price compliance. Provide clear, synthesized financial insights on portfolio risk and position allocations.",
+        userPrompts: [
+            {
+                promptName: "Portfolio Health & Allocation Audit",
+                userPrompt: "Execute LIST_ACCOUNTS to identify all active brokerage accounts. For account key '{{account_id_key}}', pull current balances via GET_ACCOUNT_BALANCE and full active positions via VIEW_PORTFOLIO. Analyze asset allocation, highlight cash reserves vs equities, flag over-concentrated positions exceeding {{max_concentration_pct_e.g._20}}% of total equity, and synthesize a portfolio health summary."
+            },
+            {
+                promptName: "Preview & Execute Equity Trade",
+                userPrompt: "Query GET_QUOTE for symbol '{{ticker_symbol_e.g._AAPL}}' to inspect market pricing. Retrieve available buying power for account '{{account_id_key}}' using GET_ACCOUNT_BALANCE. Execute PREVIEW_ORDER to {{action_BUY_or_SELL}} {{quantity}} shares at {{price_type_MARKET_or_LIMIT}} price {{limit_price_if_applicable}}. Review the preview for commission impact and estimated total cost, then proceed to PLACE_ORDER."
+            },
+            {
+                promptName: "Active Order Audit & Cancellation",
+                userPrompt: "Execute CHECK_ORDER_STATUS for account '{{account_id_key}}'. Filter for open or pending orders associated with ticker '{{ticker_symbol_e.g._TSLA}}'. If an open order matches order ID '{{order_id_to_cancel}}', call CANCEL_ORDER and confirm successful cancellation."
+            },
+            {
+                promptName: "Target Price Limit Order Setup",
+                userPrompt: "Fetch real-time quotes for '{{ticker_symbol_e.g._NVDA}}' using GET_QUOTE. Compare current market price against target limit price ${{target_price}}. If current market price is within {{price_buffer_pct_e.g._2}}% of the target, execute PREVIEW_ORDER for a LIMIT {{action_BUY_or_SELL}} order of {{quantity}} shares at ${{target_price}} on account '{{account_id_key}}'."
+            }
+        ],
+        modelAvailability: "STANDARD_ONLY",
+        costImpact: "HIGH_COMPUTE"
+    },
+    {
         toolName: "read_user_attachment",
         publicName: "File Attachment Analyzer",
         systemPrompt: "You are an intelligent file parsing agent. Extract the S3 URI from the hidden [System Context]. Read the attachment iteratively: extract the raw text or trigger the vision sub-agent for media. Synthesize the extracted data thoroughly before answering the user's specific query.",

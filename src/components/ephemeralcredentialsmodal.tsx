@@ -378,6 +378,49 @@ const EphemeralCredentialsModal: React.FC<EphemeralCredentialsModalProps> = ({
             </>
           )}
 
+          {activeAuthPrompt === 'etrade' && (
+            <>
+              <SecretInput 
+                placeholder="E*TRADE Consumer Key" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, etradeConsumerKey: e.target.value })} 
+                required 
+                style={inputStyle} 
+                darkMode={darkMode} 
+              />
+              <SecretInput 
+                placeholder="E*TRADE Consumer Secret" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, etradeConsumerSecret: e.target.value })} 
+                required 
+                style={inputStyle} 
+                darkMode={darkMode} 
+              />
+              <SecretInput 
+                placeholder="E*TRADE Access Token" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, etradeAccessToken: e.target.value })} 
+                required 
+                style={inputStyle} 
+                darkMode={darkMode} 
+              />
+              <SecretInput 
+                placeholder="E*TRADE Access Secret" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, etradeAccessSecret: e.target.value })} 
+                required 
+                style={inputStyle} 
+                darkMode={darkMode} 
+              />
+              <select 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, etradeEnvironment: e.target.value })} 
+                required 
+                style={inputStyle}
+                defaultValue=""
+              >
+                <option value="" disabled>Select API Environment...</option>
+                <option value="sandbox">Sandbox (apisb.etrade.com)</option>
+                <option value="production">Production (api.etrade.com)</option>
+              </select>
+            </>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
             <button 
               type="button" 

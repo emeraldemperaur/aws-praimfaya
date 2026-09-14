@@ -59,7 +59,8 @@ const TOOL_AUTH_MAP: Record<string, string[]> = {
     'sanity_cms_agent': ['sanityProjectId', 'sanityDataset', 'sanityToken'],
     'formstack_agile_agent': ['formstackToken'],
     'jotform_agile_agent': ['jotformToken'],
-    'shopify_admin_agent': ['shopifyDomain', 'shopifyAccessToken']
+    'shopify_admin_agent': ['shopifyDomain', 'shopifyAccessToken'],
+    'etrade_financial_agent': ['etradeConsumerKey', 'etradeConsumerSecret', 'etradeAccessToken', 'etradeAccessSecret', 'etradeEnvironment'],
 };
 
 const SecretInput: React.FC<{ placeholder: string; value: string; onChange: (v: string) => void; required?: boolean; darkMode?: boolean; autoComplete?: string }> = ({ placeholder, value, onChange, required, autoComplete = "off" }) => {

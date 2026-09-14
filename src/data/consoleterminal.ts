@@ -112,4 +112,9 @@ export interface EphemeralSecrets {
   jotformToken?: string;
   shopifyDomain?: string;
   shopifyAccessToken?: string;
+  etradeConsumerKey?: string;
+  etradeConsumerSecret?: string;
+  etradeAccessToken?:string;
+  etradeAccessSecret?:string;
+  etradeEnvironment?:string;
 }

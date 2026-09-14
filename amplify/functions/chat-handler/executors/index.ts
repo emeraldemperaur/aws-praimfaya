@@ -22,6 +22,7 @@ import { executeVanguardQA } from './qa-executor-tools';
 import { executeLumaVideoPresentation } from './presentation-tools';
 import { executePowerPointGenerator } from './powerpoint-tools';
 import { executeShopifyAdminAgent } from './shopify-admin-tools';
+import { executeETradeFinancial } from './etrade-tools';
 
 
 export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
@@ -78,5 +79,6 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
     'generate_luma_video_presentation': executeLumaVideoPresentation,
     'generate_powerpoint_agent': executePowerPointGenerator,
     'shopify_admin_agent': executeShopifyAdminAgent,
+    'etrade_financial_agent': executeETradeFinancial,
 
 };

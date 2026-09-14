@@ -1395,7 +1395,51 @@ export const NATIVE_TOOLS_REGISTRY = [
             }
                     }
                 }
-    }
+    },
+    {
+    toolSpec: {
+        name: 'etrade_financial_agent',
+        description: "Manages E*TRADE financial brokerage operations. Supports listing accounts, checking balances and portfolio positions, pulling market/equity quotes, previewing, placing, canceling orders, and checking order status.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    action: { 
+                        type: "string", 
+                        enum: [
+                            "LIST_ACCOUNTS", 
+                            "GET_ACCOUNT_BALANCE", 
+                            "VIEW_PORTFOLIO", 
+                            "GET_QUOTE", 
+                            "PREVIEW_ORDER", 
+                            "PLACE_ORDER", 
+                            "CANCEL_ORDER", 
+                            "CHECK_ORDER_STATUS"
+                        ],
+                        description: "The E*TRADE API action to execute."
+                    },
+                    accountIdKey: { 
+                        type: "string", 
+                        description: "The unique E*TRADE account ID key. Required for balance, portfolio, and order management." 
+                    },
+                    symbols: { 
+                        type: "string", 
+                        description: "Comma-separated list or single ticker symbol for GET_QUOTE (e.g. 'AAPL,TSLA,SPY')." 
+                    },
+                    orderId: { 
+                        type: "string", 
+                        description: "The order ID required for CANCEL_ORDER." 
+                    },
+                    payload: { 
+                        type: "string", 
+                        description: "Stringified JSON object payload for PREVIEW_ORDER or PLACE_ORDER containing E*TRADE order specifics (Action, Quantity, PriceType, Symbol, etc.)." 
+                    }
+                },
+                required: ["action"]
+            }
+                    }
+               }
+    },
     
 ];
 
