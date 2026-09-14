@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { generateClient } from 'aws-amplify/api';
 import { getCurrentUser } from 'aws-amplify/auth';
-import '../styles/accountSettings.scss';
+import '../styles/accountsettings.scss';
 import BottomModal from './bottommodal'; 
 import ExtraLargeModal from './extralargemodal'; 
 import { NATIVE_TOOLS_TEMPLATES } from '../utils/prometheus'; 
