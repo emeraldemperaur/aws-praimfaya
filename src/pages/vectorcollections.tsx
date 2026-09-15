@@ -7,7 +7,7 @@ import DataTable from "../components/datatable";
 import BottomRightModal from "../components/bottomrightmodal";
 import ExtraLargeModal from "../components/extralargemodal";
 import { AddVectorCollectionSVG, getModelIcon } from "../utils/voltaire";
-import { uploadData } from 'aws-amplify/storage';
+import { uploadData, remove } from 'aws-amplify/storage';
 import FullScreenModal from "../components/fullscreenmodal";
 import { generateClient } from "aws-amplify/api";
 import type { UIVectorCollection } from "../data/vectorcollection";
@@ -25,16 +25,22 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchBy, setSearchBy] = useState('name');
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isDeleteDocumentModalOpen, setIsDeleteDocumentModalOpen] = useState(false);
+  
   const [viewVectorCollection, setViewVectorCollection] = useState<UIVectorCollection | null>(null);
   const [deleteVectorCollection, setDeleteVectorCollection] = useState<UIVectorCollection | null>(null);
   const [editVectorCollection, setEditVectorCollection] = useState<UIVectorCollection | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<{ id: string, s3Uri?: string, collectionId?: string } | null>(null);
+  
   const [newCollectionData, setNewCollectionData] = useState<Partial<UIVectorCollection>>(DEFAULT_COLLECTION_STATE);
   const [editVectorCollectionData, setEditVectorCollectionData] = useState<Partial<UIVectorCollection>>({});
   const [vectorDocuments, setVectorDocuments] = useState<any[]>([]); 
+  
   const hiddenDirectS3Input = useRef<HTMLInputElement>(null);
   const client = generateClient() as any;
   const vectorCollectionsClient = client.models.VectorCollection;
@@ -68,7 +74,13 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
         'updatedAt', 
         'createdBy',
         'profiles.*', 
-        'documents.*'
+        'documents.id',
+        'documents.name',
+        'documents.size',
+        'documents.status',
+        'documents.s3Uri',
+        'documents.createdBy',
+        'documents.collectionId'
       ]
     }).subscribe({
       next: (data: any) => {
@@ -109,19 +121,14 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
 
     return vectorCollections.filter(collection => {
       switch (searchBy) {
-        case 'name':
-          return collection.name?.toLowerCase().includes(lowerTerm);
-        case 'description':
-          return collection.description?.toLowerCase().includes(lowerTerm);
-        case 'embeddingModel':
-          return collection.embeddingModel?.toLowerCase().includes(lowerTerm);
-        case 'createdBy':
-          return collection.createdBy?.toLowerCase().includes(lowerTerm);
+        case 'name': return collection.name?.toLowerCase().includes(lowerTerm);
+        case 'description': return collection.description?.toLowerCase().includes(lowerTerm);
+        case 'embeddingModel': return collection.embeddingModel?.toLowerCase().includes(lowerTerm);
+        case 'createdBy': return collection.createdBy?.toLowerCase().includes(lowerTerm);
         case 'createdAt':
           const dateString = collection.createdAt ? new Date(collection.createdAt).toLocaleDateString() : '';
           return collection.createdAt?.toLowerCase().includes(lowerTerm) || dateString.includes(lowerTerm);
-        default:
-          return true;
+        default: return true;
       }
     });
   }, [vectorCollections, searchTerm, searchBy]);
@@ -210,25 +217,21 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
   // --- Validation Logic ---
   const safeUserEmail = (currentUserEmail || '').trim().toLowerCase();
 
-  // --- Create Validation ---
   const normalizedNewName = newCollectionData.name?.trim().toLowerCase() || '';
   const isNameDuplicate = normalizedNewName !== '' && vectorCollections.some(collection => {
     const isSameName = collection.name?.trim().toLowerCase() === normalizedNewName;
     const collectionOwner = (collection.createdBy || '').trim().toLowerCase();
-    
     const isSameUser = collectionOwner ? collectionOwner === safeUserEmail : true; 
     return isSameName && isSameUser;
   });
 
   const isCollectionValid = newCollectionData.name?.trim() !== '' && !isNameDuplicate;
 
-  // --- Edit Validation ---
   const normalizedEditName = editVectorCollectionData.name?.trim().toLowerCase() || '';
   const isEditNameDuplicate = normalizedEditName !== '' && vectorCollections.some(collection => {
     const isSameName = collection.name?.trim().toLowerCase() === normalizedEditName;
     const isNotSelf = collection.id !== editVectorCollection?.id;
     const collectionOwner = (collection.createdBy || '').trim().toLowerCase();
-    
     const isSameUser = collectionOwner ? collectionOwner === safeUserEmail : true;
     return isSameName && isNotSelf && isSameUser;
   });
@@ -236,13 +239,11 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
   const isEditValid = editVectorCollectionData.name?.trim() !== '' && !isEditNameDuplicate;
 
   const handleCreateSubmit = async () => {
-    if (isNameDuplicate) {
-      alert("A Vector Collection with this name already exists. Please choose a unique name.");
-      return;
-    }
-
+    if (isNameDuplicate || !isCollectionValid) return;
+    
+    setIsSubmitting(true);
     try {
-      const { data: newCollection, errors } = await vectorCollectionsClient.create({
+      const { errors } = await vectorCollectionsClient.create({
         name: newCollectionData.name!.trim(),
         description: newCollectionData.description?.trim() || null,
         embeddingModel: newCollectionData.embeddingModel!,
@@ -250,27 +251,22 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
         createdBy: currentUserEmail,
       });
       if (errors) throw new Error(errors[0].message);
-      setVectorCollections(prev => {
-        const alreadyExists = prev.some(collection => collection.id === newCollection.id);
-        if (alreadyExists) return prev;
-        return [newCollection, ...prev];
-      });
+      
       setNewCollectionData(DEFAULT_COLLECTION_STATE);
       setIsCreateModalOpen(false);
     } catch (error) {
       console.error("Failed to create Vector Collection:", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleEditSubmit = async () => {
-    if (!editVectorCollection?.id) return;
-    if (isEditNameDuplicate) {
-      alert("A Vector Collection with this name already exists. Please choose a unique name.");
-      return;
-    }
+    if (!editVectorCollection?.id || isEditNameDuplicate || !isEditValid) return;
     
+    setIsSubmitting(true);
     try {
-      const { data: updatedCollection, errors } = await vectorCollectionsClient.update({
+      const { errors } = await vectorCollectionsClient.update({
         id: editVectorCollection.id,
         name: editVectorCollectionData.name!.trim(),
         description: editVectorCollectionData.description?.trim() || null,
@@ -280,32 +276,65 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
       });
 
       if (errors) throw new Error(errors[0].message);
-      setVectorCollections(prev => prev.map(item => 
-        item.id === updatedCollection.id ? updatedCollection : item
-      ));
       
       setIsEditModalOpen(false);
       setEditVectorCollection(null);
     } catch (error) {
       console.error("Failed to update Vector Collection:", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDeleteVectorCollection = async () => {
     if (!deleteVectorCollection?.id) return;
+    
+    setIsSubmitting(true);
     try {
       const { errors } = await vectorCollectionsClient.delete({
         id: deleteVectorCollection.id
       });
 
       if (errors) throw new Error(errors[0].message);
-      setVectorCollections(prev => prev.filter(item => item.id !== deleteVectorCollection.id));
+      
       setDeleteVectorCollection(null);
       setIsDeleteModalOpen(false);
     } catch (error) {
       console.error("Failed to delete Vector Collection:", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };  
+
+  const confirmDeleteDocument = async () => {
+    if (!documentToDelete) return;
+    const { id: documentId, s3Uri, collectionId } = documentToDelete;
+    setVectorDocuments(prev => prev.filter(doc => doc.id !== documentId));
+    if (viewVectorCollection) {
+      setViewVectorCollection(prev => prev ? { ...prev, documents: prev.documents?.filter((d: any) => d.id !== documentId) } : null);
+    }
+    setIsDeleteDocumentModalOpen(false);
+    setDocumentToDelete(null);
+
+    try {
+      await client.models.VectorDocument.delete({ id: documentId });
+      
+      if (s3Uri) {
+        try {
+          await remove({ path: s3Uri }); 
+        } catch(e) {
+          console.warn("Failed to remove document from S3 storage", e);
+        }
+      }
+
+      const activeCollectionId = collectionId || editVectorCollection?.id || viewVectorCollection?.id;
+      if (activeCollectionId) {
+        await client.mutations.syncKnowledgeBase({ collectionId: activeCollectionId });
+      }
+    } catch (error) {
+      console.error("Failed to delete document:", error);
+    }
+  };
 
   const handleDirectS3Upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -316,6 +345,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
       const identityId = session.identityId;
       if (!identityId) throw new Error("Authentication required.");
 
+      // Setup temp UI references
       const newDocs = files.map(file => ({
         id: 'temp-' + Math.random().toString(36).substring(2, 9),
         name: file.name,
@@ -324,17 +354,21 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
       }));
       setVectorDocuments(prev => [...prev, ...newDocs]);
 
-      const uploadPromises = files.map(async (file) => {
+      const uploadPromises = files.map(async (file, index) => {
+        const tempId = newDocs[index].id;
+        
         const isMedia = file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('audio/');
         const subFolder = isMedia ? 'media' : 'text';
         const s3FilePath = `vector-collections/${subFolder}/${identityId}/${editVectorCollection.id}/${file.name}`;
         
+        // 1. Upload to S3
         await uploadData({
           path: s3FilePath,
           data: file,
           options: { contentType: file.type }
         }).result;
 
+        // 2. Persist to DynamoDB VectorDocument Table
         await client.models.VectorDocument.create({
           collectionId: editVectorCollection.id,
           name: file.name,
@@ -345,14 +379,21 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
           sourceMetadata: JSON.stringify({ contentType: file.type })
         });
         
-        setVectorDocuments(prev => prev.map(doc => doc.name === file.name ? { ...doc, status: 'Processing...' } : doc));
+        // Match directly on temp ID, not file.name, to avoid overwriting duplicates
+        setVectorDocuments(prev => prev.map(doc => doc.id === tempId ? { ...doc, status: 'Processing...' } : doc));
       });
 
-      await Promise.all(uploadPromises);
+      // Use allSettled so one failed upload doesn't crash the entire batch process
+      const results = await Promise.allSettled(uploadPromises);
+      const hasSuccess = results.some(result => result.status === 'fulfilled');
 
-      await client.mutations.syncKnowledgeBase({ 
-          collectionId: editVectorCollection.id 
-      });
+      // 3. Trigger Bedrock Sync if at least one document made it through
+      if (hasSuccess) {
+        await client.mutations.syncKnowledgeBase({ 
+            collectionId: editVectorCollection.id 
+        });
+      }
+
       setVectorDocuments(prev => prev.map(doc => 
          files.some(f => f.name === doc.name) ? { ...doc, status: 'Indexed' } : doc
       ));
@@ -485,12 +526,13 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                     <th style={{ padding: '0.75rem 1rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 500 }}>File Name</th>
                     <th style={{ padding: '0.75rem 1rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 500 }}>Size</th>
                     <th style={{ padding: '0.75rem 1rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 500 }}>Status</th>
+                    <th style={{ padding: '0.75rem 1rem', color: darkMode ? '#d1d5db' : '#374151', fontWeight: 500 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {!viewVectorCollection?.documents || viewVectorCollection.documents.length === 0 ? (
                     <tr>
-                      <td colSpan={3} style={{ padding: '3rem 1rem', textAlign: 'center', color: darkMode ? '#9ca3af' : '#6b7280' }}>
+                      <td colSpan={4} style={{ padding: '3rem 1rem', textAlign: 'center', color: darkMode ? '#9ca3af' : '#6b7280' }}>
                         No documents are currently indexed in this collection.
                       </td>
                     </tr>
@@ -507,6 +549,19 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                           }}>
                             {doc.status || 'UNSYNCED'}
                           </span>
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setDocumentToDelete({ id: doc.id, s3Uri: doc.s3Uri, collectionId: viewVectorCollection.id });
+                              setIsDeleteDocumentModalOpen(true);
+                            }}
+                            className="input-typography" 
+                            style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -534,7 +589,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
             </button>
             <button 
               onClick={handleCreateSubmit}
-              disabled={!isCollectionValid}
+              disabled={!isCollectionValid || isSubmitting}
               className="input-typography"
               style={{ 
                 padding: '0.75rem 1.5rem', 
@@ -542,11 +597,11 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                 color: 'white', 
                 border: 'none', 
                 borderRadius: '4px',
-                cursor: isCollectionValid ? 'pointer' : 'not-allowed',
-                opacity: isCollectionValid ? 1 : 0.5
+                cursor: (isCollectionValid && !isSubmitting) ? 'pointer' : 'not-allowed',
+                opacity: (isCollectionValid && !isSubmitting) ? 1 : 0.5
               }}
             >
-              Create Collection
+              {isSubmitting ? 'Creating...' : 'Create Collection'}
             </button>
           </div>
         }
@@ -560,7 +615,6 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                 name="name"
                 value={newCollectionData.name}
                 onChange={handleCreateInputChange}
-                
                 placeholder="e.g., Enterprise Asset Data 2026"
                 style={{
                   ...inputStyle,
@@ -569,7 +623,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
               />
               {isNameDuplicate && (
                 <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>
-                  A pool container with this name already exists.
+                  A Vector Collection with this name already exists.
                 </p>
               )}
             </div>
@@ -627,14 +681,14 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
             </button>
             <button 
               onClick={handleEditSubmit}
-              disabled={!isEditValid}
+              disabled={!isEditValid || isSubmitting}
               className="input-typography"
               style={{ 
                 padding: '0.75rem 1.5rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px',
-                cursor: isEditValid ? 'pointer' : 'not-allowed', opacity: isEditValid ? 1 : 0.5
+                cursor: (isEditValid && !isSubmitting) ? 'pointer' : 'not-allowed', opacity: (isEditValid && !isSubmitting) ? 1 : 0.5
               }}
             >
-              Save Changes
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         }
@@ -659,7 +713,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
               />
               {isEditNameDuplicate && (
                 <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#ef4444' }}>
-                  A pool container with this name already exists.
+                  A Vector Collection with this name already exists.
                 </p>
               )}
             </div>
@@ -741,7 +795,17 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
                           </span>
                         </td>
                         <td style={{ padding: '0.75rem 1rem' }}>
-                          <button className="input-typography" style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Delete</button>
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setDocumentToDelete({ id: doc.id, s3Uri: doc.s3Uri, collectionId: editVectorCollection?.id });
+                              setIsDeleteDocumentModalOpen(true);
+                            }}
+                            className="input-typography" 
+                            style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -767,9 +831,10 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
             <button 
               className="bottom-right-modal-button"
               onClick={handleDeleteVectorCollection}
-              style={{ padding: '0.5rem 1rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              disabled={isSubmitting}
+              style={{ padding: '0.5rem 1rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.5 : 1 }}
             >
-              Confirm
+              {isSubmitting ? 'Deleting...' : 'Confirm'}
             </button>
           </div>
         }
@@ -780,6 +845,37 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
           </p>
           <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}> 
             Are you sure you want to proceed? This action cannot be undone.
+          </p>
+        </div>
+      </BottomRightModal>
+
+      <BottomRightModal
+        isOpen={isDeleteDocumentModalOpen}
+        onClose={() => setIsDeleteDocumentModalOpen(false)}
+        icon={<i className="bx bx-trash" />}
+        title="Delete Vector Document"
+        darkMode={darkMode}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+            <button className="bottom-right-modal-button" onClick={() => setIsDeleteDocumentModalOpen(false)} style={{ padding: '0.5rem 1rem', cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button 
+              className="bottom-right-modal-button"
+              onClick={confirmDeleteDocument}
+              style={{ padding: '0.5rem 1rem', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              Confirm
+            </button>
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}>
+            Are you sure you want to remove this document from the knowledge base?
+          </p>
+          <p style={{ margin: 0, fontSize: '0.875rem', color: darkMode ? '#ccc' : '#666' }}> 
+            This action cannot be undone and will trigger a pipeline sync.
           </p>
         </div>
       </BottomRightModal>
