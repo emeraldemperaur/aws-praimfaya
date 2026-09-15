@@ -181,7 +181,7 @@ const schema = a.schema({
       status: a.string(),
       s3Uri: a.string(),
       createdBy: a.string(),
-      textContent: a.string().required(), 
+      textContent: a.string(), 
       sourceMetadata: a.json(), 
       externalVectorId: a.string(), 
     })

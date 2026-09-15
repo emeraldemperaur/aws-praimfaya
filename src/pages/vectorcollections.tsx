@@ -323,7 +323,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
 
       const activeCollectionId = collectionId || editVectorCollection?.id || viewVectorCollection?.id;
       if (activeCollectionId) {
-        await client.mutations.syncKnowledgeBase({ collectionId: activeCollectionId });
+        await client.mutations.syncKnowledgeBase({ collectionId: activeCollectionId, syncCost: 1000 });
       }
     } catch (error) {
       console.error("Failed to delete document:", error);
