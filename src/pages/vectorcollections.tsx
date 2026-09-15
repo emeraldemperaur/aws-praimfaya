@@ -74,13 +74,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
         'updatedAt', 
         'createdBy',
         'profiles.*', 
-        'documents.id',
-        'documents.name',
-        'documents.size',
-        'documents.status',
-        'documents.s3Uri',
-        'documents.createdBy',
-        'documents.collectionId'
+        'documents.*',
       ]
     }).subscribe({
       next: (data: any) => {

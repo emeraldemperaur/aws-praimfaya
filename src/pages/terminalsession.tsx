@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { generateClient } from 'aws-amplify/api';
+import { generateClient } from 'aws-amplify/data';
+import type { SelectionSet } from 'aws-amplify/data';
+import type { Schema } from '../../amplify/data/resource'; // Adjust path to your actual resource.ts if needed
 import { getInitials, getModelIcon } from '../utils/voltaire';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -10,13 +12,21 @@ import { JotformEmbed } from '../components/jotformportal';
 import { HaikusDropdown } from '../components/haikusdropdown';
 import { CubeIcon } from '../components/cube';
 
+const terminalSelectionSet = [
+  'id', 'title', 'totalTokensUsed', 'status', 'contextProfileId', 'userId',
+  'contextProfile.*', 'contextProfile.foundationModel.*', 'contextProfile.supervisor.*',
+  'contextProfile.collaborators.*', 'contextProfile.vectorCollection.*', 'contextProfile.workflows.*'
+] as const;
+
+type DeepTerminalSession = SelectionSet<Schema['ConsoleTerminal']['type'], typeof terminalSelectionSet>;
+
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
-  const client = generateClient() as any;
-
-  const [session, setSession] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
+  
+  const client = generateClient<Schema>();
+  const [session, setSession] = useState<DeepTerminalSession | null>(null);
+  const [messages, setMessages] = useState<Schema['TerminalMessage']['type'][]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,14 +47,10 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
     const hydrateTerminalSession = async () => {
       try {
-        const { data: currentTerminal } = await client.models.ConsoleTerminal.get({ id: sessionId }, {
-          selectionSet: [
-            'id', 'title', 'totalTokensUsed', 'status', 'contextProfileId', 'userId',
-            'contextProfile.name', 'contextProfile.systemPrompt', 'contextProfile.temperature',
-            'contextProfile.foundationModel.apiIdentifier', 'contextProfile.foundationModel.name',
-            'contextProfile.foundationModel.provider', 'contextProfile.foundationModel.modality'
-          ]
-        });
+        const { data: currentTerminal } = await client.models.ConsoleTerminal.get(
+          { id: sessionId }, 
+          { selectionSet: terminalSelectionSet }
+        );
 
         if (!currentTerminal) {
           console.error("Session target signature not found in infrastructure database.");
@@ -59,7 +65,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         });
 
         const chronologyLog = historicMessages.sort(
-          (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
         );
         
         setMessages(chronologyLog);
@@ -71,7 +77,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     };
 
     hydrateTerminalSession();
-  }, [sessionId, navigate]);
+  }, [sessionId, navigate, client]);
 
   const handleExecutePrompt = async (e?: React.SyntheticEvent, overridePrompt?: string) => {
     if (e) e.preventDefault();
@@ -88,14 +94,17 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         content: queryText,
         terminalId: session.id
       });
-      setMessages(prev => [...prev, committedUserMsg]);
+      
+      if (committedUserMsg) {
+        setMessages((prev: Schema['TerminalMessage']['type'][]) => [...prev, committedUserMsg]);
+      }
 
       const activeProfile = session.contextProfile;
       const targetModelIdentifier = activeProfile?.foundationModel?.apiIdentifier || "us.amazon.nova-pro-v1:0";
 
-      const bedrockHistory = messages.map((m: any) => ({
+      const bedrockHistory = messages.map((m) => ({
         role: m.role === 'USER' ? 'user' : 'assistant',
-        content: [{ text: m.content }]
+        content: [{ text: m.content || '' }]
       }));
 
       const response = await client.queries.askAssistant({
@@ -108,7 +117,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         ephemeralSecretsJson: JSON.stringify(ephemeralSecrets)
       });
 
-      const transactionPayload = JSON.parse(response.data);
+      const transactionPayload = JSON.parse(response.data as string);
       const outputText = transactionPayload.answer || transactionPayload.error || "No response generated.";
       
       const authMatch = outputText.match(/<vanguard_auth_request>(.*?)<\/vanguard_auth_request>/);
@@ -121,7 +130,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         setActiveAuthPrompt(null);
       }
 
-      const generatedChips = transactionPayload.citations?.map((source: any) => {
+      const generatedChips = transactionPayload.citations?.map((source: { type: string, uri: string }) => {
         if (source.type === 'media') return `📸 Media Reference: ${source.uri.split('/').pop()}`;
         if (source.type === 'asset') return `🎥 Asset Generated: ${source.uri}`;
         return `📄 Text Vector Document`;
@@ -133,7 +142,10 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         contextSources: generatedChips,
         terminalId: session.id
       });
-      setMessages(prev => [...prev, committedAiMsg]);
+      
+      if (committedAiMsg) {
+        setMessages((prev: Schema['TerminalMessage']['type'][]) => [...prev, committedAiMsg]);
+      }
 
       const inboundTokens = transactionPayload.tokenUsage?.inputTokens || 0;
       const outboundTokens = transactionPayload.tokenUsage?.outputTokens || 0;
@@ -145,17 +157,19 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           id: session.id,
           totalTokensUsed: incrementedSessionTotal
         });
-        setSession((prev: any) => ({ ...prev, totalTokensUsed: incrementedSessionTotal }));
+        setSession((prev: DeepTerminalSession | null) => prev ? ({ ...prev, totalTokensUsed: incrementedSessionTotal }) : null);
       }
 
     } catch (err) {
       console.error("Relay framework dropped socket connection during model invocation:", err);
-      setMessages(prev => [...prev, {
+      setMessages((prev: Schema['TerminalMessage']['type'][]) => [...prev, {
         id: 'runtime-err-' + Date.now(),
         role: 'ASSISTANT',
         content: "RAG Pipeline Routing Interface Timeout or Configuration Error.",
-        createdAt: new Date().toISOString()
-      }]);
+        terminalId: session?.id || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as Schema['TerminalMessage']['type']]);
     } finally {
       setIsAiTyping(false);
     }
@@ -183,7 +197,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     sortedMessages.forEach((msg) => {
       const isUser = msg.role === 'USER';
       const avatarName = isUser ? (session.userId?.split('@')[0] || 'Anonymous') : (session.contextProfile?.name || 'Vanguard AI');
-      const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const time = new Date(msg.createdAt || 0).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       const cleanContent = (msg.content || '').replace(/<vanguard_auth_request>.*?<\/vanguard_auth_request>/g, '').trim();
 
@@ -192,9 +206,11 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
       if (msg.contextSources && msg.contextSources.length > 0) {
         markdown += `> **Retrieved Artifacts:**\n`;
-        msg.contextSources.forEach((source: string) => {
-          const cleanSource = source.replace(/[📸🎥📄]/g, '').trim();
-          markdown += `> - \`${cleanSource}\`\n`;
+        msg.contextSources.forEach((source: string | null) => {
+          if (source) {
+            const cleanSource = source.replace(/[📸🎥📄]/g, '').trim();
+            markdown += `> - \`${cleanSource}\`\n`;
+          }
         });
         markdown += `\n`;
       }
@@ -205,7 +221,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `${session.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_transcript.md`);
+    link.setAttribute('download', `${session.title?.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'session'}_transcript.md`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -269,9 +285,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           flexShrink: 0
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <img src={getModelIcon(modelApiId)} alt="Processor Meta" style={{ width: '42px', height: '40px' }} />
+            <img src={getModelIcon(modelApiId || '')} alt="Processor Meta" style={{ width: '42px', height: '40px' }} />
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.15rem', color: darkMode ? '#f9fafb' : '#111827', fontFamily: 'Bodoni Moda Variable' }}>{session?.title}</h2>
+              <h2 title={session?.contextProfile?.role} style={{ margin: 0, fontSize: '1.15rem', color: darkMode ? '#f9fafb' : '#111827', fontFamily: 'Bodoni Moda Variable' }}>{session?.title}</h2>
               <span style={{ fontSize: '0.8rem', color: darkMode ? '#9ca3af' : '#6b7280', fontFamily: 'Bodoni Moda Variable' }}>
                 Engine: <span style={{ fontFamily: 'monospace', color: '#2563eb' }}>{modelProvider} • {session?.contextProfile?.foundationModel?.name}</span>
                 &nbsp;| Personality: <strong>{session?.contextProfile?.name}</strong>
@@ -322,7 +338,8 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           {hasMoreMessages && (
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
               <button
-                onClick={() => setVisibleCount(prev => prev + 20)}
+                // EXPLICIT TYPE ADDED HERE
+                onClick={() => setVisibleCount((prev: number) => prev + 20)}
                 style={{
                   background: 'none', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
                   borderRadius: '999px', padding: '0.4rem 1rem', fontSize: '0.75rem', 
@@ -381,7 +398,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                   boxShadow: isUser ? '0 4px 6px -1px rgba(128, 0, 32, 0.2)' : '0 1px 3px 0 rgba(0, 0, 0, 0.05)'
                 }}>
                   <div style={{ fontSize: '0.675rem', opacity: isUser ? 0.8 : 0.5, marginBottom: '0.4rem', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em', fontFamily: 'Google Sans Code, monospace' }}>
-                    {avatarName} • {new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    {avatarName} • {new Date(msg.createdAt || 0).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </div>
                   
                   <div style={{ fontSize: '0.925rem', lineHeight: 1.6, fontFamily: 'inherit' }}>
@@ -445,7 +462,8 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                     }}>
                       <div style={{ fontWeight: 600, marginBottom: '0.75rem', fontFamily: 'Bodoni Moda Variable', color: isUser ? '#fecaca' : (darkMode ? '#9ca3af' : '#6b7280') }}>Generated Artifacts:</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        {msg.contextSources.map((source: string, idx: number) => {
+                        {msg.contextSources.map((source: string | null, idx: number) => {
+                          if (!source) return null;
                           const urlMatch = source.match(/https:\/\/[^\s]+/);
                           const url = urlMatch ? urlMatch[0] : null;
                           const cleanName = url ? url.split('/').pop() : source.replace(/[📸🎥📄]/g, '').trim();
