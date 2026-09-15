@@ -334,19 +334,27 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
           data: file,
           options: { contentType: file.type }
         }).result;
+
+        await client.models.VectorDocument.create({
+          collectionId: editVectorCollection.id,
+          name: file.name,
+          size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
+          status: 'Indexed',
+          s3Uri: s3FilePath,
+          createdBy: currentUserEmail,
+          sourceMetadata: JSON.stringify({ contentType: file.type })
+        });
         
         setVectorDocuments(prev => prev.map(doc => doc.name === file.name ? { ...doc, status: 'Processing...' } : doc));
       });
 
       await Promise.all(uploadPromises);
 
-      // Auto-trigger backend sync after entire batch uploads
       await client.mutations.syncKnowledgeBase({ 
           collectionId: editVectorCollection.id 
       });
-
       setVectorDocuments(prev => prev.map(doc => 
-         files.some(f => f.name === doc.name) ? { ...doc, status: 'Syncing to DB...' } : doc
+         files.some(f => f.name === doc.name) ? { ...doc, status: 'Indexed' } : doc
       ));
 
     } catch (error) {

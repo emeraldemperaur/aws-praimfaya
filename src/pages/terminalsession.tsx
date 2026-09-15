@@ -8,6 +8,7 @@ import EphemeralCredentialsModal from '../components/ephemeralcredentialsmodal';
 import type { EphemeralSecrets } from '../data/consoleterminal';
 import { JotformEmbed } from '../components/jotformportal';
 import { HaikusDropdown } from '../components/haikusdropdown';
+import { CubeIcon } from '../components/cube';
 
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -214,10 +215,12 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   if (isLoading) {
     return (
       <div style={{ display: 'flex', height: '80vh', alignItems: 'center', justifyContent: 'center', color: darkMode ? '#fff' : '#000', fontFamily: 'Google Sans Code, monospace' }}>
-      
         <div style={{ textAlign: 'center' }}>
-          <h3>INITIALIZING RAG SESSION...</h3>
-          <p style={{ opacity: 0.5, fontSize: '0.85rem' }}>Mapping Context Profiles and allocating parallel tensor buffers.</p>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
+            <CubeIcon width={30} height={30} darkMode={darkMode} edgeColor={darkMode ? '#ffffff' : '#0B0B45'} animationDuration="2s" />
+          </div>
+          <h3 style={{ margin: '0 0 0.5rem 0' }}>INITIALIZING RAG SESSION...</h3>
+          <p style={{ opacity: 0.5, fontSize: '0.85rem', margin: 0 }}>Mapping Context Profiles and allocating parallel tensor buffers.</p>
         </div>
       </div>
     );

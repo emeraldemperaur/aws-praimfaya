@@ -176,6 +176,11 @@ const schema = a.schema({
     .model({
       collectionId: a.id(),
       collection: a.belongsTo('VectorCollection', 'collectionId'),
+      name: a.string().required(),
+      size: a.string(),
+      status: a.string(),
+      s3Uri: a.string(),
+      createdBy: a.string(),
       textContent: a.string().required(), 
       sourceMetadata: a.json(), 
       externalVectorId: a.string(), 
