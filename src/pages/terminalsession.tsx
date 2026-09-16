@@ -407,7 +407,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 backgroundColor: session?.status === 'ACTIVE' ? '#10b9811c' : '#f59e0b1c', fontFamily: 'Bodoni Moda Variable',
                 color: session?.status === 'ACTIVE' ? '#10b981' : '#f59e0b'
               }}>
-                {session?.status} RAG SESSION
+                {session?.status} {session?.contextProfile?.vectorCollection ? 'RAG' : ''} SESSION
               </span>
             </div>
 
@@ -713,7 +713,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
            <button
               type="button"
               onClick={() => setIsVectorModalOpen(true)}
-              title="View Vector Collection"
+              title="Inspect Vector Collection"
               onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
               onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
               style={{
@@ -764,6 +764,32 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
               }}
             >
               <i className="fa-solid fa-circle-nodes"></i>
+            </button>
+            <button
+              type="button"
+              onClick={() => console.log('View Agent Activity Clicked')} // Placeholder action
+              title="Review Agent Activity"
+              onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
+              style={{
+                background: darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+                borderRadius: '8px',
+                color: darkMode ? '#f9fafb' : '#111827',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.85rem',
+                width: '32px',
+                height: '32px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <i className="fa-solid fa-microchip"></i>
             </button>
           </div>
 
