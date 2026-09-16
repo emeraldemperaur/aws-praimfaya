@@ -83,7 +83,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         
         setMessages(chronologyLog);
 
-        // Fetch associated artifacts for this specific terminal session
         const { data: linkedArtifacts } = await client.models.RAGArtifact.list({
            filter: { terminalId: { eq: sessionId } }
         });
@@ -406,7 +405,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 backgroundColor: session?.status === 'ACTIVE' ? '#10b9811c' : '#f59e0b1c', fontFamily: 'Bodoni Moda Variable',
                 color: session?.status === 'ACTIVE' ? '#10b981' : '#f59e0b'
               }}>
-                {session?.status} RAG SESSION
+                {session?.status} {session.contextProfile?.vectorCollection ? 'RAG': ''} SESSION
               </span>
             </div>
 
