@@ -60,6 +60,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       return;
     }
 
+    let messagesSub: any;
+    let artifactsSub: any;
+
     const hydrateTerminalSession = async () => {
       try {
         const { data: currentTerminal } = await client.models.ConsoleTerminal.get(
@@ -75,22 +78,32 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
         setSession(currentTerminal);
 
-        const { data: historicMessages } = await client.models.TerminalMessage.list({
+        messagesSub = client.models.TerminalMessage.observeQuery({
           filter: { terminalId: { eq: sessionId } }
+        }).subscribe({
+          next: (data: any) => {
+            const chronologyLog = [...data.items].sort(
+              (a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+            );
+            setMessages(chronologyLog);
+          },
+          error: (err: any) => console.error("Error observing messages:", err)
         });
 
-        const chronologyLog = historicMessages.sort(
-          (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
-        );
-        
-        setMessages(chronologyLog);
-
-        const { data: linkedArtifacts } = await client.models.RAGArtifact.list({
+        artifactsSub = client.models.RAGArtifact.observeQuery({
            filter: { terminalId: { eq: sessionId } }
+        }).subscribe({
+          next: (data: any) => {
+            const sortedArtifacts = [...data.items].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setArtifacts(sortedArtifacts);
+            setIsLoading(false);
+          },
+          error: (err: any) => {
+            console.error("Error observing artifacts:", err);
+            setIsLoading(false);
+          }
         });
-        setArtifacts(linkedArtifacts.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
 
-        setIsLoading(false);
       } catch (err) {
         console.error("Failed to safely hydrate live terminal environment layer:", err);
         setIsLoading(false);
@@ -98,6 +111,11 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     };
 
     hydrateTerminalSession();
+
+    return () => {
+      if (messagesSub) messagesSub.unsubscribe();
+      if (artifactsSub) artifactsSub.unsubscribe();
+    };
   }, [sessionId, navigate]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,7 +135,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     
     let queryText = (overridePrompt || inputMessage).trim();
     if (!queryText && selectedFiles.length === 0) return;
-    if (isAiTyping || session?.status === 'ARCHIVED') return;
+    if (isAiTyping || session?.status === 'ARCHIVED' || !session) return;
 
     if (!overridePrompt) setInputMessage('');
     setIsAiTyping(true);
@@ -143,7 +161,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
       setIsUploading(false);
 
-      // Inject hidden context into the prompt
       let bedrockPrompt = queryText;
       if (uploadedFilePaths.length > 0) {
         const hiddenContext = `<vanguard_system_context>\nUser has attached the following files for analysis:\n${uploadedFilePaths.map(path => `- ${path}`).join('\n')}\n</vanguard_system_context>\n\n`;
@@ -154,15 +171,14 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         }
       }
 
-      const { data: committedUserMsg } = await client.models.TerminalMessage.create({
+      const { data: committedUserMsg, errors: userMsgErrors } = await client.models.TerminalMessage.create({
         role: 'USER',
         content: queryText,
         terminalId: session.id
       });
       
-      if (committedUserMsg) {
-        setMessages((prev: Schema['TerminalMessage']['type'][]) => [...prev, committedUserMsg]);
-      }
+      if (userMsgErrors) throw new Error(userMsgErrors[0].message);
+      if (!committedUserMsg) throw new Error("Failed to commit user message");
 
       const activeProfile = session.contextProfile;
       const targetModelIdentifier = activeProfile?.foundationModel?.apiIdentifier || "us.amazon.nova-pro-v1:0";
@@ -177,7 +193,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         systemPrompt: activeProfile?.systemPrompt || "Act as a factual system console.",
         modelId: targetModelIdentifier,
         profileId: session.contextProfileId,
-        cognitoUserId: session.userId,
+        cognitoUserId: session.userId || 'Anonymous',
         chatHistory: JSON.stringify(bedrockHistory),
         ephemeralSecretsJson: JSON.stringify(ephemeralSecrets)
       });
@@ -195,44 +211,21 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         setActiveAuthPrompt(null);
       }
 
-      const newArtifactRecords: Schema['RAGArtifact']['type'][] = [];
-      
       const generatedChips = transactionPayload.citations?.map((source: { type: string, uri: string }) => {
-        if (source.type === 'media' || source.type === 'asset') {
-          const isVideo = source.uri.endsWith('.mp4');
-          const isDoc = source.uri.endsWith('.pdf') || source.uri.endsWith('.csv');
-          const fileType = isVideo ? 'VIDEO' : (isDoc ? 'DOCUMENT' : 'IMAGE');
-          
-          newArtifactRecords.push({
-            id: `art-${Date.now()}-${Math.random()}`,
-            userId: session.userId || 'unknown',
-            terminalId: session.id,
-            fileName: source.uri.split('/').pop() || 'Generated Asset',
-            fileUrl: source.uri,
-            fileType: fileType,
-            createdAt: new Date().toISOString()
-          } as Schema['RAGArtifact']['type']);
-        }
-
         if (source.type === 'media') return `📸 Media Reference: ${source.uri.split('/').pop()}`;
         if (source.type === 'asset') return `🎥 Asset Generated: ${source.uri}`;
         return `📄 Text Vector Document`;
       }) || [];
 
-      if (newArtifactRecords.length > 0) {
-          setArtifacts((prev: Schema['RAGArtifact']['type'][]) => [...newArtifactRecords, ...prev]);
-      }
-
-      const { data: committedAiMsg } = await client.models.TerminalMessage.create({
+      const { data: committedAiMsg, errors: aiMsgErrors } = await client.models.TerminalMessage.create({
         role: 'ASSISTANT',
         content: outputText,
         contextSources: generatedChips,
         terminalId: session.id
       });
       
-      if (committedAiMsg) {
-        setMessages((prev: Schema['TerminalMessage']['type'][]) => [...prev, committedAiMsg]);
-      }
+      if (aiMsgErrors) throw new Error(aiMsgErrors[0].message);
+      if (!committedAiMsg) throw new Error("Failed to commit AI message");
 
       const inboundTokens = transactionPayload.tokenUsage?.inputTokens || 0;
       const outboundTokens = transactionPayload.tokenUsage?.outputTokens || 0;
@@ -244,13 +237,14 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           id: session.id,
           totalTokensUsed: incrementedSessionTotal
         });
-        setSession((prev: DeepTerminalSession | null) => prev ? ({ ...prev, totalTokensUsed: incrementedSessionTotal }) : null);
+        setSession((prev: DeepTerminalSession | null) => prev ? ({ ...prev, totalTokensUsed: incrementedSessionTotal }) as any : null);
       }
 
     } catch (err) {
       console.error("Relay framework dropped socket connection during model invocation:", err);
       setIsUploading(false);
-      setMessages((prev: Schema['TerminalMessage']['type'][]) => [...prev, {
+      
+      setMessages((prev) => [...prev, {
         id: 'runtime-err-' + Date.now(),
         role: 'ASSISTANT',
         content: "RAG Pipeline Routing Interface Timeout or Configuration Error.",
@@ -647,7 +641,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
               onSelect={(promptStr) => setInputMessage(promptStr)} 
             />
             
-            {/* Hidden File Input */}
             <input 
               type="file" 
               multiple 

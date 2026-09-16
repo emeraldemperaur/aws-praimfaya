@@ -9,10 +9,13 @@ import ExtraLargeModal from "../components/extralargemodal";
 import FullScreenModal from "../components/fullscreenmodal";
 import { useNavigate } from "react-router-dom";
 import { getInitials, getModelIcon, inputStyle, labelStyle } from "../utils/voltaire";
-import { generateClient } from "aws-amplify/api";
+import { generateClient } from "aws-amplify/data";
 import type { UIConsoleTerminal } from "../data/consoleterminal";
-import { fetchUserAttributes, getCurrentUser } from 'aws-amplify/auth';
+import { getCurrentUser } from 'aws-amplify/auth';
 import { getUserEmail } from "../utils/asimov";
+import type { Schema } from '../../amplify/data/resource';
+
+const client = generateClient<Schema>();
 
 const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,7 +43,6 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   });
 
   const navigator = useNavigate();
-  const client = generateClient() as any;
   
   const [consoleTerminals, setConsoleTerminals] = useState<UIConsoleTerminal[]>([]);
   const [contextProfiles, setContextProfiles] = useState<any[]>([]); 
@@ -62,8 +64,23 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
     fetchUserEmail();
   }, []);
 
+  // Public Resources (Foundation Models)
   useEffect(() => {
+    const fmSub = client.models.FoundationModel.observeQuery({
+      selectionSet: ['id', 'name', 'apiIdentifier', 'provider', 'modality', 'isActive', 'caliber', 'region']
+    }).subscribe({
+      next: (data: any) => setFoundationModels(data.items.filter((m: any) => m.isActive)),
+      error: (err: any) => console.error("Error fetching models:", err)
+    });
+    return () => fmSub.unsubscribe();
+  }, []);
+
+  // 2. CRITICAL COST FIX: SECURE User-Specific Subscriptions
+  useEffect(() => {
+    if (!currentUserEmail) return;
+
     const terminalsSub = client.models.ConsoleTerminal.observeQuery({
+      filter: { userId: { eq: currentUserEmail } }, // Limit payload to user
       selectionSet: [
         'id', 'userId', 'title', 'totalTokensUsed', 'status', 'contextProfileId', 'createdAt', 'updatedAt',
         'contextProfile.*', 'messages.*'
@@ -80,27 +97,24 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
     });
 
     const profilesSub = client.models.ContextProfile.observeQuery({
+      filter: { createdBy: { eq: currentUserEmail } }, // Limit payload to user
       selectionSet: ['id', 'name', 'description', 'llmModelId', 'temperature', 'systemPrompt', 'role', 'vectorCollection.*', 'foundationModel.*']
     }).subscribe({
-      next: (data: any) => setContextProfiles(data.items.filter((p: any) => p.isActive !== false && p.role !== 'COLLABORATOR'))
-    });
-
-    const fmSub = client.models.FoundationModel.observeQuery().subscribe({
-      next: (data: any) => setFoundationModels(data.items),
+      next: (data: any) => setContextProfiles(data.items.filter((p: any) => p.isActive !== false && p.role !== 'COLLABORATOR')),
+      error: (err: any) => console.error("Error fetching profiles:", err)
     });
 
     return () => {
       terminalsSub.unsubscribe();
       profilesSub.unsubscribe();
-      fmSub.unsubscribe();
     };
-  }, []);
+  }, [currentUserEmail]);
 
   useEffect(() => {
     if (editConsoleTerminal) {
       setEditTerminalConsoleData({
         title: editConsoleTerminal.title,
-        status: editConsoleTerminal.status
+        status: editConsoleTerminal.status as 'ACTIVE' | 'ARCHIVED'
       });
     }
   }, [editConsoleTerminal]);
@@ -123,7 +137,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
         case 'title': return terminal.title?.toLowerCase().includes(lowerTerm);
         case 'id': return terminal.id?.toLowerCase().includes(lowerTerm);
         case 'contextProfile': return terminal.contextProfile?.name?.toLowerCase().includes(lowerTerm);
-        case 'messages': return terminal.messages?.some(msg => msg.content?.toLowerCase().includes(lowerTerm)) || false;
+        case 'messages': return terminal.messages?.some((msg: any) => msg.content?.toLowerCase().includes(lowerTerm)) || false;
         case 'status': return terminal.status?.toLowerCase().includes(lowerTerm);
         case 'createdAt':
           const dateString = terminal.createdAt ? new Date(terminal.createdAt).toLocaleDateString() : '';
@@ -225,15 +239,11 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   };
 
   // --- Validation Logic ---
-  const safeUserEmail = (currentUserEmail || '').trim().toLowerCase();
 
   // --- Create Validation ---
   const normalizedNewTitle = newConsoleTerminalData.title?.trim().toLowerCase() || '';
   const isTitleDuplicate = normalizedNewTitle !== '' && consoleTerminals.some(terminal => {
-    const isSameTitle = terminal.title.toLowerCase() === normalizedNewTitle;
-    const terminalOwner = (terminal.userId || '').trim().toLowerCase();
-    const isSameUser = terminalOwner ? terminalOwner === safeUserEmail : true;
-    return isSameTitle && isSameUser;
+    return terminal.title.toLowerCase() === normalizedNewTitle;
   });
 
   const isNewConsoleTerminalValid = newConsoleTerminalData.title?.trim() !== '' && newConsoleTerminalData.contextProfileId !== '' && !isTitleDuplicate;
@@ -243,9 +253,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
   const isEditTitleDuplicate = normalizedEditTitle !== '' && consoleTerminals.some(terminal => {
     const isSameTitle = terminal.title.toLowerCase() === normalizedEditTitle;
     const isNotSelf = terminal.id !== editConsoleTerminal?.id;
-    const terminalOwner = (terminal.userId || '').trim().toLowerCase();
-    const isSameUser = terminalOwner ? terminalOwner === safeUserEmail : true;
-    return isSameTitle && isNotSelf && isSameUser;
+    return isSameTitle && isNotSelf;
   });
 
   const isEditValid = editTerminalConsoleData.title.trim() !== '' && !isEditTitleDuplicate;
@@ -256,16 +264,16 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
     
     try {
       const { username, userId } = await getCurrentUser();
-      const attributes = await fetchUserAttributes();
       const { data: newTerminal, errors } = await client.models.ConsoleTerminal.create({
         title: newConsoleTerminalData.title!.trim(),
         contextProfileId: newConsoleTerminalData.contextProfileId,
         status: 'ACTIVE',
         totalTokensUsed: 0,
-        userId: attributes.email || userId || username || 'Anonymous'
+        userId: currentUserEmail || userId || username || 'Anonymous'
       });
 
       if (errors) throw new Error(errors[0].message);
+      if (!newTerminal) throw new Error("Terminal creation returned empty data.");
       
       setNewConsoleTerminalData({ title: '', contextProfileId: '', status: 'ACTIVE' });
       setIsCreateModalOpen(false);
@@ -288,12 +296,15 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
     }
     
     try {
-      const { errors } = await client.models.ConsoleTerminal.update({
+      const { data: updatedTerminal, errors } = await client.models.ConsoleTerminal.update({
         id: editConsoleTerminal.id,
         title: editTerminalConsoleData.title,
         status: editTerminalConsoleData.status,
       });
+
       if (errors) throw new Error(errors[0].message);
+      if (!updatedTerminal) throw new Error("Update returned empty data.");
+
       setIsEditModalOpen(false);
       setEditConsoleTerminal(null);
     } catch (error) {
@@ -306,6 +317,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
     try {
       const { errors } = await client.models.ConsoleTerminal.delete({ id: deleteConsoleTerminal.id });
       if (errors) throw new Error(errors[0].message);
+      
       setIsDeleteModalOpen(false);
       setDeleteConsoleTerminal(null);
     } catch (error) {
@@ -322,7 +334,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
       );
     }
 
-    const sortedMessages = [...terminal.messages].sort((a, b) => 
+    const sortedMessages = [...terminal.messages].sort((a: any, b: any) => 
       new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
     );
 
@@ -552,8 +564,22 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
-            <div style={{ flex: 1, backgroundColor: darkMode ? '#111827' : '#f9fafb', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>Session Transcript</h3>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Review the conversation history for this terminal. Chat logs cannot be edited directly.</p>
+            </div>
+            <div style={{ flex: 1, backgroundColor: darkMode ? '#111827' : '#f9fafb', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '1rem' }}>
+              
               {renderTranscript(viewConsoleTerminal)}
+
+              {editTerminalConsoleData.status === 'ACTIVE' && (
+                <div style={{ marginTop: 'auto', paddingTop: '2rem' }}>
+                  <button onClick={() => { navigator(`/console-terminals/session/${editConsoleTerminal?.id}`); }} style={{ width: '100%', padding: '1rem', backgroundColor: darkMode ? '#374151' : '#ffffff', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '0.5rem', color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontFamily: 'Bodoni Moda Variable, serif', fontWeight: 800, letterSpacing: '0.13em', fontSize: '0.875rem', transition: 'all 0.2s ease' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: '1.25rem', height: '1.25rem' }}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
+                    Resume Conversation
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -625,7 +651,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
         title={`Emend Terminal Session: ${editConsoleTerminal?.title || ''}`} darkMode={darkMode}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', width: '100%' }}>
-            <button onClick={() => setIsEditModalOpen(false)} style={{ padding: '0.75rem 1.5rem', cursor: 'pointer', backgroundColor: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, fontFamily: 'Bodoni Moda Variable, serif', color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px' }}>Cancel</button>
+            <button onClick={() => setIsEditModalOpen(false)} style={{ fontFamily: 'Bodoni Moda Variable, serif', padding: '0.75rem 1.5rem', cursor: 'pointer', backgroundColor: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, color: darkMode ? '#f9fafb' : '#111827', borderRadius: '4px' }}>Cancel</button>
             <button onClick={handleEditSubmit} disabled={!isEditValid} style={{ padding: '0.75rem 1.5rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', fontFamily: 'Bodoni Moda Variable, serif', cursor: isEditValid ? 'pointer' : 'not-allowed', opacity: isEditValid ? 1 : 0.5 }}>Update Console Meta</button>
           </div>
         }

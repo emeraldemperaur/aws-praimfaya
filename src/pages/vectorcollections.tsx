@@ -9,10 +9,13 @@ import ExtraLargeModal from "../components/extralargemodal";
 import { AddVectorCollectionSVG, getModelIcon } from "../utils/voltaire";
 import { uploadData, remove } from 'aws-amplify/storage';
 import FullScreenModal from "../components/fullscreenmodal";
-import { generateClient } from "aws-amplify/api";
+import { generateClient } from "aws-amplify/data"; 
 import type { UIVectorCollection } from "../data/vectorcollection";
 import { getUserEmail } from "../utils/asimov";
 import { fetchAuthSession } from 'aws-amplify/auth';
+import type { Schema } from '../../amplify/data/resource'; 
+
+const client = generateClient<Schema>();
 
 const DEFAULT_COLLECTION_STATE = {
   name: '',
@@ -42,10 +45,8 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
   const [vectorDocuments, setVectorDocuments] = useState<any[]>([]); 
   
   const hiddenDirectS3Input = useRef<HTMLInputElement>(null);
-  const client = generateClient() as any;
-  const vectorCollectionsClient = client.models.VectorCollection;
+  
   const [vectorCollections, setVectorCollections] = useState<UIVectorCollection[]>([]);
-
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
 
   useEffect(() => {
@@ -63,7 +64,10 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
   }, []);
 
   useEffect(() => {
-    const sub = vectorCollectionsClient.observeQuery({
+    if (!currentUserEmail) return;
+
+    const sub = client.models.VectorCollection.observeQuery({
+      filter: { createdBy: { eq: currentUserEmail } }, 
       selectionSet: [
         'id', 
         'name', 
@@ -87,7 +91,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
       }
     });
     return () => sub.unsubscribe();
-  }, []);
+  }, [currentUserEmail]);
 
   useEffect(() => {
     if (editVectorCollection) {
@@ -209,14 +213,9 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
   };
 
   // --- Validation Logic ---
-  const safeUserEmail = (currentUserEmail || '').trim().toLowerCase();
-
   const normalizedNewName = newCollectionData.name?.trim().toLowerCase() || '';
   const isNameDuplicate = normalizedNewName !== '' && vectorCollections.some(collection => {
-    const isSameName = collection.name?.trim().toLowerCase() === normalizedNewName;
-    const collectionOwner = (collection.createdBy || '').trim().toLowerCase();
-    const isSameUser = collectionOwner ? collectionOwner === safeUserEmail : true; 
-    return isSameName && isSameUser;
+    return collection.name?.trim().toLowerCase() === normalizedNewName;
   });
 
   const isCollectionValid = newCollectionData.name?.trim() !== '' && !isNameDuplicate;
@@ -225,9 +224,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
   const isEditNameDuplicate = normalizedEditName !== '' && vectorCollections.some(collection => {
     const isSameName = collection.name?.trim().toLowerCase() === normalizedEditName;
     const isNotSelf = collection.id !== editVectorCollection?.id;
-    const collectionOwner = (collection.createdBy || '').trim().toLowerCase();
-    const isSameUser = collectionOwner ? collectionOwner === safeUserEmail : true;
-    return isSameName && isNotSelf && isSameUser;
+    return isSameName && isNotSelf;
   });
 
   const isEditValid = editVectorCollectionData.name?.trim() !== '' && !isEditNameDuplicate;
@@ -237,7 +234,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
     
     setIsSubmitting(true);
     try {
-      const { errors } = await vectorCollectionsClient.create({
+      const { errors } = await client.models.VectorCollection.create({
         name: newCollectionData.name!.trim(),
         description: newCollectionData.description?.trim() || null,
         embeddingModel: newCollectionData.embeddingModel!,
@@ -260,7 +257,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
     
     setIsSubmitting(true);
     try {
-      const { errors } = await vectorCollectionsClient.update({
+      const { data: updatedCollection, errors } = await client.models.VectorCollection.update({
         id: editVectorCollection.id,
         name: editVectorCollectionData.name!.trim(),
         description: editVectorCollectionData.description?.trim() || null,
@@ -270,6 +267,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
       });
 
       if (errors) throw new Error(errors[0].message);
+      if (!updatedCollection) throw new Error("Update returned empty data.");
       
       setIsEditModalOpen(false);
       setEditVectorCollection(null);
@@ -285,7 +283,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
     
     setIsSubmitting(true);
     try {
-      const { errors } = await vectorCollectionsClient.delete({
+      const { errors } = await client.models.VectorCollection.delete({
         id: deleteVectorCollection.id
       });
 
@@ -303,6 +301,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
   const confirmDeleteDocument = async () => {
     if (!documentToDelete) return;
     const { id: documentId, s3Uri, collectionId } = documentToDelete;
+    
     setVectorDocuments(prev => prev.filter(doc => doc.id !== documentId));
     if (viewVectorCollection) {
       setViewVectorCollection(prev => prev ? { ...prev, documents: prev.documents?.filter((d: any) => d.id !== documentId) } : null);
@@ -373,18 +372,16 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
           sourceMetadata: JSON.stringify({ contentType: file.type })
         });
         
-        // Match directly on temp ID, not file.name, to avoid overwriting duplicates
         setVectorDocuments(prev => prev.map(doc => doc.id === tempId ? { ...doc, status: 'Processing...' } : doc));
       });
 
-      // Use allSettled so one failed upload doesn't crash the entire batch process
       const results = await Promise.allSettled(uploadPromises);
       const hasSuccess = results.some(result => result.status === 'fulfilled');
 
-      // 3. Trigger Bedrock Sync if at least one document made it through
       if (hasSuccess) {
         await client.mutations.syncKnowledgeBase({ 
-            collectionId: editVectorCollection.id 
+            collectionId: editVectorCollection.id,
+            syncCost: 1000
         });
       }
 
@@ -513,7 +510,7 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
               </p>
             </div>
 
-            <div style={{ border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', overflow: 'hidden', flexGrow: 1 }}>
+            <div style={{ border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', overflowY: 'auto', flexGrow: 1 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
                 <thead style={{ backgroundColor: darkMode ? '#1f2937' : '#f9fafb', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
                   <tr>

@@ -1,54 +1,88 @@
 import { useEffect, useState } from 'react';
-import { generateClient } from 'aws-amplify/api';
+import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
+import type { Schema } from '../../amplify/data/resource';
+import { getUserEmail } from '../utils/asimov';
+
+const client = generateClient<Schema>();
 
 const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
-  const client = generateClient() as any;
   const [artifacts, setArtifacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
 
   useEffect(() => {
-    const fetchArtifacts = async () => {
-      try {
-        const { data } = await client.models.RAGArtifact.list();
-        
-        const artifactsWithSecureUrls = await Promise.all(
-          data.map(async (art: any) => {
-            try {
-              const signedUrlResponse = await getUrl({ 
-                path: art.s3Key 
-              });
-              
-              return { 
-                ...art, 
-                freshUrl: signedUrlResponse.url.toString() 
-              };
-            } catch (urlErr) {
-              console.error(`Failed to generate secure link for ${art.s3Key}:`, urlErr);
-              return { ...art, freshUrl: '' };
-            }
-          })
-        );
-
-        setArtifacts(artifactsWithSecureUrls.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-      } catch (err) {
-        console.error("Failed to fetch RAG artifacts:", err);
-      } finally {
-        setLoading(false);
+    const fetchUserEmail = async () => {
+      if (getUserEmail) {
+        const email = await getUserEmail();
+        setCurrentUserEmail(email || '');
       }
     };
-    
-    fetchArtifacts();
+    fetchUserEmail();
   }, []);
 
-  const filteredArtifacts = artifacts.filter(art => {
+  useEffect(() => {
+    if (!currentUserEmail) return;
+
+    let isMounted = true;
+
+    const sub = client.models.RAGArtifact.observeQuery({
+      filter: { userId: { eq: currentUserEmail } }
+    }).subscribe({
+      next: async (data) => {
+        try {
+          const artifactsWithSecureUrls = await Promise.all(
+            data.items.map(async (art) => {
+              const rawUrl = art.fileUrl || '';
+              
+              if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+                return { ...art, freshUrl: rawUrl };
+              }
+
+              try {
+                const signedUrlResponse = await getUrl({ path: rawUrl });
+                return { ...art, freshUrl: signedUrlResponse.url.toString() };
+              } catch (urlErr) {
+                console.error(`Failed to generate link for path "${rawUrl}":`, urlErr);
+                return { ...art, freshUrl: '' };
+              }
+            })
+          );
+
+          if (isMounted) {
+            setArtifacts(
+              artifactsWithSecureUrls.sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              )
+            );
+            setLoading(false);
+          }
+        } catch (err) {
+          console.error("Error processing artifact links:", err);
+          if (isMounted) setLoading(false);
+        }
+      },
+      error: (err) => {
+        console.error("Failed to observe RAG artifacts:", err);
+        if (isMounted) setLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      sub.unsubscribe();
+    };
+  }, [currentUserEmail]);
+
+  const filteredArtifacts = artifacts.filter((art) => {
     const matchesType = typeFilter === 'ALL' || art.fileType === typeFilter;
-    const matchesSearch = (art.fileName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
-                          (art.terminalTitle?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                          (art.contextProfileName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      (art.fileName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (art.terminalTitle?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (art.contextProfileName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     return matchesType && matchesSearch;
   });
 
@@ -60,43 +94,64 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   };
 
   return (
-    <div style={{ 
-      padding: '2rem', 
-      marginTop: '7.3rem', 
-      minHeight: 'calc(100vh - 7.3rem)',
-      boxSizing: 'border-box',
-      backgroundColor: darkMode ? '#1b1c1d' : '#f9fafb',
-      color: darkMode ? '#f9fafb' : '#0b0b45',
-      fontFamily: 'Google Sans Code, monospace'
-    }}>
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingBottom: '1rem' }}>
+    <div
+      style={{
+        padding: '2rem',
+        marginTop: '7.3rem',
+        minHeight: 'calc(100vh - 7.3rem)',
+        boxSizing: 'border-box',
+        backgroundColor: darkMode ? '#1b1c1d' : '#f9fafb',
+        color: darkMode ? '#f9fafb' : '#0b0b45',
+        fontFamily: 'Google Sans Code, monospace'
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
+          marginBottom: '2rem',
+          borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+          paddingBottom: '1rem'
+        }}
+      >
         <div>
-          <h1 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '2rem' }}>RAG Artifacts</h1>
+          <h1 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '2rem' }}>
+            RAG Artifacts
+          </h1>
           <p style={{ margin: 0, fontSize: '0.85rem', color: darkMode ? '#9ca3af' : '#6b7280', fontFamily: 'Bodoni Moda Variable' }}>
-            Generated media, documents, and assets across all Console Terminal sessions.
+            Generated media, documents, and assets across your Console Terminal sessions.
           </p>
         </div>
-        
+
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <input 
-            type="text" 
-            placeholder="Search filenames, sessions..." 
+          <input
+            type="text"
+            placeholder="Search filenames, sessions..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
-              padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.85rem', width: '250px',
-              backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
-              color: darkMode ? '#f9fafb' : '#111827', fontFamily: 'inherit'
+              padding: '0.5rem 1rem',
+              borderRadius: '4px',
+              fontSize: '0.85rem',
+              width: '250px',
+              backgroundColor: darkMode ? '#1f2937' : '#ffffff',
+              border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+              color: darkMode ? '#f9fafb' : '#111827',
+              fontFamily: 'inherit'
             }}
           />
-          <select 
-            value={typeFilter} 
+          <select
+            value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
             style={{
-              padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.85rem',
-              backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
-              color: darkMode ? '#f9fafb' : '#111827', fontFamily: 'inherit'
+              padding: '0.5rem 1rem',
+              borderRadius: '4px',
+              fontSize: '0.85rem',
+              backgroundColor: darkMode ? '#1f2937' : '#ffffff',
+              border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+              color: darkMode ? '#f9fafb' : '#111827',
+              fontFamily: 'inherit'
             }}
           >
             <option value="ALL">All Formats</option>
@@ -109,7 +164,9 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '4rem', opacity: 0.5, fontFamily: 'Bodoni Moda Variable' }}>Loading artifacts...</div>
+        <div style={{ textAlign: 'center', padding: '4rem', opacity: 0.5, fontFamily: 'Bodoni Moda Variable' }}>
+          Loading artifacts...
+        </div>
       ) : artifacts.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '4rem', color: darkMode ? '#9ca3af' : '#6b7280', fontFamily: 'Bodoni Moda Variable' }}>
           <i className="fa-solid fa-box-open" style={{ fontSize: '2rem', marginBottom: '1rem', opacity: 0.3, display: 'block' }}></i>
@@ -123,45 +180,90 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
           {filteredArtifacts.map((art) => (
-            <div key={art.id} style={{
-              backgroundColor: darkMode ? '#1f2937' : '#ffffff',
-              border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-              borderRadius: '8px', overflow: 'hidden',
-              display: 'flex', flexDirection: 'column', transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-            }}
-            onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-            onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}
+            <div
+              key={art.id}
+              style={{
+                backgroundColor: darkMode ? '#1f2937' : '#ffffff',
+                border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                borderRadius: '8px',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
+              onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
             >
-              
-              <div style={{ height: '180px', backgroundColor: darkMode ? '#111827' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, position: 'relative' }}>
-                <span style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', backgroundColor: 'rgba(0,0,0,0.6)', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 'bold', zIndex: 10 }}>
+              <div
+                style={{
+                  height: '180px',
+                  backgroundColor: darkMode ? '#111827' : '#f3f4f6',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                  position: 'relative'
+                }}
+              >
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '0.5rem',
+                    right: '0.5rem',
+                    backgroundColor: 'rgba(0,0,0,0.6)',
+                    color: 'white',
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: '4px',
+                    fontSize: '0.65rem',
+                    fontWeight: 'bold',
+                    zIndex: 10
+                  }}
+                >
                   <i className={`fa-solid ${getIconForType(art.fileType)}`}></i> {art.fileType}
                 </span>
 
-                {art.fileType === 'IMAGE' && <img src={art.freshUrl} alt={art.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />}
-                {art.fileType === 'VIDEO' && <video src={art.freshUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls />}
-                {art.fileType === 'AUDIO' && <div style={{ width: '80%' }}><audio src={art.freshUrl} controls style={{ width: '100%' }} /></div>}
-                {art.fileType === 'DOCUMENT' && <i className="fa-solid fa-file-pdf" style={{ fontSize: '3rem', color: darkMode ? '#4b5563' : '#9ca3af' }}></i>}
+                {art.fileType === 'IMAGE' && (
+                  <img src={art.freshUrl} alt={art.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                )}
+                {art.fileType === 'VIDEO' && (
+                  <video src={art.freshUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls />
+                )}
+                {art.fileType === 'AUDIO' && (
+                  <div style={{ width: '80%' }}>
+                    <audio src={art.freshUrl} controls style={{ width: '100%' }} />
+                  </div>
+                )}
+                {art.fileType === 'DOCUMENT' && (
+                  <i className="fa-solid fa-file-pdf" style={{ fontSize: '3rem', color: darkMode ? '#4b5563' : '#9ca3af' }}></i>
+                )}
               </div>
 
               <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={art.fileName}>
                   {art.fileName}
                 </h3>
-                
+
                 <div style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '1rem' }}>
                   <span><strong>Session:</strong> {art.terminalTitle || 'Terminal Chat'}</span>
-                  <span><strong>Profile:</strong> {art.contextProfileName}</span>
+                  <span><strong>Profile:</strong> {art.contextProfileName || 'N/A'}</span>
                   <span><strong>Date:</strong> {new Date(art.createdAt).toLocaleDateString()}</span>
                 </div>
 
-                <a 
-                  href={art.freshUrl} 
-                  target="_blank" 
+                <a
+                  href={art.freshUrl}
+                  target="_blank"
                   rel="noopener noreferrer"
-                  style={{ 
-                    marginTop: 'auto', textAlign: 'center', padding: '0.5rem', backgroundColor: '#800020', color: 'white', 
-                    borderRadius: '4px', textDecoration: 'none', fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase'
+                  style={{
+                    marginTop: 'auto',
+                    textAlign: 'center',
+                    padding: '0.5rem',
+                    backgroundColor: '#800020',
+                    color: 'white',
+                    borderRadius: '4px',
+                    textDecoration: 'none',
+                    fontSize: '0.8rem',
+                    fontWeight: 'bold',
+                    textTransform: 'uppercase'
                   }}
                 >
                   Open Artifact <i className="fa-solid fa-arrow-up-right-from-square"></i>

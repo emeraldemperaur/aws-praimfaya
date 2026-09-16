@@ -3,14 +3,16 @@ import TitleRibbon from "../components/titleribbon";
 import { UserProfileCard, type SubscriptionDetails } from "../components/userprofilecard";
 import { usePraimfaya } from "../contexts";
 import { getPermissions } from "../utils/asimov";
-import { generateClient } from "aws-amplify/api";
+import { generateClient } from "aws-amplify/data"; // Fixed import
 import { getCurrentUser } from "aws-amplify/auth";
+import type { Schema } from '../../amplify/data/resource'; // Added schema typing
+
+const client = generateClient<Schema>();
 
 const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
   const { logUser, logKey, userGroups } = usePraimfaya();
-  const client = generateClient() as any;
 
-  const [dbProfile, setDbProfile] = useState<any>(null);
+  const [dbProfile, setDbProfile] = useState<Schema['UserProfile']['type'] | null>(null);
 
   const adminRoles = ['admin', 'superadmin', 'root', 'heda'];
   const highestRole = userGroups.find(group => adminRoles.includes(group));
@@ -20,29 +22,38 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
     document.body.style.backgroundColor = darkMode ? "#1b1c1d" : "#ffffff";
   }, [darkMode]);
 
-  
   useEffect(() => {
+    let sub: any;
+
     const fetchProfile = async () => {
       try {
         const { userId } = await getCurrentUser();
 
-        const { data } = await client.models.UserProfile.list({
+        sub = client.models.UserProfile.observeQuery({
           filter: {
             cognitoUserId: { eq: userId }
           }
+        }).subscribe({
+          next: (data) => {
+            if (data.items && data.items.length > 0) {
+              setDbProfile(data.items[0]);
+            } else {
+              console.log("No backend UserProfile found for this user yet.");
+            }
+          },
+          error: (err) => console.error("Error observing live user profile:", err)
         });
 
-        if (data && data.length > 0) {
-          setDbProfile(data[0]);
-        } else {
-          console.log("No backend UserProfile found for this user yet.");
-        }
       } catch (err) {
         console.error("Error fetching live user profile:", err);
       }
     };
     fetchProfile();
-  }, [client.models.UserProfile]);
+
+    return () => {
+      if (sub) sub.unsubscribe();
+    }
+  }, []);
 
   const initUser = {
     username: logUser ? logUser.split('@')[0] : 'John Doe',
@@ -55,12 +66,11 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
   const subscriptionDetails: SubscriptionDetails = {
     status: (dbProfile?.subscriptionStatus?.toLowerCase() as any) || 'none',
     planName: dbProfile?.planName || 'Free Tier',
-    currentPeriodEnd: dbProfile?.currentPeriodEnd,
+    currentPeriodEnd: dbProfile?.currentPeriodEnd || undefined,
     computeCredits: dbProfile?.computeCredits ?? 0,
     maxCredits: dbProfile?.maxCredits ?? 1,
   };
 
-  // Stripe Checkout Action Handler
   const handleCheckout = async (planTier: 'VANGUARD' | 'VANGUARD_ELITE' | 'TOP_UP') => {
     try {
       console.log(`Initiating checkout session for tier: ${planTier}...`);
@@ -75,13 +85,11 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
 
   const handleStripeCancel = async () => {
     console.log('Canceling subscription at period end...');
-    // Implement cancel mutation call if linked to backend billing portal
     await new Promise((resolve) => setTimeout(resolve, 1500)); 
   };
 
   const handleStripeRenew = async () => {
     console.log('Renewing subscription...');
-    // Implement renewal routing or checkout redirect
     await new Promise((resolve) => setTimeout(resolve, 1500)); 
   };
 

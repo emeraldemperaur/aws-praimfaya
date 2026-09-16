@@ -7,16 +7,16 @@ import BottomRightModal from "../components/bottomrightmodal";
 import FullScreenModal from "../components/fullscreenmodal";
 import ExtraLargeModal from "../components/extralargemodal";
 import { getModelIcon, getUiModality } from "../utils/voltaire";
-import { generateClient } from "aws-amplify/api";
+import { generateClient } from "aws-amplify/data"; // Fixed import
 import type { UIFoundationModel } from "../data/foundationmodel";
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
 import { getUserEmail } from "../utils/asimov";
 import type { UIContextProfile } from "../data/contextprofile";
+import type { Schema } from '../../amplify/data/resource'; // Added Schema typing
+
+const client = generateClient<Schema>();
 
 const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
-  const client = generateClient() as any;
-  const foundationModelsClient = client.models.FoundationModel;
-  
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -50,15 +50,17 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
         setIsAdmin(isUserAdmin);
         const { userId } = await getCurrentUser();
         setUserEmail(await getUserEmail());
+        
         console.log(`[Auth] Checking UserProfile for userId: ${userId}`);
         const { data: existingProfiles } = await client.models.UserProfile.list({
           filter: { cognitoUserId: { eq: userId } }
         });
+        
         let activeProfileId = null;
         if (existingProfiles && existingProfiles.length > 0) {
           activeProfileId = existingProfiles[0].id;
           setUserProfileId(activeProfileId);
-          setDisabledModelIds(existingProfiles[0].disabledModelIds || []);
+          setDisabledModelIds((existingProfiles[0].disabledModelIds || []).filter(Boolean) as string[]);
         } else {
           console.warn("[Auth] No UserProfile found. Initializing JIT Profile...");
           try {
@@ -88,7 +90,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
           }).subscribe({
             next: (data: any) => {
               if (data.items.length > 0) {
-                setDisabledModelIds(data.items[0].disabledModelIds || []);
+                setDisabledModelIds((data.items[0].disabledModelIds || []).filter(Boolean) as string[]);
               }
             },
             error: (err: any) => console.error("Error observing user profile:", err)
@@ -108,7 +110,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
   }, []);
 
   useEffect(() => {
-    const sub = foundationModelsClient.observeQuery({
+    const sub = client.models.FoundationModel.observeQuery({
       selectionSet: [
         'id', 'name', 'provider', 'apiIdentifier', 'modality', 
         'contextWindowTokens', 'isActive', 'createdAt', 'updatedAt', 'profiles.*',
@@ -354,17 +356,21 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
   const handleEditSubmit = async () => {
     if (!editFoundationModel?.id) return;
     try {
-      const { data: updatedModel, errors } = await foundationModelsClient.update({
+      const { data: updatedModel, errors } = await client.models.FoundationModel.update({
         id: editFoundationModel.id,
         name: editFoundationModelData.name!,
-        modality: editFoundationModelData.modality!,
+        modality: editFoundationModelData.modality as any,
         contextWindowTokens: editFoundationModelData.contextWindowTokens || null,
         isActive: editFoundationModelData.isActive ?? false,
         updatedBy: getUserEmail ? await getUserEmail() : 'Unknown User'
       });
       if (errors) throw new Error(errors[0].message);
+      
+      // Strict null check for updatedModel
+      if (!updatedModel) throw new Error("Update returned empty data.");
+
       setFoundationModels(prev => prev.map(item => 
-        item.id === updatedModel.id ? { ...item, ...updatedModel } : item
+        item.id === updatedModel.id ? { ...item, ...updatedModel } as any : item
       ));
       setIsEditModalOpen(false);
       setEditFoundationModel(null);

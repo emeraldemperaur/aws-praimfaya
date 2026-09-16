@@ -4,9 +4,12 @@ import DashboardInterface from "../components/dashboardui";
 import ExtraLargeModal from "../components/extralargemodal";
 import { inputStyle, labelStyle } from "../utils/voltaire";
 import { useNavigate } from "react-router-dom";
-import { generateClient } from "aws-amplify/api";
+import { generateClient } from "aws-amplify/data"; 
 import { getCurrentUser } from 'aws-amplify/auth';
 import { getUserEmail } from "../utils/asimov";
+import type { Schema } from '../../amplify/data/resource'; 
+
+const client = generateClient<Schema>();
 
 const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -16,7 +19,6 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
     contextProfileId: '',
   });
 
-  const client = generateClient() as any;
   const [contextProfiles, setContextProfiles] = useState<any[]>([]);
   const [foundationModels, setFoundationModels] = useState<any[]>([]);
   const [existingTerminals, setExistingTerminals] = useState<any[]>([]);
@@ -42,8 +44,8 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
     const fmSub = client.models.FoundationModel.observeQuery({
       selectionSet: ['id', 'name', 'apiIdentifier', 'provider']
     }).subscribe({
-      next: (data: any) => setFoundationModels(data.items),
-      error: (err: any) => console.error("Error fetching foundation models:", err)
+      next: (data) => setFoundationModels(data.items),
+      error: (err) => console.error("Error fetching foundation models:", err)
     });
 
     const cpSub = client.models.ContextProfile.observeQuery({
@@ -52,25 +54,29 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
         'systemPrompt', 'isActive', 'vectorCollection.*', 'foundationModel.*'
       ]
     }).subscribe({
-      next: (data: any) => {
-        setContextProfiles(data.items.filter((p: any) => p.isActive !== false));
-      },
-      error: (err: any) => console.error("Error fetching context profiles:", err)
-    });
-
-    const terminalSub = client.models.ConsoleTerminal.observeQuery({
-      selectionSet: ['id', 'title', 'userId']
-    }).subscribe({
-      next: (data: any) => setExistingTerminals(data.items),
-      error: (err: any) => console.error("Error fetching terminals for validation:", err)
+      next: (data) => setContextProfiles(data.items.filter(p => p.isActive !== false)),
+      error: (err) => console.error("Error fetching context profiles:", err)
     });
 
     return () => {
       fmSub.unsubscribe();
       cpSub.unsubscribe();
-      terminalSub.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!currentUserEmail) return;
+
+    const terminalSub = client.models.ConsoleTerminal.observeQuery({
+      filter: { userId: { eq: currentUserEmail } },
+      selectionSet: ['id', 'title', 'userId']
+    }).subscribe({
+      next: (data) => setExistingTerminals(data.items),
+      error: (err) => console.error("Error fetching terminals for validation:", err)
+    });
+
+    return () => terminalSub.unsubscribe();
+  }, [currentUserEmail]);
 
   const selectedProfile = useMemo(() => {
     return contextProfiles.find(p => p.id === newConsoleTerminalData.contextProfileId);
@@ -87,15 +93,11 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
   };
 
   // --- Validation Logic ---
-  const safeUserEmail = (currentUserEmail || '').trim().toLowerCase();
-
   const normalizedNewTitle = newConsoleTerminalData.title?.trim().toLowerCase() || '';
-  const isTitleDuplicate = normalizedNewTitle !== '' && existingTerminals.some(terminal => {
-    const isSameTitle = terminal.title.toLowerCase() === normalizedNewTitle;
-    const terminalOwner = (terminal.userId || '').trim().toLowerCase();
-    const isSameUser = terminalOwner ? terminalOwner === safeUserEmail : true;
-    return isSameTitle && isSameUser;
-  });
+  
+  const isTitleDuplicate = normalizedNewTitle !== '' && existingTerminals.some(
+    terminal => terminal.title.toLowerCase() === normalizedNewTitle
+  );
 
   const isNewConsoleTerminalValid = newConsoleTerminalData.title.trim() !== '' && 
                                     newConsoleTerminalData.contextProfileId !== '' &&
@@ -119,10 +121,13 @@ const DashboardUI = ({ darkMode }: { darkMode: boolean }) => {
       });
 
       if (errors) throw new Error(errors[0].message);
+      
+      if (!newTerminal) throw new Error("Terminal session creation returned empty data.");
+
       console.log('Successfully created Terminal Session:', newTerminal);
       setNewConsoleTerminalData({ title: '', contextProfileId: '', status: 'ACTIVE' });
       setIsCreateModalOpen(false);
-      sessionNavigator(`/console-terminal/session/${newTerminal.id}`);
+      sessionNavigator(`/console-terminals/session/${newTerminal.id}`);
 
     } catch (error) {
       console.error("Failed to start session:", error);

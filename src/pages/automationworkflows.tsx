@@ -8,8 +8,11 @@ import ExtraLargeModal from "../components/extralargemodal";
 import FullScreenModal from "../components/fullscreenmodal";
 import BottomRightModal from "../components/bottomrightmodal";
 import type { UIAutomationWorkflow } from "../data/automationworkflows";
-import { generateClient } from "aws-amplify/api";
+import { generateClient } from "aws-amplify/data"; 
 import { getUserEmail } from "../utils/asimov";
+import type { Schema } from '../../amplify/data/resource';
+
+const client = generateClient<Schema>();
 
 const isValidURL = (urlString?: string | null): boolean => {
   if (!urlString) return false;
@@ -24,9 +27,6 @@ const isValidURL = (urlString?: string | null): boolean => {
 const DATA_TYPES = ['String', 'Number', 'Float', 'Boolean', 'Array', 'Tuple', 'Date', 'DateTime', 'Object'];
 
 const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
-  const client = generateClient() as any;
-  const contextWorkflowsClient = client.models.ContextWorkflow;
-
   const [searchTerm, setSearchTerm] = useState('');
   const [searchBy, setSearchBy] = useState('name');
   const [isLoading, setIsLoading] = useState(true);
@@ -96,7 +96,10 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   }, []);
 
   useEffect(() => {
-    const subscription = contextWorkflowsClient.observeQuery({
+    if (!currentUserEmail) return;
+
+    const subscription = client.models.ContextWorkflow.observeQuery({
+      filter: { createdBy: { eq: currentUserEmail } }, 
       selectionSet: [
         'id', 'name', 'description', 'tool', 'triggerURL', 'callbackURL',
         'inputParameters.*', 'outputVariables.*', 'pingSuccess', 'archived', 
@@ -114,7 +117,7 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
       }
     });
     return () => subscription.unsubscribe();
-  }, [contextWorkflowsClient]);
+  }, [currentUserEmail]);
 
   const filteredWorkflows = useMemo(() => {
     if (!searchTerm.trim()) return automationWorkflows;
@@ -138,15 +141,11 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   }, [automationWorkflows, searchTerm, searchBy]);
 
   // --- Validation Logic ---
-  const safeUserEmail = (currentUserEmail || '').trim().toLowerCase();
-
+  
   // --- Create Validation ---
   const normalizedNewName = newWorkflowData.name?.trim().toLowerCase() || '';
   const isNameDuplicate = normalizedNewName !== '' && automationWorkflows.some(w => {
-    const isSameName = w.name?.trim().toLowerCase() === normalizedNewName;
-    const workflowOwner = (w.createdBy || '').trim().toLowerCase();
-    const isSameUser = workflowOwner ? workflowOwner === safeUserEmail : true;
-    return isSameName && isSameUser;
+    return w.name?.trim().toLowerCase() === normalizedNewName;
   });
 
   const isValidTrigger = isValidURL(newWorkflowData.triggerURL);
@@ -165,9 +164,7 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   const isEditNameDuplicate = normalizedEditName !== '' && automationWorkflows.some(w => {
     const isSameName = w.name?.trim().toLowerCase() === normalizedEditName;
     const isNotSelf = w.id !== editWorkflowData?.id;
-    const workflowOwner = (w.createdBy || '').trim().toLowerCase();
-    const isSameUser = workflowOwner ? workflowOwner === safeUserEmail : true;
-    return isSameName && isNotSelf && isSameUser;
+    return isSameName && isNotSelf;
   });
 
   const isEditValidTrigger = isValidURL(editWorkflowData.triggerURL);
@@ -223,16 +220,16 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
     const cleanOutputs = newWorkflowData.outputVariables?.filter(p => p.variable.trim() !== '') || [];
 
     try {
-      await contextWorkflowsClient.create({
-        name: newWorkflowData.name,
+      await client.models.ContextWorkflow.create({
+        name: newWorkflowData.name!,
         description: newWorkflowData.description,
-        tool: newWorkflowData.tool,
-        triggerURL: newWorkflowData.triggerURL,
+        tool: newWorkflowData.tool as "N8N" | "ZAPIER" | "MAKE" | "PIPEDREAM",
+        triggerURL: newWorkflowData.triggerURL!,
         callbackURL: newWorkflowData.callbackURL,
-        vectorFactor: newWorkflowData.vectorFactor,
+        vectorFactor: Number(newWorkflowData.vectorFactor) || 0,
         archived: newWorkflowData.archived,
-        inputParameters: cleanInputs,
-        outputVariables: cleanOutputs,
+        inputParameters: cleanInputs as any,
+        outputVariables: cleanOutputs as any,
         requiresAuth: newWorkflowData.requiresAuth || false,
         authHeader: newWorkflowData.requiresAuth ? (newWorkflowData.authHeader?.trim() || null) : null,
         createdBy: currentUserEmail
@@ -287,17 +284,17 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
     const cleanOutputs = editWorkflowData.outputVariables?.filter(p => p.variable.trim() !== '') || [];
 
     try {
-      await contextWorkflowsClient.update({
+      await client.models.ContextWorkflow.update({
         id: editWorkflowData.id,
-        name: editWorkflowData.name,
+        name: editWorkflowData.name!,
         description: editWorkflowData.description,
-        tool: editWorkflowData.tool,
-        triggerURL: editWorkflowData.triggerURL,
+        tool: editWorkflowData.tool as "N8N" | "ZAPIER" | "MAKE" | "PIPEDREAM",
+        triggerURL: editWorkflowData.triggerURL!,
         callbackURL: editWorkflowData.callbackURL,
-        vectorFactor: editWorkflowData.vectorFactor,
+        vectorFactor: Number(editWorkflowData.vectorFactor) || 0,
         archived: editWorkflowData.archived,
-        inputParameters: cleanInputs,
-        outputVariables: cleanOutputs,
+        inputParameters: cleanInputs as any,
+        outputVariables: cleanOutputs as any,
         requiresAuth: editWorkflowData.requiresAuth || false,
         authHeader: editWorkflowData.requiresAuth ? (editWorkflowData.authHeader?.trim() || null) : null,
         updatedBy: currentUserEmail
@@ -311,7 +308,7 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
   const handleDeleteWorkflow = async () => {
     if (!deleteWorkflow?.id) return;
     try {
-      await contextWorkflowsClient.delete({ id: deleteWorkflow.id });
+      await client.models.ContextWorkflow.delete({ id: deleteWorkflow.id });
       setIsDeleteModalOpen(false);
     } catch (err) {
       console.error("Error deleting workflow:", err);
@@ -958,7 +955,6 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
               </div>
             </div>
             <hr style={{ borderColor: darkMode ? '#374151' : '#e5e7eb', margin: '0.5rem 0' }} />
-            
             <div style={{ display: 'flex', gap: '1rem', flexGrow: 1 }}>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { generateClient } from 'aws-amplify/api';
+import { generateClient } from 'aws-amplify/data'; 
 import { getCurrentUser } from 'aws-amplify/auth';
+import type { Schema } from '../../amplify/data/resource'; 
 import '../styles/accountsettings.scss';
 import BottomModal from './bottommodal'; 
 import ExtraLargeModal from './extralargemodal'; 
@@ -9,7 +10,7 @@ import { NATIVE_TOOLS_TEMPLATES } from '../utils/prometheus';
 import { getModelIcon } from '../utils/voltaire'; 
 import { TIMEZONES } from '../utils/chronos';
 
-const client = generateClient() as any;
+const client = generateClient<Schema>();
 
 interface AccountSettingsProps {
     searchQuery: string;
@@ -119,6 +120,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
             try {
                 const user = await getCurrentUser();
                 setCognitoUserId(user.userId);
+                
                 const { data: profiles } = await client.models.UserProfile.list({
                     filter: { cognitoUserId: { eq: user.userId } }
                 });
@@ -130,16 +132,26 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
                     setProfile({
                         firstName: dbProfile.firstName || '',
                         lastName: dbProfile.lastName || '',
-                        email: user.signInDetails?.loginId || dbProfile.email || 'user@vanguard.io',
+                        email: user.signInDetails?.loginId || 'user@vanguard.io',
                         timeZone: dbProfile.timeZone || 'America/Vancouver',
                         mcpDiscovery: dbProfile.mcpDiscovery ?? false,
                         nocturnalAgents: dbProfile.nocturnalAgents ?? false
                     });
 
-                    const dbIntegrations = typeof dbProfile.integrations === 'string' 
-                        ? JSON.parse(dbProfile.integrations) 
-                        : (dbProfile.integrations || {});
-                    setIntegrations(dbIntegrations);
+                    let parsedIntegrations = {};
+                    if (dbProfile.integrations) {
+                        try {
+                            parsedIntegrations = typeof dbProfile.integrations === 'string' 
+                                ? JSON.parse(dbProfile.integrations) 
+                                : dbProfile.integrations;
+                        } catch (parseError) {
+                            console.error("Failed to parse integrations JSON. Falling back to empty object.", parseError);
+                        }
+                    }
+                    setIntegrations(parsedIntegrations);
+                } else {
+                    // Fallback email generation if profile doesn't exist yet
+                    setProfile(prev => ({ ...prev, email: user.signInDetails?.loginId || 'user@vanguard.io' }));
                 }
             } catch (error) {
                 console.error("Failed to load user profile: ", error);
@@ -170,14 +182,14 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
             } else if (cognitoUserId) {
                 const response = await client.models.UserProfile.create({
                     cognitoUserId: cognitoUserId,
-                    email: profile.email,
+                    // email is intentionally omitted here as it's not in the DB schema
                     firstName: profile.firstName,
                     lastName: profile.lastName,
                     timeZone: profile.timeZone,
                     mcpDiscovery: profile.mcpDiscovery,
                     nocturnalAgents: profile.nocturnalAgents
                 });
-                setProfileId(response.data.id);
+                if (response.data?.id) setProfileId(response.data.id);
             }
             alert('Account Profile saved successfully.');
         } catch (error) {
@@ -198,16 +210,17 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
             } else if (cognitoUserId) {
                 const response = await client.models.UserProfile.create({
                     cognitoUserId: cognitoUserId,
-                    email: profile.email,
+                    // email is intentionally omitted here
                     timeZone: profile.timeZone,
                     mcpDiscovery: profile.mcpDiscovery,
                     nocturnalAgents: profile.nocturnalAgents,
                     integrations: payload
                 });
-                setProfileId(response.data.id);
+                if (response.data?.id) setProfileId(response.data.id);
             }
         } catch (error) {
             console.error("Failed to save integrations: ", error);
+            alert("Failed to sync credentials to cloud.");
         }
     };
 

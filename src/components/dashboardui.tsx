@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { signOut, fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
-import { generateClient } from 'aws-amplify/api';
+import { generateClient } from 'aws-amplify/data'; // Fixed import
+import type { Schema } from '../../amplify/data/resource'; // Added Schema
 import { useNavigate } from 'react-router-dom';
 import { usePraimfaya } from '../contexts';
 import '../styles/dashboard.scss'; 
@@ -11,7 +12,7 @@ import AgentNodes from './agentnodes';
 import KnowledgeLoci from './knowledgeloci';
 import AccountSettings from './accountsettings';
 
-const client = generateClient() as any;
+const client = generateClient<Schema>();
 
 const menuItems = [
     { id: 'overview', icon: 'bx bx-grid-alt', label: 'System Overview' },
@@ -78,7 +79,7 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
             case 'overview':
                 return <SystemOverview searchQuery={searchQuery} darkMode={darkMode} />;
             case 'compute-credits':
-                return <ComputeCredits searchQuery={searchQuery} darkMode={darkMode} />; // Placeholder for ComputeCredits component
+                return <ComputeCredits searchQuery={searchQuery} darkMode={darkMode} />; 
             case 'agent-nodes':
                 return <AgentNodes searchQuery={searchQuery} darkMode={darkMode} />;
             case 'knowledge-loci':
@@ -151,7 +152,6 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
                     <div className="header-actions">
                         <div className="search-bar">
                             <i className="bx bx-search"></i>
-                            {/* NEW: Bind input to searchQuery state */}
                             <input 
                                 style={{fontFamily: 'Google Sans Code'}}
                                 type="text" 

@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import FAButton from "../components/floatingactionbutton";
-import { generateClient } from "aws-amplify/api";
+import { generateClient } from "aws-amplify/data"; 
 import TitleRibbon from "../components/titleribbon";
 import SearchRibbon from "../components/searchribbon";
 import type { ColumnDef } from "../components/datatable";
@@ -14,6 +14,10 @@ import { getUserEmail } from "../utils/asimov";
 import { HaikuDropdown } from "../components/haikudropdown";
 import { NATIVE_TOOLS_TEMPLATES } from "../utils/prometheus";
 import { getCurrentUser } from 'aws-amplify/auth';
+import type { Schema } from '../../amplify/data/resource'; 
+
+// Client generated OUTSIDE the component, strongly typed
+const client = generateClient<Schema>();
 
 const DEFAULT_PROFILE_STATE = {
   name: '',
@@ -41,9 +45,6 @@ const STANDARD_ONLY_PROMPTS = new Set(
 );
 
 const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
-  const client = generateClient() as any;
-  const contextProfilesClient = client.models.ContextProfile;
-
   const [searchTerm, setSearchTerm] = useState('');
   const [searchBy, setSearchBy] = useState('name');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -102,7 +103,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
 
         if (existingProfiles && existingProfiles.length > 0) {
           activeProfileId = existingProfiles[0].id;
-          setDisabledModelIds(existingProfiles[0].disabledModelIds || []);
+          // FIX 1: Filter out nulls and cast to string[]
+          setDisabledModelIds((existingProfiles[0].disabledModelIds || []).filter(Boolean) as string[]);
         } else {
           try {
             const { data: newProfile, errors } = await client.models.UserProfile.create({
@@ -128,7 +130,8 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
           }).subscribe({
             next: (data: any) => {
               if (data.items.length > 0) {
-                setDisabledModelIds(data.items[0].disabledModelIds || []);
+                // FIX 2: Filter out nulls and cast to string[]
+                setDisabledModelIds((data.items[0].disabledModelIds || []).filter(Boolean) as string[]);
               }
             },
             error: (err: any) => console.error("Error observing user profile:", err)
@@ -146,6 +149,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     };
   }, []);
 
+  // Public Resources (Safe for global query)
   useEffect(() => {
     const fmSub = client.models.FoundationModel.observeQuery({
       selectionSet: ['id', 'name', 'apiIdentifier', 'provider', 'modality', 'isActive', 'caliber', 'region']
@@ -175,12 +179,16 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     };
   }, []);
 
+  // SECURE User-Specific Subscription
   useEffect(() => {
-    const contextProfilesSubscription = contextProfilesClient.observeQuery({
+    if (!currentUserEmail) return;
+
+    const contextProfilesSubscription = client.models.ContextProfile.observeQuery({
+      filter: { createdBy: { eq: currentUserEmail } }, 
       selectionSet: [
         'id', 'name', 'description', 'systemPrompt', 
         'vectorCollectionId', 'llmModelId', 'temperature', 
-        'isActive', 'createdAt', 'updatedAt', 'createdBy', // <-- Added 'createdBy' here to fix the validation bug
+        'isActive', 'createdAt', 'updatedAt', 'createdBy',
         'role', 'enableCodeInterpreter', 'enableWebSearch', 'supervisorId',
         'enableMitoMcp', 'enableApotheosisMcp', 'customMcpUrl', 
         'provisioningStatus', 'awsAgentId', 'awsAliasId', 'subagentEavesdrop',
@@ -202,7 +210,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     });
 
     return () => contextProfilesSubscription.unsubscribe();
-  }, []);
+  }, [currentUserEmail]);
   
   useEffect(() => {
     if (editContextProfile) {
@@ -223,8 +231,18 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         mcpRequiresAuth: editContextProfile.mcpRequiresAuth ?? false,
         mcpAuthToken: editContextProfile.mcpAuthToken || ''
       });
-      setSelectedWorkflowIds(Array.isArray(editContextProfile.workflows) ? editContextProfile.workflows.map((w: any) => w.contextWorkflowId) : []);
-      setSelectedCollaboratorIds(Array.isArray(editContextProfile.collaborators) ? editContextProfile.collaborators.map((c: any) => c.id) : []);
+      
+      setSelectedWorkflowIds(
+        Array.isArray(editContextProfile.workflows) 
+          ? (editContextProfile.workflows.map((w: any) => w.contextWorkflowId).filter(Boolean) as string[]) 
+          : []
+      );
+      
+      setSelectedCollaboratorIds(
+        Array.isArray(editContextProfile.collaborators) 
+          ? (editContextProfile.collaborators.map((c: any) => c.id).filter(Boolean) as string[]) 
+          : []
+      );
     }
   }, [editContextProfile]);
 
@@ -433,14 +451,9 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     setNewContextProfileData((prev) => ({ ...prev, [name]: checked }));
   };
 
-  const safeUserEmail = (currentUserEmail || '').trim().toLowerCase();
   const normalizedNewName = newContextProfileData.name?.trim().toLowerCase() || '';
   const isNameDuplicate = normalizedNewName !== '' && contextProfiles.some(profile => {
-    const isSameName = profile.name?.trim().toLowerCase() === normalizedNewName;
-    const profileOwner = (profile.createdBy || '').trim().toLowerCase();
-    const isSameUser = profileOwner ? profileOwner === safeUserEmail : true; 
-    
-    return isSameName && isSameUser;
+    return profile.name?.trim().toLowerCase() === normalizedNewName;
   });
 
   const isContextProfileValid = newContextProfileData.name?.trim() !== '' && 
@@ -452,11 +465,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   const isEditNameDuplicate = normalizedEditName !== '' && contextProfiles.some(profile => {
     const isSameName = profile.name?.trim().toLowerCase() === normalizedEditName;
     const isNotSelf = profile.id !== editContextProfile?.id;
-    const profileOwner = (profile.createdBy || '').trim().toLowerCase();
-    
-    const isSameUser = profileOwner ? profileOwner === safeUserEmail : true;
-    
-    return isSameName && isNotSelf && isSameUser;
+    return isSameName && isNotSelf;
   });
 
   const isEditValid = editContextProfileData.name?.trim() !== '' && 
@@ -470,7 +479,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       return;
     }
     try {
-      const { data: newProfile, errors } = await contextProfilesClient.create({
+      const { data: newProfile, errors } = await client.models.ContextProfile.create({
         name: newContextProfileData.name!.trim(),
         description: newContextProfileData.description?.trim() || null,
         systemPrompt: newContextProfileData.systemPrompt!.trim(),
@@ -493,30 +502,32 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       
       if (errors) throw new Error(errors[0].message);
 
-      if (selectedWorkflowIds.length > 0) {
+      if (selectedWorkflowIds.length > 0 && newProfile) {
         await Promise.all(selectedWorkflowIds.map(wId => 
           client.models.ContextProfileWorkflow.create({ contextProfileId: newProfile.id, contextWorkflowId: wId })
         ));
       }
 
-      if (newContextProfileData.role === 'SUPERVISOR' && selectedCollaboratorIds.length > 0) {
+      if (newContextProfileData.role === 'SUPERVISOR' && selectedCollaboratorIds.length > 0 && newProfile) {
         await Promise.all(selectedCollaboratorIds.map(cId => 
           client.models.ContextProfile.update({ id: cId, supervisorId: newProfile.id })
         ));
       }
 
-      setContextProfiles(prev => {
-        const alreadyExists = prev.some(profile => profile.id === newProfile.id);
-        if (alreadyExists) return prev;
-        
-        const formattedNewProfile = {
-          ...newProfile,
-          workflows: selectedWorkflowIds.map(id => ({ contextWorkflowId: id })),
-          collaborators: selectedCollaboratorIds.map(id => ({ id }))
-        };
+      if (newProfile) {
+        setContextProfiles(prev => {
+            const alreadyExists = prev.some(profile => profile.id === newProfile.id);
+            if (alreadyExists) return prev;
+            
+            const formattedNewProfile = {
+            ...newProfile,
+            workflows: selectedWorkflowIds.map(id => ({ contextWorkflowId: id })),
+            collaborators: selectedCollaboratorIds.map(id => ({ id }))
+            };
 
-        return [formattedNewProfile, ...prev];
-      });
+            return [formattedNewProfile as any, ...prev];
+        });
+      }
       setIsCreateModalOpen(false);
       setNewContextProfileData(DEFAULT_PROFILE_STATE);
     } catch (error) {
@@ -556,7 +567,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       return;
     }
     try {
-      const { data: updatedProfile, errors } = await contextProfilesClient.update({
+      const { data: updatedProfile, errors } = await client.models.ContextProfile.update({
         id: editContextProfile.id,
         name: editContextProfileData.name!.trim(),
         description: editContextProfileData.description?.trim() || null,
@@ -577,6 +588,9 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         updatedBy: currentUserEmail,
       });
       if (errors) throw new Error(errors[0].message);
+      
+      // FIX: Add null check for updatedProfile
+      if (!updatedProfile) throw new Error("Update returned empty data.");
 
       const existingLinksResp = await client.models.ContextProfileWorkflow.list({
         filter: { contextProfileId: { eq: editContextProfile.id } }
@@ -608,7 +622,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
           ...updatedProfile, 
           workflows: selectedWorkflowIds.map(id => ({ contextWorkflowId: id })), 
           collaborators: targetCIds.map(id => ({ id }))
-        } : item
+        } as any : item
       ));
       
       setIsEditModalOpen(false);
@@ -621,7 +635,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   const handleDeleteContextProfile = async () => {
     if (!deleteContextProfile?.id) return;
     try {
-      const { errors } = await contextProfilesClient.delete({
+      const { errors } = await client.models.ContextProfile.delete({
         id: deleteContextProfile.id
       });
 
@@ -1142,7 +1156,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
               </div>
 
               <div style={{ backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
-                <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: darkMode ? '#d1d5db' : '#4b5563', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Automation Workflows</h4>
+                <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: darkMode ? '#d1d5db' : '#4b5563', textTransform: 'uppercase' }}>Automation Action Groups</h4>
                 
                 {selectedWorkflowIds.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
@@ -1449,7 +1463,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
 
               </div>
 
-              <div style={{ backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
                 <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: darkMode ? '#d1d5db' : '#4b5563', textTransform: 'uppercase' }}>Automation Action Groups</h4>
                 
                 {selectedWorkflowIds.length > 0 && (
