@@ -56,7 +56,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
           filter: { cognitoUserId: { eq: userId } }
         });
         
-        let activeProfileId = null;
+        let activeProfileId: string | null = null;
         if (existingProfiles && existingProfiles.length > 0) {
           activeProfileId = existingProfiles[0].id;
           setUserProfileId(activeProfileId);

@@ -99,11 +99,10 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
           filter: { cognitoUserId: { eq: userId } }
         });
 
-        let activeProfileId = null;
+        let activeProfileId: string | null = null;
 
         if (existingProfiles && existingProfiles.length > 0) {
           activeProfileId = existingProfiles[0].id;
-          // FIX 1: Filter out nulls and cast to string[]
           setDisabledModelIds((existingProfiles[0].disabledModelIds || []).filter(Boolean) as string[]);
         } else {
           try {
@@ -130,7 +129,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
           }).subscribe({
             next: (data: any) => {
               if (data.items.length > 0) {
-                // FIX 2: Filter out nulls and cast to string[]
                 setDisabledModelIds((data.items[0].disabledModelIds || []).filter(Boolean) as string[]);
               }
             },
@@ -149,7 +147,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     };
   }, []);
 
-  // Public Resources (Safe for global query)
   useEffect(() => {
     const fmSub = client.models.FoundationModel.observeQuery({
       selectionSet: ['id', 'name', 'apiIdentifier', 'provider', 'modality', 'isActive', 'caliber', 'region']
@@ -179,7 +176,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
     };
   }, []);
 
-  // SECURE User-Specific Subscription
   useEffect(() => {
     if (!currentUserEmail) return;
 
