@@ -12,6 +12,7 @@ import type { EphemeralSecrets } from '../data/consoleterminal';
 import { JotformEmbed } from '../components/jotformportal';
 import { HaikusDropdown } from '../components/haikusdropdown';
 import { CubeIcon } from '../components/cube';
+
 import { ArtifactsDrawerModal } from '../components/artifactsdrawermodal';
 import { VectorDrawerModal } from '../components/vectordrawermodal';
 import { WorkflowsDrawerModal } from '../components/workflowsdrawermodal';
@@ -24,11 +25,12 @@ export const terminalSelectionSet = [
 
 export type DeepTerminalSession = SelectionSet<Schema['ConsoleTerminal']['type'], typeof terminalSelectionSet>;
 
+const client = generateClient<Schema>();
+
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
   
-  const client = generateClient<Schema>();
   const [session, setSession] = useState<DeepTerminalSession | null>(null);
   const [messages, setMessages] = useState<Schema['TerminalMessage']['type'][]>([]);
   const [artifacts, setArtifacts] = useState<Schema['RAGArtifact']['type'][]>([]);
@@ -96,7 +98,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     };
 
     hydrateTerminalSession();
-  }, [sessionId, navigate, client]);
+  }, [sessionId, navigate]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -146,12 +148,12 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       if (uploadedFilePaths.length > 0) {
         const hiddenContext = `<vanguard_system_context>\nUser has attached the following files for analysis:\n${uploadedFilePaths.map(path => `- ${path}`).join('\n')}\n</vanguard_system_context>\n\n`;
         bedrockPrompt = hiddenContext + queryText;
-        // If the user just uploaded a file but typed no text, provide a default instruction
         if (!queryText) {
             queryText = `Attached ${uploadedFilePaths.length} file(s) for analysis.`;
             bedrockPrompt += "Please analyze the attached files and provide a summary or address any obvious data points.";
         }
       }
+
       const { data: committedUserMsg } = await client.models.TerminalMessage.create({
         role: 'USER',
         content: queryText,
@@ -405,7 +407,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 backgroundColor: session?.status === 'ACTIVE' ? '#10b9811c' : '#f59e0b1c', fontFamily: 'Bodoni Moda Variable',
                 color: session?.status === 'ACTIVE' ? '#10b981' : '#f59e0b'
               }}>
-                {session?.status} {session.contextProfile?.vectorCollection ? 'RAG': ''} SESSION
+                {session?.status} RAG SESSION
               </span>
             </div>
 

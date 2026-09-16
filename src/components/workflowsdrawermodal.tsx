@@ -87,7 +87,7 @@ export const WorkflowsDrawerModal = ({ isOpen, onClose, darkMode = false, sessio
                   </div>
 
                   <div>
-                    <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: darkMode ? '#9ca3af' : '#6b7280', fontWeight: 600, letterSpacing: '0.05em' }}>Security</span>
+                    <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: darkMode ? '#9ca3af' : '#6b7280', fontWeight: 600, letterSpacing: '0.05em' }}>Authentication</span>
                     <div style={{ marginTop: '0.5rem' }}>
                       {wf.requiresAuth ? (
                         <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem', backgroundColor: '#fef2f2', color: '#991b1b', borderRadius: '4px', fontWeight: 600 }}>
