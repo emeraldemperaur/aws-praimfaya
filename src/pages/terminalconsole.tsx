@@ -142,7 +142,17 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
         const linkedProfile = contextProfiles.find(p => p.id === row.contextProfileId) || row.contextProfile;
         const linkedModel = foundationModels.find(m => m.id === linkedProfile?.llmModelId) || linkedProfile?.foundationModel;
         return (
-          <div className="tbl-cell-user">
+          <div className="tbl-cell-user" 
+          style={{cursor: 'pointer'}} 
+          onClick={() => {
+              if (row.status === 'ACTIVE') {
+                navigator(`/console-terminals/session/${row.id}`);
+              } else {
+                setVisibleTranscriptCount(20);
+                setViewConsoleTerminal(row);
+                setIsViewModalOpen(true);
+              }
+            }}>
             <img src={getModelIcon(linkedModel?.apiIdentifier)} alt={linkedModel?.name || 'AI Model'} />
             <div className="user-info">
               <span className="primary-text">{row.title}</span>
@@ -185,7 +195,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
               if (row.status === 'ACTIVE') {
                 navigator(`/console-terminals/session/${row.id}`);
               } else {
-                setVisibleTranscriptCount(20); // Reset count on open
+                setVisibleTranscriptCount(20);
                 setViewConsoleTerminal(row);
                 setIsViewModalOpen(true);
               }
@@ -195,7 +205,7 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
             {row.status === 'ACTIVE' ? 'Resume' : 'Review'}
           </button>
           <button className="tbl-action-btn edit-btn" onClick={() => { 
-            setVisibleTranscriptCount(20); // Reset count on open
+            setVisibleTranscriptCount(20);
             setEditConsoleTerminal(row); 
             setIsEditModalOpen(true); 
           }}>Emend</button>

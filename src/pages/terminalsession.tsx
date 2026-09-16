@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { generateClient } from 'aws-amplify/data';
+import { uploadData } from 'aws-amplify/storage';
 import type { SelectionSet } from 'aws-amplify/data';
-import type { Schema } from '../../amplify/data/resource'; // Adjust path to your actual resource.ts if needed
+import type { Schema } from '../../amplify/data/resource'; 
 import { getInitials, getModelIcon } from '../utils/voltaire';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -11,14 +12,17 @@ import type { EphemeralSecrets } from '../data/consoleterminal';
 import { JotformEmbed } from '../components/jotformportal';
 import { HaikusDropdown } from '../components/haikusdropdown';
 import { CubeIcon } from '../components/cube';
+import { ArtifactsDrawerModal } from '../components/artifactsdrawermodal';
+import { VectorDrawerModal } from '../components/vectordrawermodal';
+import { WorkflowsDrawerModal } from '../components/workflowsdrawermodal';
 
-const terminalSelectionSet = [
+export const terminalSelectionSet = [
   'id', 'title', 'totalTokensUsed', 'status', 'contextProfileId', 'userId',
   'contextProfile.*', 'contextProfile.foundationModel.*', 'contextProfile.supervisor.*',
-  'contextProfile.collaborators.*', 'contextProfile.vectorCollection.*', 'contextProfile.workflows.*'
+  'contextProfile.collaborators.*', 'contextProfile.vectorCollection.*', 'contextProfile.vectorCollection.documents.*', 'contextProfile.workflows.*', 'contextProfile.workflows.contextWorkflow.*'
 ] as const;
 
-type DeepTerminalSession = SelectionSet<Schema['ConsoleTerminal']['type'], typeof terminalSelectionSet>;
+export type DeepTerminalSession = SelectionSet<Schema['ConsoleTerminal']['type'], typeof terminalSelectionSet>;
 
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -27,6 +31,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const client = generateClient<Schema>();
   const [session, setSession] = useState<DeepTerminalSession | null>(null);
   const [messages, setMessages] = useState<Schema['TerminalMessage']['type'][]>([]);
+  const [artifacts, setArtifacts] = useState<Schema['RAGArtifact']['type'][]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,6 +39,14 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const [activeAuthPrompt, setActiveAuthPrompt] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(20);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const [isArtifactsModalOpen, setIsArtifactsModalOpen] = useState(false);
+  const [isVectorModalOpen, setIsVectorModalOpen] = useState(false);
+  const [isWorkflowsModalOpen, setIsWorkflowsModalOpen] = useState(false);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -69,6 +82,13 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         );
         
         setMessages(chronologyLog);
+
+        // Fetch associated artifacts for this specific terminal session
+        const { data: linkedArtifacts } = await client.models.RAGArtifact.list({
+           filter: { terminalId: { eq: sessionId } }
+        });
+        setArtifacts(linkedArtifacts.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+
         setIsLoading(false);
       } catch (err) {
         console.error("Failed to safely hydrate live terminal environment layer:", err);
@@ -79,16 +99,60 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     hydrateTerminalSession();
   }, [sessionId, navigate, client]);
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const filesArray = Array.from(e.target.files);
+      setSelectedFiles(prev => [...prev, ...filesArray]);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeFile = (indexToRemove: number) => {
+    setSelectedFiles(prev => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
   const handleExecutePrompt = async (e?: React.SyntheticEvent, overridePrompt?: string) => {
     if (e) e.preventDefault();
     
-    const queryText = (overridePrompt || inputMessage).trim();
-    if (!queryText || isAiTyping || session?.status === 'ARCHIVED') return;
+    let queryText = (overridePrompt || inputMessage).trim();
+    if (!queryText && selectedFiles.length === 0) return;
+    if (isAiTyping || session?.status === 'ARCHIVED') return;
 
     if (!overridePrompt) setInputMessage('');
     setIsAiTyping(true);
+    setIsUploading(true);
 
     try {
+      const uploadedFilePaths: string[] = [];
+      
+      if (selectedFiles.length > 0) {
+        for (const file of selectedFiles) {
+          const timestamp = new Date().getTime();
+          const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+          
+          const uploadTask = await uploadData({
+            path: ({identityId}) => `vector-collections/${identityId}/attachments/${session.id}/${timestamp}-${safeName}`,
+            data: file,
+          }).result;
+
+          uploadedFilePaths.push(uploadTask.path);
+        }
+        setSelectedFiles([]);
+      }
+
+      setIsUploading(false);
+
+      // Inject hidden context into the prompt
+      let bedrockPrompt = queryText;
+      if (uploadedFilePaths.length > 0) {
+        const hiddenContext = `<vanguard_system_context>\nUser has attached the following files for analysis:\n${uploadedFilePaths.map(path => `- ${path}`).join('\n')}\n</vanguard_system_context>\n\n`;
+        bedrockPrompt = hiddenContext + queryText;
+        // If the user just uploaded a file but typed no text, provide a default instruction
+        if (!queryText) {
+            queryText = `Attached ${uploadedFilePaths.length} file(s) for analysis.`;
+            bedrockPrompt += "Please analyze the attached files and provide a summary or address any obvious data points.";
+        }
+      }
       const { data: committedUserMsg } = await client.models.TerminalMessage.create({
         role: 'USER',
         content: queryText,
@@ -108,7 +172,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       }));
 
       const response = await client.queries.askAssistant({
-        prompt: queryText,
+        prompt: bedrockPrompt, 
         systemPrompt: activeProfile?.systemPrompt || "Act as a factual system console.",
         modelId: targetModelIdentifier,
         profileId: session.contextProfileId,
@@ -130,11 +194,33 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         setActiveAuthPrompt(null);
       }
 
+      const newArtifactRecords: Schema['RAGArtifact']['type'][] = [];
+      
       const generatedChips = transactionPayload.citations?.map((source: { type: string, uri: string }) => {
+        if (source.type === 'media' || source.type === 'asset') {
+          const isVideo = source.uri.endsWith('.mp4');
+          const isDoc = source.uri.endsWith('.pdf') || source.uri.endsWith('.csv');
+          const fileType = isVideo ? 'VIDEO' : (isDoc ? 'DOCUMENT' : 'IMAGE');
+          
+          newArtifactRecords.push({
+            id: `art-${Date.now()}-${Math.random()}`,
+            userId: session.userId || 'unknown',
+            terminalId: session.id,
+            fileName: source.uri.split('/').pop() || 'Generated Asset',
+            fileUrl: source.uri,
+            fileType: fileType,
+            createdAt: new Date().toISOString()
+          } as Schema['RAGArtifact']['type']);
+        }
+
         if (source.type === 'media') return `📸 Media Reference: ${source.uri.split('/').pop()}`;
         if (source.type === 'asset') return `🎥 Asset Generated: ${source.uri}`;
         return `📄 Text Vector Document`;
       }) || [];
+
+      if (newArtifactRecords.length > 0) {
+          setArtifacts((prev: Schema['RAGArtifact']['type'][]) => [...newArtifactRecords, ...prev]);
+      }
 
       const { data: committedAiMsg } = await client.models.TerminalMessage.create({
         role: 'ASSISTANT',
@@ -162,6 +248,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
     } catch (err) {
       console.error("Relay framework dropped socket connection during model invocation:", err);
+      setIsUploading(false);
       setMessages((prev: Schema['TerminalMessage']['type'][]) => [...prev, {
         id: 'runtime-err-' + Date.now(),
         role: 'ASSISTANT',
@@ -287,7 +374,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <img src={getModelIcon(modelApiId || '')} alt="Processor Meta" style={{ width: '42px', height: '40px' }} />
             <div>
-              <h2 title={session?.contextProfile?.role} style={{ margin: 0, fontSize: '1.15rem', color: darkMode ? '#f9fafb' : '#111827', fontFamily: 'Bodoni Moda Variable' }}>{session?.title}</h2>
+              <h2 title={session?.contextProfile?.role || 'STANDARD'} style={{ margin: 0, fontSize: '1.15rem', color: darkMode ? '#f9fafb' : '#111827', fontFamily: 'Bodoni Moda Variable' }}>{session?.title}</h2>
               <span style={{ fontSize: '0.8rem', color: darkMode ? '#9ca3af' : '#6b7280', fontFamily: 'Bodoni Moda Variable' }}>
                 Engine: <span style={{ fontFamily: 'monospace', color: '#2563eb' }}>{modelProvider} • {session?.contextProfile?.foundationModel?.name}</span>
                 &nbsp;| Personality: <strong>{session?.contextProfile?.name}</strong>
@@ -338,7 +425,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           {hasMoreMessages && (
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
               <button
-                // EXPLICIT TYPE ADDED HERE
                 onClick={() => setVisibleCount((prev: number) => prev + 20)}
                 style={{
                   background: 'none', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
@@ -525,7 +611,8 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           {isAiTyping && (
             <div style={{ alignSelf: 'flex-start', marginLeft: '3rem', padding: '0.85rem 1.15rem', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '0.85rem', fontFamily: 'Google Sans Code, monospace' }}>
               <span style={{ fontStyle: 'italic' }}>
-                {modalityType === 'IMAGE' || modalityType === 'VIDEO' ? 'Generating asset pipeline rendering...' : 'Fusing text matrices and visual multimodal indexes...'}
+                {isUploading ? 'Uploading attachments to secure S3 bucket...' : 
+                 (modalityType === 'IMAGE' || modalityType === 'VIDEO' ? 'Generating asset pipeline rendering...' : 'Fusing text matrices and visual multimodal indexes...')}
               </span>
             </div>
           )}
@@ -534,14 +621,43 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem', flexShrink: 0 }}>
           
+          {/* File Staging Area */}
+          {selectedFiles.length > 0 && (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+              {selectedFiles.map((file, idx) => (
+                <div key={idx} style={{ 
+                  display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0.5rem', 
+                  backgroundColor: darkMode ? '#374151' : '#e5e7eb', borderRadius: '4px', fontSize: '0.75rem', 
+                  color: darkMode ? '#d1d5db' : '#4b5563', fontFamily: 'Google Sans Code, monospace'
+                }}>
+                  <i className="fa-solid fa-file"></i>
+                  <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+                  <button type="button" onClick={() => removeFile(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0 2px' }}>
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', alignSelf: 'flex-start' }}>
             <HaikusDropdown 
               darkMode={darkMode} 
               onSelect={(promptStr) => setInputMessage(promptStr)} 
             />
             
+            {/* Hidden File Input */}
+            <input 
+              type="file" 
+              multiple 
+              ref={fileInputRef} 
+              style={{ display: 'none' }} 
+              onChange={handleFileSelect}
+            />
+
             <button
               type="button"
+              onClick={() => fileInputRef.current?.click()}
               title="Attach Document or Media"
               onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
               onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
@@ -568,6 +684,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
             <button
               type="button"
+              onClick={() => setIsArtifactsModalOpen(true)}
               title="Open Artifacts Drawer"
               onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
               onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
@@ -594,6 +711,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
            <button
               type="button"
+              onClick={() => setIsVectorModalOpen(true)}
               title="View Vector Collection"
               onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
               onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
@@ -622,6 +740,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
             </button>
             <button
               type="button"
+              onClick={() => setIsWorkflowsModalOpen(true)}
               title="View Automation Workflows"
               onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
               onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
@@ -655,7 +774,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
               placeholder={
                 session?.status === 'ARCHIVED' 
                   ? "This session is archived and read-only." 
-                  : `Ask ${session?.contextProfile?.name || 'Praimfaya'} a question or query your knowledge base...`
+                  : `Ask ${session?.contextProfile?.name || 'Praimfaya'} a question or attach files...`
               }
               disabled={isAiTyping || session?.status === 'ARCHIVED'}
               style={{
@@ -671,12 +790,12 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
             <button
               type="submit"
               title="Submit"
-              disabled={isAiTyping || !inputMessage.trim() || session?.status === 'ARCHIVED'}
+              disabled={isAiTyping || session?.status === 'ARCHIVED' || (!inputMessage.trim() && selectedFiles.length === 0)}
               style={{
                 padding: '0.85rem 2.25rem', backgroundColor: '#800020', color: 'white', border: 'none', borderRadius: '0.375rem',
                 fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.09em', fontFamily: 'Google Sans Code',
-                cursor: (isAiTyping || !inputMessage.trim() || session?.status === 'ARCHIVED') ? 'not-allowed' : 'pointer',
-                opacity: (isAiTyping || !inputMessage.trim() || session?.status === 'ARCHIVED') ? 0.5 : 1,
+                cursor: (isAiTyping || session?.status === 'ARCHIVED' || (!inputMessage.trim() && selectedFiles.length === 0)) ? 'not-allowed' : 'pointer',
+                opacity: (isAiTyping || session?.status === 'ARCHIVED' || (!inputMessage.trim() && selectedFiles.length === 0)) ? 0.5 : 1,
                 whiteSpace: 'nowrap'
               }}
             >
@@ -697,6 +816,28 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           onCancel={() => setActiveAuthPrompt(null)}
         />
       )}
+
+      <ArtifactsDrawerModal 
+        isOpen={isArtifactsModalOpen} 
+        onClose={() => setIsArtifactsModalOpen(false)} 
+        darkMode={darkMode} 
+        session={session} 
+        artifacts={artifacts} 
+      />
+      
+      <VectorDrawerModal 
+        isOpen={isVectorModalOpen} 
+        onClose={() => setIsVectorModalOpen(false)} 
+        darkMode={darkMode} 
+        session={session} 
+      />
+      
+      <WorkflowsDrawerModal 
+        isOpen={isWorkflowsModalOpen} 
+        onClose={() => setIsWorkflowsModalOpen(false)} 
+        darkMode={darkMode} 
+        session={session} 
+      />
     </>
   );
 };

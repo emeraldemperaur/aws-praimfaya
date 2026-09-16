@@ -341,3 +341,10 @@ export const isValidURL = (urlString?: string | null): boolean => {
     return false;
   }
 };
+
+export const getPriorityText = (factor?: number | null) => {
+    if (!factor) return 'Unassigned';
+    if (factor <= 3) return 'Lower Priority';
+    if (factor <= 6) return 'Medium Priority';
+    return 'High Priority';
+  };

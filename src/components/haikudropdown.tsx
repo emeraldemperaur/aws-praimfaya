@@ -111,7 +111,7 @@ export const HaikuDropdown = ({ darkMode, onSelect, role = 'STANDARD' }: { darkM
                   background: darkMode ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.5)',
                   color: darkMode ? '#f9fafb' : '#111827',
                   fontSize: '0.75rem',
-                  fontFamily: 'inherit',
+                  fontFamily: 'Google Sans Code',
                   outline: 'none',
                   boxSizing: 'border-box'
                 }}
