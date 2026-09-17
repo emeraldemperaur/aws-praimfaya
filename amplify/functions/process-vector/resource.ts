@@ -4,5 +4,5 @@ export const processVector = defineFunction({
   name: 'process-vector',
   entry: './handler.ts',
   timeoutSeconds: 30,
-  resourceGroupName: 'storage'
+  resourceGroupName: 'data'
 });

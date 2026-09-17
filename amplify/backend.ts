@@ -266,11 +266,11 @@ new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
 
 backend.vectorCollectionsS3.resources.bucket.grantReadWrite(processVectorLambda);
 
-backend.vectorCollectionsS3.resources.bucket.addEventNotification(
-  s3.EventType.OBJECT_CREATED,
-  new s3n.LambdaDestination(processVectorLambda),
-  { prefix: 'vector-collections/' }
-);
+processVectorLambda.addPermission('AllowS3VectorBucketInvocation', {
+  principal: new iam.ServicePrincipal('s3.amazonaws.com'),
+  action: 'lambda:InvokeFunction',
+  sourceArn: backend.vectorCollectionsS3.resources.bucket.bucketArn,
+});
 
 syncKbLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: ['bedrock:ListKnowledgeBases', 'bedrock:ListDataSources', 'bedrock:StartIngestionJob', 'dynamodb:*'],
