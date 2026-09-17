@@ -11,7 +11,6 @@ import { chatHandler } from './functions/chat-handler/resource';
 import { agentWorker } from './functions/agent-worker/resource'; 
 
 import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
 import * as s3vectors from 'aws-cdk-lib/aws-s3vectors';
@@ -63,7 +62,8 @@ const backend = defineBackend({
   pollBedrock
 });
 
-const customStack = backend.createStack('BedrockAIStack');
+// FOLD STACKS: Attach everything to the Data stack to eliminate BedrockAIStack <-> Data Stack loops
+const customStack = cdk.Stack.of(backend.chatHandler.resources.lambda);
 
 const isProd = cdk.Stage.of(customStack)?.stageName === 'prod';
 const connectInstanceId = process.env.CONNECT_INSTANCE_ID || '';
@@ -264,13 +264,30 @@ new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
   }
 });
 
-backend.vectorCollectionsS3.resources.bucket.grantReadWrite(processVectorLambda);
 
-processVectorLambda.addPermission('AllowS3VectorBucketInvocation', {
-  principal: new iam.ServicePrincipal('s3.amazonaws.com'),
-  action: 'lambda:InvokeFunction',
-  sourceArn: backend.vectorCollectionsS3.resources.bucket.bucketArn,
+const cfnVectorBucket = backend.vectorCollectionsS3.resources.bucket.node.defaultChild as s3.CfnBucket;
+cfnVectorBucket.notificationConfiguration = {
+  eventBridgeConfiguration: { eventBridgeEnabled: true }
+};
+
+const s3UploadRule = new events.Rule(customStack, 'VectorS3UploadRule', {
+  eventPattern: {
+    source: ['aws.s3'],
+    detailType: ['Object Created'],
+    detail: {
+      bucket: { name: [backend.vectorCollectionsS3.resources.bucket.bucketName] },
+      object: { key: [{ prefix: 'vector-collections/' }] }
+    }
+  }
 });
+s3UploadRule.addTarget(new targets.LambdaFunction(processVectorLambda));
+
+processVectorLambda.addPermission('AllowEventBridgeInvoke', {
+  principal: new iam.ServicePrincipal('events.amazonaws.com'),
+  action: 'lambda:InvokeFunction',
+  sourceArn: s3UploadRule.ruleArn
+});
+
 
 syncKbLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: ['bedrock:ListKnowledgeBases', 'bedrock:ListDataSources', 'bedrock:StartIngestionJob', 'dynamodb:*'],
@@ -280,8 +297,7 @@ syncKbLambda.addToRolePolicy(new iam.PolicyStatement({
 syncKbLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 syncKbLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
 
-// Dynamic Stack Event Bindings
-const bedrockEventRule = new events.Rule(cdk.Stack.of(statusLambda), 'BedrockIngestionStatusRule', {
+const bedrockEventRule = new events.Rule(customStack, 'BedrockIngestionStatusRule', {
   eventPattern: {
     source: ['aws.bedrock'],
     detailType: ['Bedrock Knowledge Base Ingestion Job State Change'],
@@ -289,7 +305,7 @@ const bedrockEventRule = new events.Rule(cdk.Stack.of(statusLambda), 'BedrockIng
 });
 bedrockEventRule.addTarget(new targets.LambdaFunction(statusLambda));
 
-const connectCtrRule = new events.Rule(cdk.Stack.of(postCallAnalysisLambda), 'ConnectCtrDisconnectRule', {
+const connectCtrRule = new events.Rule(customStack, 'ConnectCtrDisconnectRule', {
   eventPattern: {
     source: ['aws.connect'],
     detailType: ['Amazon Connect Contact Event'],
@@ -300,7 +316,7 @@ connectCtrRule.addTarget(new targets.LambdaFunction(postCallAnalysisLambda));
 
 const deployTime = Date.now().toString();
 
-const modelSeederCustomResource = new cr.AwsCustomResource(cdk.Stack.of(seederLambda), 'FoundationModelSeederResource', {
+const modelSeederCustomResource = new cr.AwsCustomResource(customStack, 'FoundationModelSeederResource', {
   onCreate: {
     service: 'Lambda',
     action: 'invoke',
@@ -324,24 +340,23 @@ const modelSeederCustomResource = new cr.AwsCustomResource(cdk.Stack.of(seederLa
   policy: cr.AwsCustomResourcePolicy.fromStatements([
     new iam.PolicyStatement({
       actions: ['lambda:InvokeFunction'],
-      resources: [seederLambda.functionArn],
+      resources: ['*'],
     }),
   ]),
 });
-modelSeederCustomResource.node.addDependency(foundationModelsTable);
 modelSeederCustomResource.node.addDependency(seederLambda);
 
 const webhookUrl = webhookLambda.addFunctionUrl({
   authType: lambda.FunctionUrlAuthType.NONE,
 });
 
-new cdk.CfnOutput(cdk.Stack.of(webhookLambda), 'StripeWebhookUrl', {
+new cdk.CfnOutput(customStack, 'StripeWebhookUrl', {
   value: webhookUrl.url,
   description: 'Copy this URL and paste it into the Stripe Webhook Dashboard',
 });
 
 // ==============================================================================
-// Lambda Routing & Execution Mappings
+// Lambda Routing & Execution Mappings (Decoupled IAM Policies)
 // ==============================================================================
 
 provisionerLambda.addEventSource(new DynamoEventSource(profilesTable, {
@@ -355,21 +370,17 @@ provisionerLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName)
 provisionerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 provisionerLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
 provisionerLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn);
-
-// Decoupled string token breaks GetAtt cycle between provisioner and mediaLambda
-const decoupledMediaLambdaArn = cdk.Fn.sub(
-  'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${fnName}',
-  { fnName: mediaLambda.functionName }
-);
-provisionerLambda.addEnvironment('MULTIMODAL_EXECUTOR_LAMBDA_ARN', decoupledMediaLambdaArn);
+provisionerLambda.addEnvironment('MULTIMODAL_EXECUTOR_LAMBDA_ARN', mediaLambda.functionArn);
 provisionerLambda.addEnvironment('ACCOUNT_ID', customStack.account);
 
 routerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 reaperLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 
-provisionerLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
+// Broad IAM statements decouple Lambda constructs from Table construct dependencies
+provisionerLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*', 'lambda:InvokeFunction'], resources: ['*'] }));
 reaperLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
-routerLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
+routerLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*', 'lambda:InvokeFunction'], resources: ['*'] }));
+processVectorLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*', 's3:*'], resources: ['*'] }));
 
 const bedrockAgentRole = new iam.Role(customStack, 'BedrockAgentExecutionRole', {
   assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
@@ -390,18 +401,13 @@ const bedrockAdminPolicy = new iam.PolicyStatement({
 provisionerLambda.addToRolePolicy(bedrockAdminPolicy);
 reaperLambda.addToRolePolicy(bedrockAdminPolicy);
 
-routerLambda.addPermission('AllowBedrockInvoke', {
-  principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
-  action: 'lambda:InvokeFunction',
-});
-
 // FAST-ACK INGESTION CONFIGURATION (chatLambda)
 chatLambda.addEnvironment('AGENT_WORKER_FUNCTION_NAME', workerLambda.functionName);
 chatLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 chatLambda.addEnvironment('TERMINAL_MESSAGES_TABLE_NAME', terminalMessagesTable.tableName);
 
 chatLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['lambda:InvokeFunction', 'dynamodb:*'],
+  actions: ['lambda:InvokeFunction', 'dynamodb:*', 's3:*'],
   resources: ['*']
 }));
 
@@ -421,12 +427,11 @@ workerLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketN
 workerLambda.addEnvironment('TITAN_TEXT_KB_ID', titanKb.ref);
 workerLambda.addEnvironment('VECTOR_COLLECTIONS_BUCKET_NAME', backend.vectorCollectionsS3.resources.bucket.bucketName);
 
-backend.vectorCollectionsS3.resources.bucket.grantReadWrite(workerLambda);
-multimodalBucket.grantReadWrite(workerLambda);
 
 workerLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: [
     'dynamodb:*', 
+    's3:*',
     'lambda:InvokeFunction',
     'bedrock:InvokeModel', 
     'bedrock:InvokeModelWithResponseStream', 
@@ -438,7 +443,6 @@ workerLambda.addToRolePolicy(new iam.PolicyStatement({
   resources: ['*']
 }));
 
-// SCHEDULER ROLE (DECOUPLED VIA INLINE POLICY & WILDCARD)
 const schedulerRole = new iam.Role(customStack, 'AgentSchedulerRole', {
   assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
   inlinePolicies: {
@@ -461,7 +465,6 @@ workerLambda.addToRolePolicy(new iam.PolicyStatement({
 workerLambda.addEnvironment('SCHEDULER_ROLE_ARN', schedulerRole.roleArn);
 workerLambda.addEnvironment('AGENT_WORKER_FUNCTION_ARN', workerLambda.functionArn);
 
-// LEGACY CHAT LAMBDA ENVIRONMENTS PRESERVED
 chatLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 chatLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 chatLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
@@ -474,9 +477,6 @@ chatLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableNam
 chatLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
 chatLambda.addEnvironment('TITAN_TEXT_KB_ID', titanKb.ref);
 chatLambda.addEnvironment('VECTOR_COLLECTIONS_BUCKET_NAME', backend.vectorCollectionsS3.resources.bucket.bucketName);
-
-backend.vectorCollectionsS3.resources.bucket.grantReadWrite(chatLambda);
-multimodalBucket.grantReadWrite(chatLambda);
 
 chatLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream', 'bedrock:StartAsyncInvoke', 'bedrock:Retrieve', 'polly:SynthesizeSpeech'],
@@ -501,7 +501,6 @@ workerLambda.addEnvironment('AIRFLOW_DAGS_BUCKET', airflowDagsBucket.bucketName)
 airflowDagsBucket.grantWrite(chatLambda);
 airflowDagsBucket.grantWrite(workerLambda);
 
-// MULTIMEDIA EXECUTOR CONFIGURATION (mediaLambda)
 mediaLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
 mediaLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
 mediaLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
@@ -510,17 +509,10 @@ mediaLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 mediaLambda.addEnvironment('SCHEDULER_ROLE_ARN', schedulerRole.roleArn);
 mediaLambda.addEnvironment('AGENT_WORKER_FUNCTION_ARN', workerLambda.functionArn);
 
-multimodalBucket.grantReadWrite(mediaLambda);
-
 mediaLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['dynamodb:*', 'bedrock:InvokeModel', 'bedrock:StartAsyncInvoke', 'polly:SynthesizeSpeech', 'scheduler:CreateSchedule', 'iam:PassRole'],
+  actions: ['dynamodb:*', 's3:*', 'bedrock:InvokeModel', 'bedrock:StartAsyncInvoke', 'polly:SynthesizeSpeech', 'scheduler:CreateSchedule', 'iam:PassRole'],
   resources: ['*']
 }));
-
-mediaLambda.addPermission('AllowBedrockAgentInvoke', {
-  principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
-  action: 'lambda:InvokeFunction',
-});
 
 pollBedrockLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: ['bedrock:GetAsyncInvoke'],
@@ -572,9 +564,8 @@ mediaLambda.addEnvironment('CONNECT_INSTANCE_ID', connectInstanceId);
 mediaLambda.addEnvironment('CONNECT_CONTACT_FLOW_ID', connectContactFlowId);
 mediaLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', connectSourcePhone);
 
-voiceAgentTable.grantReadWriteData(lexFulfillmentLambda);
-voiceAgentTable.grantReadWriteData(postCallAnalysisLambda);
 postCallAnalysisLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
+lexFulfillmentLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
 
 const voiceBedrockPolicy = new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel', 'bedrock:Converse'],

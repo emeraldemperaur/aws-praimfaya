@@ -5,4 +5,5 @@ export const multimediaExecutor = defineFunction({
   entry: './handler.ts',
   timeoutSeconds: 900,
   memoryMB: 1024,
+  resourceGroupName: 'data'
 });
