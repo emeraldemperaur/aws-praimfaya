@@ -4,7 +4,7 @@ import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { PollyClient } from "@aws-sdk/client-polly";
-import { S3Client } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { CORE_SYSTEM_TOOLS, isValidUrl, NATIVE_TOOLS_REGISTRY } from "./tool-registry";
 import { TOOL_EXECUTORS } from "./executors";
 import { MODEL_CREDIT_MULTIPLIERS } from "./model-credit-multipliers";
@@ -24,6 +24,7 @@ const PROFILE_WORKFLOWS_TABLE = process.env.PROFILE_WORKFLOWS_TABLE_NAME!;
 const WEBHOOK_ROUTER_ARN = process.env.WEBHOOK_ROUTER_LAMBDA_ARN!;
 const USER_PROFILES_TABLE = process.env.USER_PROFILES_TABLE_NAME!;
 const USAGE_RECORDS_TABLE = process.env.USAGE_RECORDS_TABLE_NAME!;
+const VECTOR_COLLECTIONS_BUCKET = process.env.VECTOR_COLLECTIONS_BUCKET_NAME!;
 
 const MAX_CACHE_ENTRIES = 500;
 const workflowEmbeddingCache: Record<string, number[]> = {};
@@ -46,17 +47,13 @@ const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = {
     "enterprise_voice_agent": 2500, 
     "generate_document_agent": 100,
     "jotform_agile_agent": 500,        
-    "formstack_agile_agent": 500       
+    "formstack_agile_agent": 500        
 };
 
 const safeJsonParse = (str: any, fallback: any = {}) => {
     if (!str) return fallback;
     if (typeof str === 'object') return str;
-    try {
-        return JSON.parse(str);
-    } catch {
-        return fallback;
-    }
+    try { return JSON.parse(str); } catch { return fallback; }
 };
 
 export const handler = async (event: any) => {
@@ -76,7 +73,6 @@ export const handler = async (event: any) => {
         if (!userRes.Item || (userRes.Item.computeCredits ?? 0) <= 0) {
             return JSON.stringify({ error: "INSUFFICIENT_CREDITS: Your compute credit balance is exhausted. Please top up to continue." });
         }
-        // const isEliteUser = userRes.Item?.planName === 'VANGUARD_ELITE';
 
         const history = safeJsonParse(args.chatHistory, []);
         const profileRes = await dynamodb.send(new GetCommand({ TableName: PROFILES_TABLE, Key: { id: profileId } }));
@@ -101,14 +97,88 @@ export const handler = async (event: any) => {
         let requestedCredentials: string[] = [];
 
         // ================================================
+        // EXTRACT S3 ATTACHMENTS FOR MULTIMODAL INFERENCE
+        // ================================================
+        const userContentBlocks: any[] = [];
+        let cleanPromptText = userMessage;
+        const agentFiles: any[] = [];
+        const contextMatch = userMessage.match(/<vanguard_system_context>([\s\S]*?)<\/vanguard_system_context>/);
+        if (contextMatch) {
+            const contextContent = contextMatch[1];
+            const lines = contextContent.split('\n');
+            
+            for (const line of lines) {
+                if (line.trim().startsWith('- vector-collections/')) {
+                    const s3Key = line.trim().substring(2);
+                    const ext = s3Key.split('.').pop()?.toLowerCase() || 'txt';
+                    
+                    try {
+                        if (['mp4', 'mov', 'webm'].includes(ext)) {
+                            userContentBlocks.push({
+                                video: {
+                                    format: ext,
+                                    source: { s3Location: { uri: `s3://${VECTOR_COLLECTIONS_BUCKET}/${s3Key}` } }
+                                }
+                            });
+                        } else if (['png', 'jpeg', 'jpg', 'gif', 'webp'].includes(ext)) {
+                            const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
+                            const bytes = await obj.Body?.transformToByteArray();
+                            if (bytes) {
+                                userContentBlocks.push({
+                                    image: { format: ext === 'jpg' ? 'jpeg' : ext, source: { bytes } }
+                                });
+                            }
+                        } else {
+                            const formatMap: Record<string, string> = { pdf: 'pdf', csv: 'csv', txt: 'txt', md: 'md', html: 'html', doc: 'doc', docx: 'docx', xls: 'xls', xlsx: 'xlsx' };
+                            const docFormat = formatMap[ext] || 'txt';
+                            const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
+                            const bytes = await obj.Body?.transformToByteArray();
+                            if (bytes) {
+                                userContentBlocks.push({
+                                    document: { name: `file_${Date.now()}`, format: docFormat, source: { bytes } }
+                                });
+                            }
+                        }
+
+                        if (!['mp4', 'mov', 'webm'].includes(ext)) {
+                             const mimeMap: Record<string, string> = {
+                                pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain', md: 'text/plain', html: 'text/html',
+                                png: 'image/png', jpeg: 'image/jpeg', jpg: 'image/jpeg', webp: 'image/webp'
+                            };
+                            
+                            const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
+                            const bytes = await obj.Body?.transformToByteArray();
+                            if (bytes) {
+                                agentFiles.push({
+                                    name: s3Key.split('/').pop() || `file_${Date.now()}`,
+                                    source: {
+                                        sourceType: 'BYTE_CONTENT',
+                                        byteContent: {
+                                            mediaType: mimeMap[ext] || 'text/plain',
+                                            data: bytes
+                                        }
+                                    },
+                                    useCase: 'CHAT'
+                                });
+                            }
+                        }
+                    } catch (fetchErr) {
+                        console.error(`Failed to process attachment ${s3Key}:`, fetchErr);
+                    }
+                }
+            }
+            cleanPromptText = userMessage.replace(/<vanguard_system_context>[\s\S]*?<\/vanguard_system_context>/, '').trim();
+        }
+
+        if (cleanPromptText) {
+            userContentBlocks.push({ text: cleanPromptText });
+        }
+
+
+        // ================================================
         // Managed Agent (Supervisor & Collaborator Agents)
         // ================================================
         if (profile.role === 'SUPERVISOR' && profile.awsAgentId && profile.awsAliasId) {
-            //if (!isEliteUser) {
-              //  return JSON.stringify({ 
-                //    error: "FEATURE_LOCKED: Autonomous Supervisor agents require the Vanguard Elite subscription tier. Please upgrade your plan to access multi-agent orchestration." 
-               // });
-            //}
             try {
                 const safeSessionId = cognitoUserId.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50) + "-session";
                 const dynamicPrompt = profile.systemPrompt || "You are an enterprise supervisor agent.";
@@ -117,7 +187,7 @@ export const handler = async (event: any) => {
                     agentId: profile.awsAgentId,
                     agentAliasId: profile.awsAliasId,
                     sessionId: safeSessionId,
-                    inputText: userMessage,
+                    inputText: cleanPromptText || "Analyze attached files.",
                     enableTrace: false,
                     sessionState: {
                         sessionAttributes: {
@@ -129,7 +199,8 @@ export const handler = async (event: any) => {
                         },
                         promptSessionAttributes: {
                             "dynamicSystemPrompt": dynamicPrompt
-                        }
+                        },
+                        ...(agentFiles.length > 0 ? { files: agentFiles } : {})
                     }
                 }));
 
@@ -195,7 +266,7 @@ export const handler = async (event: any) => {
             try {
                 const retrieveResponse = await bedrockAgentRuntime.send(new RetrieveCommand({
                     knowledgeBaseId: profile.vectorCollectionId,
-                    retrievalQuery: { text: userMessage },
+                    retrievalQuery: { text: cleanPromptText },
                     retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 5 } }
                 }));
                 const ragChunks = retrieveResponse.retrievalResults?.map(r => r.content?.text).filter(Boolean) || [];
@@ -207,7 +278,7 @@ export const handler = async (event: any) => {
             } catch (kbError) { console.error("Knowledge Base retrieval failed.", kbError); }
         }
 
-        const userQueryVector = await getEmbedding(userMessage);
+        const userQueryVector = await getEmbedding(cleanPromptText);
 
         const assignedWorkflows = await getAssignedWorkflows(profile.id);
         let relevantWorkflows = assignedWorkflows;
@@ -258,7 +329,7 @@ export const handler = async (event: any) => {
 
         const allTools = [...workflowTools, ...CORE_SYSTEM_TOOLS, ...relevantNativeTools];
         const toolConfig = allTools.length > 0 ? { tools: allTools as any[] } : undefined;
-        const messages = [...history, { role: "user", content: [{ text: userMessage }] }];
+        const messages = [...history, { role: "user", content: userContentBlocks }];
 
         let totalInboundTokens = 0; 
         let totalOutboundTokens = 0; 

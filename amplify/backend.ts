@@ -405,6 +405,9 @@ chatLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableNam
 chatLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
 chatLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
 chatLambda.addEnvironment('TITAN_TEXT_KB_ID', titanKb.ref);
+chatLambda.addEnvironment('VECTOR_COLLECTIONS_BUCKET_NAME', backend.vectorCollectionsS3.resources.bucket.bucketName);
+backend.vectorCollectionsS3.resources.bucket.grantReadWrite(chatLambda);
+
 
 profilesTable.grantReadData(chatLambda);
 workflowsTable.grantReadData(chatLambda);
