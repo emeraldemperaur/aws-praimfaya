@@ -341,7 +341,6 @@ new cdk.CfnOutput(cdk.Stack.of(webhookLambda), 'StripeWebhookUrl', {
   description: 'Copy this URL and paste it into the Stripe Webhook Dashboard',
 });
 
-
 provisionerLambda.addEventSource(new DynamoEventSource(profilesTable, {
   startingPosition: lambda.StartingPosition.LATEST,
   batchSize: 1, 
@@ -353,7 +352,7 @@ provisionerLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName)
 provisionerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 provisionerLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
 provisionerLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn);
-provisionerLambda.addEnvironment('MULTIMEDIA_EXECUTOR_LAMBDA_ARN', mediaLambda.functionArn);
+provisionerLambda.addEnvironment('MULTIMODAL_EXECUTOR_LAMBDA_ARN', mediaLambda.functionArn);
 provisionerLambda.addEnvironment('ACCOUNT_ID', customStack.account);
 
 routerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
@@ -392,7 +391,11 @@ routerLambda.addPermission('AllowBedrockInvoke', {
 chatLambda.addEnvironment('AGENT_WORKER_FUNCTION_NAME', workerLambda.functionName);
 chatLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 chatLambda.addEnvironment('TERMINAL_MESSAGES_TABLE_NAME', terminalMessagesTable.tableName);
-workerLambda.grantInvoke(chatLambda);
+
+chatLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['lambda:InvokeFunction'],
+  resources: [`arn:aws:lambda:${customStack.region}:${customStack.account}:function:*`]
+}));
 terminalMessagesTable.grantReadWriteData(chatLambda);
 
 workerLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
@@ -426,10 +429,20 @@ workerLambda.addToRolePolicy(new iam.PolicyStatement({
   resources: ['*']
 }));
 
+// EVENTBRIDGE SCHEDULER ROLE (DECOUPLED FROM WORKER TO PREVENT CIRCULAR DEPENDENCY)
 const schedulerRole = new iam.Role(cdk.Stack.of(workerLambda), 'AgentSchedulerRole', {
   assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
+  inlinePolicies: {
+    InvokeLambdaPolicy: new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          actions: ['lambda:InvokeFunction'],
+          resources: [`arn:aws:lambda:${customStack.region}:${customStack.account}:function:*`]
+        })
+      ]
+    })
+  }
 });
-workerLambda.grantInvoke(schedulerRole);
 
 workerLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: ['scheduler:CreateSchedule'],
@@ -491,7 +504,7 @@ mediaLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketNa
 mediaLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
 mediaLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 mediaLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
-mediaLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName); // PROFILES TABLE ADDED
+mediaLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 mediaLambda.addEnvironment('SCHEDULER_ROLE_ARN', schedulerRole.roleArn);
 mediaLambda.addEnvironment('AGENT_WORKER_FUNCTION_ARN', workerLambda.functionArn);
 
@@ -499,7 +512,7 @@ multimodalBucket.grantReadWrite(mediaLambda);
 ragArtifactsTable.grantReadWriteData(mediaLambda);
 userProfilesTable.grantReadWriteData(mediaLambda);
 usageRecordsTable.grantReadWriteData(mediaLambda);
-profilesTable.grantReadData(mediaLambda); // PERMISSION ADDED
+profilesTable.grantReadData(mediaLambda);
 
 mediaLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel', 'bedrock:StartAsyncInvoke', 'polly:SynthesizeSpeech'],
