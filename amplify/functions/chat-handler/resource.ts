@@ -4,6 +4,6 @@ export const chatHandler = defineFunction({
   name: 'chat-handler',
   entry: './handler.ts',
   timeoutSeconds: 30, 
-  memoryMB: 1024,
+  memoryMB: 512,
   resourceGroupName: 'data'
 });

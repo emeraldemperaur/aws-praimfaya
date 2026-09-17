@@ -5,4 +5,5 @@ export const agentProvisioner = defineFunction({
   entry: './handler.ts',
   timeoutSeconds: 300,
   resourceGroupName: 'data',
+  memoryMB: 512,
 });

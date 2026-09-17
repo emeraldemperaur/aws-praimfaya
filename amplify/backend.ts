@@ -426,7 +426,7 @@ workerLambda.addToRolePolicy(new iam.PolicyStatement({
   resources: ['*']
 }));
 
-const schedulerRole = new iam.Role(customStack, 'AgentSchedulerRole', {
+const schedulerRole = new iam.Role(cdk.Stack.of(workerLambda), 'AgentSchedulerRole', {
   assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
 });
 workerLambda.grantInvoke(schedulerRole);
