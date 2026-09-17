@@ -8,6 +8,7 @@ export const chronos = defineFunction({
   entry: "./handler.ts",
   resourceGroupName: 'data',
   runtime: 24,
+  timeoutSeconds: 30,
   bundling: {
     minify: true
   },
