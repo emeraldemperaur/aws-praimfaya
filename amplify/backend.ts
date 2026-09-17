@@ -273,19 +273,14 @@ backend.vectorCollectionsS3.resources.bucket.addEventNotification(
 );
 
 syncKbLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['bedrock:ListKnowledgeBases', 'bedrock:ListDataSources', 'bedrock:StartIngestionJob'],
+  actions: ['bedrock:ListKnowledgeBases', 'bedrock:ListDataSources', 'bedrock:StartIngestionJob', 'dynamodb:*'],
   resources: ['*'] 
 }));
 
 syncKbLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 syncKbLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
-userProfilesTable.grantReadWriteData(syncKbLambda);
-usageRecordsTable.grantReadWriteData(syncKbLambda);
 
-// ==============================================================================
 // Dynamic Stack Event Bindings
-// ==============================================================================
-
 const bedrockEventRule = new events.Rule(cdk.Stack.of(statusLambda), 'BedrockIngestionStatusRule', {
   eventPattern: {
     source: ['aws.bedrock'],
@@ -345,6 +340,10 @@ new cdk.CfnOutput(cdk.Stack.of(webhookLambda), 'StripeWebhookUrl', {
   description: 'Copy this URL and paste it into the Stripe Webhook Dashboard',
 });
 
+// ==============================================================================
+// Lambda Routing & Execution Mappings
+// ==============================================================================
+
 provisionerLambda.addEventSource(new DynamoEventSource(profilesTable, {
   startingPosition: lambda.StartingPosition.LATEST,
   batchSize: 1, 
@@ -357,6 +356,7 @@ provisionerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableNam
 provisionerLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
 provisionerLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn);
 
+// Decoupled string token breaks GetAtt cycle between provisioner and mediaLambda
 const decoupledMediaLambdaArn = cdk.Fn.sub(
   'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${fnName}',
   { fnName: mediaLambda.functionName }
@@ -367,11 +367,9 @@ provisionerLambda.addEnvironment('ACCOUNT_ID', customStack.account);
 routerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 reaperLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 
-profilesTable.grantReadWriteData(provisionerLambda);
-profilesTable.grantReadWriteData(reaperLambda);
-workflowsTable.grantReadData(provisionerLambda);
-profileWorkflowsTable.grantReadData(provisionerLambda);
-workflowsTable.grantReadData(routerLambda);
+provisionerLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
+reaperLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
+routerLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
 
 const bedrockAgentRole = new iam.Role(customStack, 'BedrockAgentExecutionRole', {
   assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
@@ -397,16 +395,17 @@ routerLambda.addPermission('AllowBedrockInvoke', {
   action: 'lambda:InvokeFunction',
 });
 
+// FAST-ACK INGESTION CONFIGURATION (chatLambda)
 chatLambda.addEnvironment('AGENT_WORKER_FUNCTION_NAME', workerLambda.functionName);
 chatLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 chatLambda.addEnvironment('TERMINAL_MESSAGES_TABLE_NAME', terminalMessagesTable.tableName);
 
 chatLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['lambda:InvokeFunction'],
+  actions: ['lambda:InvokeFunction', 'dynamodb:*'],
   resources: ['*']
 }));
-terminalMessagesTable.grantReadWriteData(chatLambda);
 
+// ASYNC WORKER CONFIGURATION (workerLambda)
 workerLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 workerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 workerLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
@@ -423,22 +422,24 @@ workerLambda.addEnvironment('TITAN_TEXT_KB_ID', titanKb.ref);
 workerLambda.addEnvironment('VECTOR_COLLECTIONS_BUCKET_NAME', backend.vectorCollectionsS3.resources.bucket.bucketName);
 
 backend.vectorCollectionsS3.resources.bucket.grantReadWrite(workerLambda);
-profilesTable.grantReadData(workerLambda);
-workflowsTable.grantReadData(workerLambda);
-profileWorkflowsTable.grantReadData(workerLambda);
-userProfilesTable.grantReadWriteData(workerLambda);
-ragArtifactsTable.grantReadWriteData(workerLambda);
-usageRecordsTable.grantReadWriteData(workerLambda);
-terminalMessagesTable.grantReadWriteData(workerLambda);
 multimodalBucket.grantReadWrite(workerLambda);
-routerLambda.grantInvoke(workerLambda);
 
 workerLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream', 'bedrock:StartAsyncInvoke', 'bedrock:Retrieve', 'polly:SynthesizeSpeech', 'bedrock:InvokeAgent'],
+  actions: [
+    'dynamodb:*', 
+    'lambda:InvokeFunction',
+    'bedrock:InvokeModel', 
+    'bedrock:InvokeModelWithResponseStream', 
+    'bedrock:StartAsyncInvoke', 
+    'bedrock:Retrieve', 
+    'polly:SynthesizeSpeech', 
+    'bedrock:InvokeAgent'
+  ],
   resources: ['*']
 }));
 
-const schedulerRole = new iam.Role(cdk.Stack.of(workerLambda), 'AgentSchedulerRole', {
+// SCHEDULER ROLE (DECOUPLED VIA INLINE POLICY & WILDCARD)
+const schedulerRole = new iam.Role(customStack, 'AgentSchedulerRole', {
   assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
   inlinePolicies: {
     InvokeLambdaPolicy: new iam.PolicyDocument({
@@ -453,17 +454,14 @@ const schedulerRole = new iam.Role(cdk.Stack.of(workerLambda), 'AgentSchedulerRo
 });
 
 workerLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['scheduler:CreateSchedule'],
+  actions: ['scheduler:CreateSchedule', 'iam:PassRole'],
   resources: ['*'], 
-}));
-workerLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['iam:PassRole'],
-  resources: [schedulerRole.roleArn],
 }));
 
 workerLambda.addEnvironment('SCHEDULER_ROLE_ARN', schedulerRole.roleArn);
 workerLambda.addEnvironment('AGENT_WORKER_FUNCTION_ARN', workerLambda.functionArn);
 
+// LEGACY CHAT LAMBDA ENVIRONMENTS PRESERVED
 chatLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 chatLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 chatLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
@@ -476,15 +474,10 @@ chatLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableNam
 chatLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
 chatLambda.addEnvironment('TITAN_TEXT_KB_ID', titanKb.ref);
 chatLambda.addEnvironment('VECTOR_COLLECTIONS_BUCKET_NAME', backend.vectorCollectionsS3.resources.bucket.bucketName);
+
 backend.vectorCollectionsS3.resources.bucket.grantReadWrite(chatLambda);
-profilesTable.grantReadData(chatLambda);
-workflowsTable.grantReadData(chatLambda);
-profileWorkflowsTable.grantReadData(chatLambda);
-userProfilesTable.grantReadWriteData(chatLambda);
-ragArtifactsTable.grantReadWriteData(chatLambda);
-usageRecordsTable.grantReadWriteData(chatLambda);
 multimodalBucket.grantReadWrite(chatLambda);
-routerLambda.grantInvoke(chatLambda);
+
 chatLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream', 'bedrock:StartAsyncInvoke', 'bedrock:Retrieve', 'polly:SynthesizeSpeech'],
   resources: ['*']
@@ -508,6 +501,7 @@ workerLambda.addEnvironment('AIRFLOW_DAGS_BUCKET', airflowDagsBucket.bucketName)
 airflowDagsBucket.grantWrite(chatLambda);
 airflowDagsBucket.grantWrite(workerLambda);
 
+// MULTIMEDIA EXECUTOR CONFIGURATION (mediaLambda)
 mediaLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
 mediaLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
 mediaLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
@@ -517,28 +511,10 @@ mediaLambda.addEnvironment('SCHEDULER_ROLE_ARN', schedulerRole.roleArn);
 mediaLambda.addEnvironment('AGENT_WORKER_FUNCTION_ARN', workerLambda.functionArn);
 
 multimodalBucket.grantReadWrite(mediaLambda);
-ragArtifactsTable.grantReadWriteData(mediaLambda);
-userProfilesTable.grantReadWriteData(mediaLambda);
-usageRecordsTable.grantReadWriteData(mediaLambda);
 
 mediaLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['dynamodb:GetItem', 'dynamodb:BatchGetItem', 'dynamodb:Query', 'dynamodb:Scan'],
+  actions: ['dynamodb:*', 'bedrock:InvokeModel', 'bedrock:StartAsyncInvoke', 'polly:SynthesizeSpeech', 'scheduler:CreateSchedule', 'iam:PassRole'],
   resources: ['*']
-}));
-
-mediaLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['bedrock:InvokeModel', 'bedrock:StartAsyncInvoke', 'polly:SynthesizeSpeech'],
-  resources: ['*']
-}));
-
-mediaLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['scheduler:CreateSchedule'],
-  resources: ['*'], 
-}));
-
-mediaLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: ['iam:PassRole'],
-  resources: [schedulerRole.roleArn],
 }));
 
 mediaLambda.addPermission('AllowBedrockAgentInvoke', {
@@ -563,15 +539,12 @@ webhookLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.table
 webhookLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
 seederLambda.addEnvironment('FOUNDATION_MODELS_TABLE_NAME', foundationModelsTable.tableName);
 
-userProfilesTable.grantReadWriteData(webhookLambda);
-usageRecordsTable.grantReadWriteData(webhookLambda);
-foundationModelsTable.grantReadWriteData(seederLambda);
+webhookLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
+seederLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
+promoLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
 
 promoLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 promoLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
-
-userProfilesTable.grantReadWriteData(promoLambda);
-usageRecordsTable.grantReadWriteData(promoLambda);
 
 // VOICE AGENT INFRASTRUCTURE
 const voiceAgentTable = new dynamodb.Table(customStack, 'VoiceAgentCallLogs', {
@@ -601,11 +574,7 @@ mediaLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', connectSourcePhone);
 
 voiceAgentTable.grantReadWriteData(lexFulfillmentLambda);
 voiceAgentTable.grantReadWriteData(postCallAnalysisLambda);
-voiceAgentTable.grantReadWriteData(chatLambda);
-voiceAgentTable.grantReadWriteData(workerLambda);
-voiceAgentTable.grantReadWriteData(mediaLambda);
-userProfilesTable.grantReadWriteData(postCallAnalysisLambda);
-usageRecordsTable.grantReadWriteData(postCallAnalysisLambda);
+postCallAnalysisLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:*'], resources: ['*'] }));
 
 const voiceBedrockPolicy = new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel', 'bedrock:Converse'],
