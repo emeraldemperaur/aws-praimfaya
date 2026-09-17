@@ -170,6 +170,7 @@ const bedrockKbPolicy = new iam.Policy(customStack, 'BedrockKBPolicy', {
 });
 bedrockKbRole.attachInlinePolicy(bedrockKbPolicy);
 
+// Knowledge Base Configurations
 const titanKb = new bedrock.CfnKnowledgeBase(customStack, 'TitanTextKB', {
   name: 'TitanTextKB',
   roleArn: bedrockKbRole.roleArn,
@@ -281,6 +282,9 @@ syncKbLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableN
 userProfilesTable.grantReadWriteData(syncKbLambda);
 usageRecordsTable.grantReadWriteData(syncKbLambda);
 
+// ==============================================================================
+// Dynamic Stack Event Bindings
+// ==============================================================================
 
 const bedrockEventRule = new events.Rule(cdk.Stack.of(statusLambda), 'BedrockIngestionStatusRule', {
   eventPattern: {
@@ -352,7 +356,12 @@ provisionerLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName)
 provisionerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 provisionerLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
 provisionerLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn);
-provisionerLambda.addEnvironment('MULTIMODAL_EXECUTOR_LAMBDA_ARN', mediaLambda.functionArn);
+
+const decoupledMediaLambdaArn = cdk.Fn.sub(
+  'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${fnName}',
+  { fnName: mediaLambda.functionName }
+);
+provisionerLambda.addEnvironment('MULTIMODAL_EXECUTOR_LAMBDA_ARN', decoupledMediaLambdaArn);
 provisionerLambda.addEnvironment('ACCOUNT_ID', customStack.account);
 
 routerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
@@ -394,7 +403,7 @@ chatLambda.addEnvironment('TERMINAL_MESSAGES_TABLE_NAME', terminalMessagesTable.
 
 chatLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: ['lambda:InvokeFunction'],
-  resources: [`arn:aws:lambda:${customStack.region}:${customStack.account}:function:*`]
+  resources: ['*']
 }));
 terminalMessagesTable.grantReadWriteData(chatLambda);
 
@@ -429,7 +438,6 @@ workerLambda.addToRolePolicy(new iam.PolicyStatement({
   resources: ['*']
 }));
 
-// EVENTBRIDGE SCHEDULER ROLE (DECOUPLED FROM WORKER TO PREVENT CIRCULAR DEPENDENCY)
 const schedulerRole = new iam.Role(cdk.Stack.of(workerLambda), 'AgentSchedulerRole', {
   assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
   inlinePolicies: {
@@ -437,7 +445,7 @@ const schedulerRole = new iam.Role(cdk.Stack.of(workerLambda), 'AgentSchedulerRo
       statements: [
         new iam.PolicyStatement({
           actions: ['lambda:InvokeFunction'],
-          resources: [`arn:aws:lambda:${customStack.region}:${customStack.account}:function:*`]
+          resources: ['*']
         })
       ]
     })
@@ -512,7 +520,11 @@ multimodalBucket.grantReadWrite(mediaLambda);
 ragArtifactsTable.grantReadWriteData(mediaLambda);
 userProfilesTable.grantReadWriteData(mediaLambda);
 usageRecordsTable.grantReadWriteData(mediaLambda);
-profilesTable.grantReadData(mediaLambda);
+
+mediaLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['dynamodb:GetItem', 'dynamodb:BatchGetItem', 'dynamodb:Query', 'dynamodb:Scan'],
+  resources: ['*']
+}));
 
 mediaLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel', 'bedrock:StartAsyncInvoke', 'polly:SynthesizeSpeech'],
