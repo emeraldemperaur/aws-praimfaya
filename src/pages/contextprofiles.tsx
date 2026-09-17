@@ -12,11 +12,9 @@ import { getModelIcon, MODEL_FAMILY_DESCRIPTIONS, ROLE_DESCRIPTIONS } from "../u
 import type { UIContextProfile } from "../data/contextprofile";
 import { getUserEmail } from "../utils/asimov";
 import { HaikuDropdown } from "../components/haikudropdown";
-import { NATIVE_TOOLS_TEMPLATES } from "../utils/prometheus";
 import { getCurrentUser } from 'aws-amplify/auth';
 import type { Schema } from '../../amplify/data/resource'; 
 
-// Client generated OUTSIDE the component, strongly typed
 const client = generateClient<Schema>();
 
 const DEFAULT_PROFILE_STATE = {
@@ -37,12 +35,6 @@ const DEFAULT_PROFILE_STATE = {
   mcpAuthToken: '',
   subagentEavesdrop: false
 };
-
-const STANDARD_ONLY_PROMPTS = new Set(
-  NATIVE_TOOLS_TEMPLATES
-    .filter(tool => tool.modelAvailability === 'STANDARD_ONLY')
-    .map(tool => tool.systemPrompt.trim())
-);
 
 const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -425,16 +417,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
 
   const handleNewTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    
-    setNewContextProfileData((prev) => {
-      const updates: Partial<UIContextProfile> = { [name]: value };
-      if (name === 'role' && (value === 'SUPERVISOR' || value === 'COLLABORATOR')) {
-        if (prev.systemPrompt && STANDARD_ONLY_PROMPTS.has(prev.systemPrompt.trim())) {
-          updates.systemPrompt = '';
-        }
-      }
-      return { ...prev, ...updates };
-    });
+    setNewContextProfileData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleNewNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -533,17 +516,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
 
   const handleEditTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    
-    setEditContextProfileData((prev) => {
-      const updates: Partial<UIContextProfile> = { [name]: value };
-      
-      if (name === 'role' && (value === 'SUPERVISOR' || value === 'COLLABORATOR')) {
-        if (prev.systemPrompt && STANDARD_ONLY_PROMPTS.has(prev.systemPrompt.trim())) {
-          updates.systemPrompt = '';
-        }
-      }
-      return { ...prev, ...updates };
-    });
+    setEditContextProfileData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleEditNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -585,7 +558,6 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       });
       if (errors) throw new Error(errors[0].message);
       
-      // FIX: Add null check for updatedProfile
       if (!updatedProfile) throw new Error("Update returned empty data.");
 
       const existingLinksResp = await client.models.ContextProfileWorkflow.list({
@@ -1038,7 +1010,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                 <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>System Prompt <span style={{ color: '#ef4444' }}>*</span></h3>
                 <HaikuDropdown 
                   darkMode={darkMode} 
-                  role={newContextProfileData.role || 'STANDARD'}
+                  role="STANDARD"
                   onSelect={(prompt) => {
                     setNewContextProfileData(prev => ({
                       ...prev,
@@ -1349,7 +1321,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
                 <h3 style={{ margin: 0, color: darkMode ? '#f9fafb' : '#111827' }}>System Prompt <span style={{ color: '#ef4444' }}>*</span></h3>
                 <HaikuDropdown 
                   darkMode={darkMode} 
-                  role={editContextProfileData.role || 'STANDARD'}
+                  role="STANDARD"
                   onSelect={(prompt) => {
                     setEditContextProfileData(prev => ({
                       ...prev,
@@ -1578,7 +1550,7 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
         </div>
       </BottomRightModal>
     </>
-    )
+  )
 }
 
 export default ContextProfilesUI;

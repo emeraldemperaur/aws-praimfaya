@@ -1,60 +1,13 @@
-import { BedrockRuntimeClient, ConverseCommand, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
-import { BedrockAgentRuntimeClient, RetrieveCommand, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { PollyClient } from "@aws-sdk/client-polly";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-import { CORE_SYSTEM_TOOLS, isValidUrl, NATIVE_TOOLS_REGISTRY } from "./tool-registry";
-import { TOOL_EXECUTORS } from "./executors";
-import { MODEL_CREDIT_MULTIPLIERS } from "./model-credit-multipliers";
-import { executeBYOMCP } from "./executors/mcp-tools";
+import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 
-const bedrockRuntime = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
-const bedrockAgentRuntime = new BedrockAgentRuntimeClient({ region: process.env.AWS_REGION });
 const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION });
-const pollyClient = new PollyClient({ region: process.env.AWS_REGION });
-const s3Client = new S3Client({ region: process.env.AWS_REGION });
-const rawDynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-const dynamodb = DynamoDBDocumentClient.from(rawDynamoClient);
+const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION }));
 
-const PROFILES_TABLE = process.env.PROFILES_TABLE_NAME!;
-const WORKFLOWS_TABLE = process.env.WORKFLOWS_TABLE_NAME!;
-const PROFILE_WORKFLOWS_TABLE = process.env.PROFILE_WORKFLOWS_TABLE_NAME!;
-const WEBHOOK_ROUTER_ARN = process.env.WEBHOOK_ROUTER_LAMBDA_ARN!;
 const USER_PROFILES_TABLE = process.env.USER_PROFILES_TABLE_NAME!;
-const USAGE_RECORDS_TABLE = process.env.USAGE_RECORDS_TABLE_NAME!;
-const VECTOR_COLLECTIONS_BUCKET = process.env.VECTOR_COLLECTIONS_BUCKET_NAME!;
-
-const MAX_CACHE_ENTRIES = 500;
-const workflowEmbeddingCache: Record<string, number[]> = {};
-const nativeToolEmbeddingCache: Record<string, number[]> = {};
-
-const setBoundedCache = (cache: Record<string, number[]>, key: string, vector: number[]) => {
-    const keys = Object.keys(cache);
-    if (keys.length >= MAX_CACHE_ENTRIES) {
-        delete cache[keys[0]];
-    }
-    cache[key] = vector;
-};
-
-const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = { 
-    "generate_luma_video": 150000, 
-    "generate_audio": 500, 
-    "generate_image": 30000, 
-    "generate_enterprise_image": 4000, 
-    "edit_image": 15000, 
-    "enterprise_voice_agent": 2500, 
-    "generate_document_agent": 100,
-    "jotform_agile_agent": 500,        
-    "formstack_agile_agent": 500        
-};
-
-const safeJsonParse = (str: any, fallback: any = {}) => {
-    if (!str) return fallback;
-    if (typeof str === 'object') return str;
-    try { return JSON.parse(str); } catch { return fallback; }
-};
+const TERMINAL_MESSAGES_TABLE = process.env.TERMINAL_MESSAGES_TABLE_NAME!;
+const WORKER_FUNCTION = process.env.AGENT_WORKER_FUNCTION_NAME!;
 
 export const handler = async (event: any) => {
     try {
@@ -63,7 +16,8 @@ export const handler = async (event: any) => {
         const userMessage = args.prompt || args.userMessage; 
         const cognitoUserId = args.cognitoUserId || event.identity?.claims?.sub;
         
-        const ephemeralSecrets = safeJsonParse(args.ephemeralSecretsJson, {});
+        const sessionId = args.sessionId || `session-${Date.now()}`;
+        const terminalId = args.terminalId || sessionId;
 
         if (!profileId || !userMessage || !cognitoUserId) {
             return JSON.stringify({ error: "Missing required parameters: profileId, userMessage, and cognitoUserId are required." });
@@ -74,539 +28,43 @@ export const handler = async (event: any) => {
             return JSON.stringify({ error: "INSUFFICIENT_CREDITS: Your compute credit balance is exhausted. Please top up to continue." });
         }
 
-        const history = safeJsonParse(args.chatHistory, []);
-        const profileRes = await dynamodb.send(new GetCommand({ TableName: PROFILES_TABLE, Key: { id: profileId } }));
-        const profile = profileRes.Item;
-        if (!profile) return JSON.stringify({ error: "Context Profile not found." });
-
-        const targetModelId = profile.llmModelId || "amazon.nova-pro-v1:0";
-        const multiplier = MODEL_CREDIT_MULTIPLIERS[targetModelId] || 2;
-        const computeCredits = userRes.Item.computeCredits ?? 0;
-        const historyString = JSON.stringify(history);
-        const systemPromptStr = profile.systemPrompt || "";
-        const estimatedInputTokens = Math.ceil((userMessage.length + historyString.length + systemPromptStr.length + 1000) / 4);
-        const minimumCreditsNeeded = estimatedInputTokens * multiplier;
-
-        if (computeCredits < minimumCreditsNeeded) {
-            return JSON.stringify({ 
-                error: `INSUFFICIENT_CREDITS: Your prompt and chat history require at least ${minimumCreditsNeeded} credits to process. You only have ${computeCredits} available.` 
-            });
-        }
-
-        const citations: any[] = []; 
-        let requestedCredentials: string[] = [];
-
-        // ================================================
-        // EXTRACT S3 ATTACHMENTS FOR MULTIMODAL INFERENCE
-        // ================================================
-        const userContentBlocks: any[] = [];
-        let cleanPromptText = userMessage;
-        const agentFiles: any[] = [];
-        const contextMatch = userMessage.match(/<vanguard_system_context>([\s\S]*?)<\/vanguard_system_context>/);
-        if (contextMatch) {
-            const contextContent = contextMatch[1];
-            const lines = contextContent.split('\n');
-            
-            for (const line of lines) {
-                if (line.trim().startsWith('- vector-collections/')) {
-                    const s3Key = line.trim().substring(2);
-                    const ext = s3Key.split('.').pop()?.toLowerCase() || 'txt';
-                    
-                    try {
-                        if (['mp4', 'mov', 'webm'].includes(ext)) {
-                            userContentBlocks.push({
-                                video: {
-                                    format: ext,
-                                    source: { s3Location: { uri: `s3://${VECTOR_COLLECTIONS_BUCKET}/${s3Key}` } }
-                                }
-                            });
-                        } else if (['png', 'jpeg', 'jpg', 'gif', 'webp'].includes(ext)) {
-                            const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
-                            const bytes = await obj.Body?.transformToByteArray();
-                            if (bytes) {
-                                userContentBlocks.push({
-                                    image: { format: ext === 'jpg' ? 'jpeg' : ext, source: { bytes } }
-                                });
-                            }
-                        } else {
-                            const formatMap: Record<string, string> = { pdf: 'pdf', csv: 'csv', txt: 'txt', md: 'md', html: 'html', doc: 'doc', docx: 'docx', xls: 'xls', xlsx: 'xlsx' };
-                            const docFormat = formatMap[ext] || 'txt';
-                            const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
-                            const bytes = await obj.Body?.transformToByteArray();
-                            if (bytes) {
-                                userContentBlocks.push({
-                                    document: { name: `file_${Date.now()}`, format: docFormat, source: { bytes } }
-                                });
-                            }
-                        }
-
-                        if (!['mp4', 'mov', 'webm'].includes(ext)) {
-                             const mimeMap: Record<string, string> = {
-                                pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain', md: 'text/plain', html: 'text/html',
-                                png: 'image/png', jpeg: 'image/jpeg', jpg: 'image/jpeg', webp: 'image/webp'
-                            };
-                            
-                            const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
-                            const bytes = await obj.Body?.transformToByteArray();
-                            if (bytes) {
-                                agentFiles.push({
-                                    name: s3Key.split('/').pop() || `file_${Date.now()}`,
-                                    source: {
-                                        sourceType: 'BYTE_CONTENT',
-                                        byteContent: {
-                                            mediaType: mimeMap[ext] || 'text/plain',
-                                            data: bytes
-                                        }
-                                    },
-                                    useCase: 'CHAT'
-                                });
-                            }
-                        }
-                    } catch (fetchErr) {
-                        console.error(`Failed to process attachment ${s3Key}:`, fetchErr);
-                    }
-                }
-            }
-            cleanPromptText = userMessage.replace(/<vanguard_system_context>[\s\S]*?<\/vanguard_system_context>/, '').trim();
-        }
-
-        if (cleanPromptText) {
-            userContentBlocks.push({ text: cleanPromptText });
-        }
-
-
-        // ================================================
-        // Managed Agent (Supervisor & Collaborator Agents)
-        // ================================================
-        if (profile.role === 'SUPERVISOR' && profile.awsAgentId && profile.awsAliasId) {
-            try {
-                const safeSessionId = cognitoUserId.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50) + "-session";
-                const dynamicPrompt = profile.systemPrompt || "You are an enterprise supervisor agent.";
-                
-                const invokeAgentRes = await bedrockAgentRuntime.send(new InvokeAgentCommand({
-                    agentId: profile.awsAgentId,
-                    agentAliasId: profile.awsAliasId,
-                    sessionId: safeSessionId,
-                    inputText: cleanPromptText || "Analyze attached files.",
-                    enableTrace: false,
-                    sessionState: {
-                        sessionAttributes: {
-                            userId: cognitoUserId,
-                            terminalId: args.sessionId || safeSessionId,
-                            terminalTitle: profile.title || 'Managed Agent Session',
-                            contextProfileName: profile.name || 'Supervisor Agent',
-                            contextProfileId: profile.id,
-                        },
-                        promptSessionAttributes: {
-                            "dynamicSystemPrompt": dynamicPrompt
-                        },
-                        ...(agentFiles.length > 0 ? { files: agentFiles } : {})
-                    }
-                }));
-
-                let agentResponse = "";
-                let streamCost = minimumCreditsNeeded;
-                for await (const streamEvent of invokeAgentRes.completion || []) {
-                    if (streamEvent.chunk?.bytes) {
-                        agentResponse += new TextDecoder("utf-8").decode(streamEvent.chunk.bytes);
-
-                        const currentOutputTokens = Math.ceil(agentResponse.length / 4);
-                        streamCost = (estimatedInputTokens + currentOutputTokens) * multiplier;
-                        if (streamCost >= computeCredits) {
-                            agentResponse += "\n\n[SYSTEM: EXECUTION HALTED - COMPUTE CREDITS EXHAUSTED. PLEASE TOP UP TO CONTINUE.]";
-                            break; 
-                        }
-                    }
-                }
-
-                const authRegex = /<vanguard_auth_request>(.*?)<\/vanguard_auth_request>/g;
-                let match;
-                while ((match = authRegex.exec(agentResponse)) !== null) {
-                    requestedCredentials.push(match[1].toLowerCase().trim());
-                }
-                
-                const cleanResponse = agentResponse.replace(authRegex, '').trim();
-                const outputTokens = Math.ceil(cleanResponse.length / 4);
-                const llmCost = Math.ceil((estimatedInputTokens + outputTokens) * multiplier);
-                
-                if (llmCost > 0) {
-                    await recordUsageTransaction(cognitoUserId, llmCost, {
-                        sessionId: args.sessionId || safeSessionId,
-                        sessionTitle: profile.title || 'Managed Agent Session',
-                        actionType: 'LLM_INFERENCE', 
-                        modelId: targetModelId,
-                        inputTokens: estimatedInputTokens,
-                        outputTokens: outputTokens
-                    });
-                }
-
-                return JSON.stringify({ 
-                    answer: cleanResponse, 
-                    citations: [], 
-                    requestedCredentials: requestedCredentials, 
-                    tokenUsage: { inputTokens: estimatedInputTokens, outputTokens } 
-                });
-
-            } catch (err: any) {
-                return JSON.stringify({ error: `Managed Agent Execution Failed: ${err.message}` });
-            }
-        }
-
-        // ================================================
-        // Standard Agent (Workflow Routing + Native Tools)
-        // ================================================
-        let systemPrompt = profile.systemPrompt || "You are a helpful AI assistant.";
-        systemPrompt += `\n\n[CRITICAL ROUTING DIRECTIVE]: You act as an intelligent workflow coordinator. Evaluate if an automation workflow (wf_) can fulfill the user's overarching intent first before cascading down to Native Tools. 
-        Note that workflow descriptions contain a [Priority: X/10] indicator; if multiple workflows are relevant, heavily favor the one with the highest user-specified priority.`;
-
-        const llmTemperature = profile.temperature !== undefined && profile.temperature !== null ? profile.temperature : 0.7;
-
-        // RAG EXECUTION
-        if (profile.vectorCollectionId) {
-            try {
-                const retrieveResponse = await bedrockAgentRuntime.send(new RetrieveCommand({
-                    knowledgeBaseId: profile.vectorCollectionId,
-                    retrievalQuery: { text: cleanPromptText },
-                    retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 5 } }
-                }));
-                const ragChunks = retrieveResponse.retrievalResults?.map(r => r.content?.text).filter(Boolean) || [];
-                if (ragChunks.length > 0) {
-                    systemPrompt += `\n\n### ENTERPRISE KNOWLEDGE BASE CONTEXT ###\n`;
-                    ragChunks.forEach((chunk, idx) => systemPrompt += `\n[Reference ${idx + 1}]:\n${chunk}\n`);
-                    citations.push({ type: 'document', uri: `Knowledge Base Retrieval (${ragChunks.length} chunks)` });
-                }
-            } catch (kbError) { console.error("Knowledge Base retrieval failed.", kbError); }
-        }
-
-        const userQueryVector = await getEmbedding(cleanPromptText);
-
-        const assignedWorkflows = await getAssignedWorkflows(profile.id);
-        let relevantWorkflows = assignedWorkflows;
-
-        if (assignedWorkflows.length > 0 && userQueryVector.length > 0) {
-            const scoredWorkflows = await Promise.all(
-                assignedWorkflows.map(async (wf) => {
-                    let v = workflowEmbeddingCache[wf.id];
-                    if (!v) { 
-                        v = await getEmbedding(`${wf.name}: ${wf.description || ''}`); 
-                        if (v.length > 0) setBoundedCache(workflowEmbeddingCache, wf.id, v); 
-                    }
-                    return { wf, similarity: cosineSimilarity(userQueryVector, v) };
-                })
-            );
-            scoredWorkflows.sort((a, b) => b.similarity - a.similarity);
-            relevantWorkflows = scoredWorkflows.filter(item => item.similarity >= 0.25).slice(0, 3).map(item => item.wf);
-        }
-
-        const workflowTools = relevantWorkflows.map(wf => ({
-            toolSpec: { name: sanitizeToolName(`wf_${wf.id}`), description: wf.description || '', inputSchema: { json: buildJsonSchemaFromParams(wf.inputParameters) } }
-        }));
-
-        const allowedNativeTools = NATIVE_TOOLS_REGISTRY.filter(tool => {
-            if (tool.toolSpec.name === 'mito_mcp_agent' && !profile.enableMitoMcp) return false;
-            if (tool.toolSpec.name === 'apotheosis_mcp_agent' && !profile.enableApotheosisMcp) return false;
-            if (tool.toolSpec.name === 'byo_mcp_agent') {
-                if (!profile.customMcpUrl || profile.customMcpUrl.trim() === '' || !isValidUrl(profile.customMcpUrl)) { return false;}
-            }
-            return true;
-        });
-
-        let relevantNativeTools = allowedNativeTools;
-        if (userQueryVector.length > 0) {
-            const scoredNativeTools = await Promise.all(
-                allowedNativeTools.map(async (tool) => {
-                    let v = nativeToolEmbeddingCache[tool.toolSpec.name];
-                    if (!v) { 
-                        v = await getEmbedding(`${tool.toolSpec.name}: ${tool.toolSpec.description}`); 
-                        if (v.length > 0) setBoundedCache(nativeToolEmbeddingCache, tool.toolSpec.name, v); 
-                    }
-                    return { tool, similarity: cosineSimilarity(userQueryVector, v) };
-                })
-            );
-            scoredNativeTools.sort((a, b) => b.similarity - a.similarity);
-            relevantNativeTools = scoredNativeTools.filter(item => item.similarity >= 0.20).slice(0, 6).map(item => item.tool);
-        }
-
-        const allTools = [...workflowTools, ...CORE_SYSTEM_TOOLS, ...relevantNativeTools];
-        const toolConfig = allTools.length > 0 ? { tools: allTools as any[] } : undefined;
-        const messages = [...history, { role: "user", content: userContentBlocks }];
-
-        let totalInboundTokens = 0; 
-        let totalOutboundTokens = 0; 
-        let flatToolCredits = 0;
-        const safeMaxTokens = Math.max(256, Math.min(4096, Math.floor((computeCredits - (estimatedInputTokens * multiplier)) / multiplier)));
-
-        let converseResponse = await bedrockRuntime.send(new ConverseCommand({
-            modelId: targetModelId, 
-            messages: messages, 
-            system: [{ text: systemPrompt }], 
-            toolConfig: toolConfig,
-            inferenceConfig: { 
-                temperature: llmTemperature,
-                maxTokens: safeMaxTokens
+        const messageId = `msg_usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        await dynamodb.send(new PutCommand({
+            TableName: TERMINAL_MESSAGES_TABLE,
+            Item: {
+                id: messageId,
+                terminalId: terminalId,
+                role: 'USER',
+                content: userMessage,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             }
         }));
 
-        totalInboundTokens += converseResponse.usage?.inputTokens || 0;
-        totalOutboundTokens += converseResponse.usage?.outputTokens || 0;
+        await lambdaClient.send(new InvokeCommand({
+            FunctionName: WORKER_FUNCTION,
+            InvocationType: 'Event', 
+            Payload: Buffer.from(JSON.stringify({
+                profileId,
+                prompt: userMessage,
+                cognitoUserId,
+                sessionId,
+                terminalId,
+                ephemeralSecretsJson: args.ephemeralSecretsJson,
+                chatHistory: args.chatHistory,
+                userProfile: userRes.Item 
+            }))
+        }));
 
-        let loopCount = 0;
-        const MAX_TOOL_LOOPS = 5;
-
-        while (loopCount < MAX_TOOL_LOOPS) {
-            const outputMessage = converseResponse.output?.message;
-            const toolUseBlocks = outputMessage?.content?.filter(block => block.toolUse) || [];
-
-            if (toolUseBlocks.length === 0) break;
-
-            messages.push(outputMessage!);
-            const toolResults = [];
-
-            for (const block of toolUseBlocks) {
-                const toolUse = block.toolUse!;
-                if (!toolUse.name || !toolUse.toolUseId) continue;
-                
-                const toolInput: any = toolUse.input || {};
-                let executionResult: any;
-
-                if (MULTIMODAL_TOOL_FLAT_COSTS[toolUse.name]) {
-                    flatToolCredits += MULTIMODAL_TOOL_FLAT_COSTS[toolUse.name];
-                }
-
-                if (toolUse.name === 'request_secure_credentials') {
-                    requestedCredentials.push(toolInput.serviceName?.toLowerCase());
-                    executionResult = { status: "Success. The frontend is displaying a secure credential prompt. Tell the user you are waiting for them." };
-                }
-                
-                else if (TOOL_EXECUTORS[toolUse.name]) {
-                    try {
-                        const context = {
-                            toolInput,
-                            ephemeralSecrets,
-                            profile,
-                            cognitoUserId,
-                            sessionId: args.sessionId || `session-${Date.now()}`,
-                            citations,
-                            clients: { 
-                                s3: s3Client, 
-                                polly: pollyClient, 
-                                bedrockRuntime: bedrockRuntime,
-                                dynamodb: dynamodb,        
-                                lambda: lambdaClient      
-                            },
-                            env: process.env as Record<string, string>
-                        };
-                        
-                        executionResult = await TOOL_EXECUTORS[toolUse.name](context);
-                        if (executionResult?.additionalCreditsUsed) {
-                            flatToolCredits += executionResult.additionalCreditsUsed;
-                        }
-                    } catch (err: any) {
-                        executionResult = { error: `Tool Execution Error: ${err.message}` };
-                    }
-                } 
-
-                else if (toolUse.name.startsWith('wf_')) {
-                    const matchedWf = assignedWorkflows.find(wf => sanitizeToolName(`wf_${wf.id}`) === toolUse.name);
-                    executionResult = matchedWf ? await invokeWebhookRouter(matchedWf.id, toolInput) : { error: "Workflow not found." };
-                } 
-                else if (profile.customMcpUrl) {
-                    executionResult = await executeMcpTool(profile.customMcpUrl, toolUse.name, toolInput);
-                }
-
-                toolResults.push({ 
-                    toolResult: { 
-                        toolUseId: toolUse.toolUseId, 
-                        content: [{ text: JSON.stringify(executionResult) }], 
-                        status: executionResult?.error ? "error" : "success" 
-                    } 
-                });
-            }
-
-            messages.push({ role: "user", content: toolResults });
-            
-            converseResponse = await bedrockRuntime.send(new ConverseCommand({ 
-                modelId: targetModelId, 
-                messages: messages, 
-                system: [{ text: systemPrompt }],
-                toolConfig: toolConfig,
-                inferenceConfig: { temperature: llmTemperature }
-            }));
-
-            totalInboundTokens += converseResponse.usage?.inputTokens || 0;
-            totalOutboundTokens += converseResponse.usage?.outputTokens || 0;
-            loopCount++;
-        }
-
-        const responseText = converseResponse.output?.message?.content?.[0]?.text || "No response generated.";
-        const totalDeduction = Math.ceil((totalInboundTokens + totalOutboundTokens) * multiplier) + flatToolCredits;
-
-        if (totalDeduction > 0) {
-            await recordUsageTransaction(cognitoUserId, totalDeduction, {
-                sessionId: args.sessionId || 'unknown-session',
-                sessionTitle: profile.title,
-                actionType: 'LLM_INFERENCE', 
-                modelId: targetModelId,
-                inputTokens: totalInboundTokens,
-                outputTokens: totalOutboundTokens
-            });
-        }
-  
         return JSON.stringify({ 
-            answer: responseText,          
-            citations: citations,          
-            requestedCredentials: requestedCredentials, 
-            tokenUsage: { inputTokens: totalInboundTokens, outputTokens: totalOutboundTokens }
+            status: "PROCESSING", 
+            answer: "", 
+            citations: [], 
+            requestedCredentials: [] 
         });
 
     } catch (error: any) {
-        return JSON.stringify({ error: error.message || "An unexpected error occurred." });
+        console.error("Fast-ACK Ingestion Error:", error);
+        return JSON.stringify({ error: `System Failure: ${error.message}` });
     }
 };
-
-async function getEmbedding(text: string): Promise<number[]> { 
-    try { 
-        const res = await bedrockRuntime.send(new InvokeModelCommand({ 
-            modelId: "amazon.titan-embed-text-v2:0", 
-            contentType: "application/json", 
-            accept: "application/json", 
-            body: JSON.stringify({ inputText: text, dimensions: 1024, normalize: true }) 
-        })); 
-        return JSON.parse(new TextDecoder().decode(res.body)).embedding || []; 
-    } catch { 
-        return []; 
-    } 
-}
-
-function cosineSimilarity(a: number[], b: number[]): number { 
-    if (!a.length || !b.length || a.length !== b.length) return 0; 
-    let d = 0; 
-    for (let i = 0; i < a.length; i++) d += a[i] * b[i]; 
-    return d; 
-}
-
-async function invokeWebhookRouter(id: string, payload: any) { 
-    try { 
-        const res = await lambdaClient.send(new InvokeCommand({ 
-            FunctionName: WEBHOOK_ROUTER_ARN, 
-            Payload: Buffer.from(JSON.stringify({ parameters: [{ name: 'workflowId', value: id }, { name: 'payloadJson', value: JSON.stringify(payload) }] })) 
-        })); 
-        const out = JSON.parse(Buffer.from(res.Payload!).toString()); 
-        return out?.response?.functionResponse?.responseBody?.TEXT?.body ? JSON.parse(out.response.functionResponse.responseBody.TEXT.body) : out; 
-    } catch (err: any) { 
-        return { error: err.message }; 
-    } 
-}
-
-async function getAssignedWorkflows(pid: string) { 
-    const m = await dynamodb.send(new QueryCommand({ 
-        TableName: PROFILE_WORKFLOWS_TABLE, 
-        IndexName: 'byProfile', 
-        KeyConditionExpression: 'contextProfileId = :pid', 
-        ExpressionAttributeValues: { ':pid': pid } 
-    })); 
-    const wfs = []; 
-    for (const wId of (m.Items?.map(i => i.contextWorkflowId) || [])) { 
-        const r = await dynamodb.send(new GetCommand({ TableName: WORKFLOWS_TABLE, Key: { id: wId } })); 
-        if (r.Item && !r.Item.archived) wfs.push(r.Item); 
-    } 
-    return wfs; 
-}
-
-async function executeMcpTool(url: string, name: string, args: any) {
-    const mockContext: any = {
-        toolInput: { action: 'CALL_TOOL', mcpToolName: name, mcpArguments: args },
-        profile: { customMcpUrl: url }
-    };
-    return await executeBYOMCP(mockContext);
-}
-
-function mapToBedrockType(t?: string): string { 
-    switch (t?.toLowerCase()) { 
-        case 'number': 
-        case 'float': return 'number'; 
-        case 'boolean': return 'boolean'; 
-        case 'array': return 'array'; 
-        case 'object': return 'object'; 
-        default: return 'string'; 
-    } 
-}
-
-function buildJsonSchemaFromParams(params?: any[]) { 
-    if (!params || !params.length) return { type: "object", properties: {} }; 
-    const props: any = {}; 
-    const req: string[] = []; 
-    params.forEach(p => { 
-        props[p.variable] = { type: mapToBedrockType(p.type), description: p.variable }; 
-        if (p.isRequired) req.push(p.variable); 
-    }); 
-    return { type: "object", properties: props, required: req.length ? req : undefined }; 
-}
-
-function sanitizeToolName(n: string): string { 
-    return n.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 64); 
-}
-
-async function recordUsageTransaction(
-    userId: string, 
-    cost: number, 
-    telemetry: {
-        sessionId: string,
-        sessionTitle?: string,
-        actionType: 'LLM_INFERENCE' | 'TOOL_EXECUTION',
-        modelId?: string,
-        toolName?: string,
-        inputTokens?: number,
-        outputTokens?: number
-    }
-) {
-    if (cost <= 0) return;
-
-    const recordId = `usg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const now = new Date().toISOString();
-
-    try {
-        await dynamodb.send(new TransactWriteCommand({
-            TransactItems: [
-                {
-                    Update: {
-                        TableName: USER_PROFILES_TABLE!,
-                        Key: { cognitoUserId: userId },
-                        UpdateExpression: "SET computeCredits = computeCredits - :cost",
-                        ExpressionAttributeValues: { ":cost": cost }
-                    }
-                },
-                {
-                    Put: {
-                        TableName: USAGE_RECORDS_TABLE!, 
-                        Item: {
-                            id: recordId,
-                            userId: userId,
-                            sessionId: telemetry.sessionId,
-                            sessionTitle: telemetry.sessionTitle || 'Terminal Session',
-                            actionType: telemetry.actionType,
-                            modelId: telemetry.modelId || 'N/A',
-                            toolName: telemetry.toolName || 'N/A',
-                            creditsUsed: cost,
-                            inputTokens: telemetry.inputTokens || 0,
-                            outputTokens: telemetry.outputTokens || 0,
-                            createdAt: now
-                        }
-                    }
-                }
-            ]
-        }));
-    } catch (err) {
-        console.error(`CRITICAL: Transaction failed for user ${userId}. Attempting direct credit deduction fallback.`, err);
-        try {
-            await dynamodb.send(new UpdateCommand({
-                TableName: USER_PROFILES_TABLE!,
-                Key: { cognitoUserId: userId },
-                UpdateExpression: "SET computeCredits = computeCredits - :cost",
-                ExpressionAttributeValues: { ":cost": cost }
-            }));
-        } catch (fallbackErr) {
-            console.error(`FATAL: Fallback credit deduction failed for user ${userId}:`, fallbackErr);
-        }
-    }
-}

@@ -86,6 +86,21 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
               (a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
             );
             setMessages(chronologyLog);
+
+            if (chronologyLog.length > 0) {
+              const lastMsg = chronologyLog[chronologyLog.length - 1];
+              if (lastMsg.role === 'USER') {
+                setIsAiTyping(true);
+              } else {
+                setIsAiTyping(false);
+                if (lastMsg.role === 'ASSISTANT' && lastMsg.content) {
+                  const authMatch = lastMsg.content.match(/<vanguard_auth_request>(.*?)<\/vanguard_auth_request>/);
+                  if (authMatch) {
+                    setActiveAuthPrompt(authMatch[1]);
+                  }
+                }
+              }
+            }
           },
           error: (err: any) => console.error("Error observing messages:", err)
         });
@@ -171,15 +186,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         }
       }
 
-      const { data: committedUserMsg, errors: userMsgErrors } = await client.models.TerminalMessage.create({
-        role: 'USER',
-        content: queryText,
-        terminalId: session.id
-      });
-      
-      if (userMsgErrors) throw new Error(userMsgErrors[0].message);
-      if (!committedUserMsg) throw new Error("Failed to commit user message");
-
       const activeProfile = session.contextProfile;
       const targetModelIdentifier = activeProfile?.foundationModel?.apiIdentifier || "us.amazon.nova-pro-v1:0";
 
@@ -199,50 +205,16 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       });
 
       const transactionPayload = JSON.parse(response.data as string);
-      const outputText = transactionPayload.answer || transactionPayload.error || "No response generated.";
-      
-      const authMatch = outputText.match(/<vanguard_auth_request>(.*?)<\/vanguard_auth_request>/);
-      
-      if (authMatch) {
-        setActiveAuthPrompt(authMatch[1]);
-      } else if (transactionPayload.requestedCredentials && transactionPayload.requestedCredentials.length > 0) {
-        setActiveAuthPrompt(transactionPayload.requestedCredentials[0]);
-      } else {
-        setActiveAuthPrompt(null);
-      }
 
-      const generatedChips = transactionPayload.citations?.map((source: { type: string, uri: string }) => {
-        if (source.type === 'media') return `📸 Media Reference: ${source.uri.split('/').pop()}`;
-        if (source.type === 'asset') return `🎥 Asset Generated: ${source.uri}`;
-        return `📄 Text Vector Document`;
-      }) || [];
-
-      const { data: committedAiMsg, errors: aiMsgErrors } = await client.models.TerminalMessage.create({
-        role: 'ASSISTANT',
-        content: outputText,
-        contextSources: generatedChips,
-        terminalId: session.id
-      });
-      
-      if (aiMsgErrors) throw new Error(aiMsgErrors[0].message);
-      if (!committedAiMsg) throw new Error("Failed to commit AI message");
-
-      const inboundTokens = transactionPayload.tokenUsage?.inputTokens || 0;
-      const outboundTokens = transactionPayload.tokenUsage?.outputTokens || 0;
-      const aggregatedCost = inboundTokens + outboundTokens;
-
-      if (aggregatedCost > 0) {
-        const incrementedSessionTotal = (session.totalTokensUsed || 0) + aggregatedCost;
-        await client.models.ConsoleTerminal.update({
-          id: session.id,
-          totalTokensUsed: incrementedSessionTotal
-        });
-        setSession((prev: DeepTerminalSession | null) => prev ? ({ ...prev, totalTokensUsed: incrementedSessionTotal }) as any : null);
+      if (transactionPayload.error) {
+        console.error("Fast-ACK Ingestion returned error:", transactionPayload.error);
+        setIsAiTyping(false);
       }
 
     } catch (err) {
       console.error("Relay framework dropped socket connection during model invocation:", err);
       setIsUploading(false);
+      setIsAiTyping(false);
       
       setMessages((prev) => [...prev, {
         id: 'runtime-err-' + Date.now(),
@@ -252,8 +224,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       } as Schema['TerminalMessage']['type']]);
-    } finally {
-      setIsAiTyping(false);
     }
   };
 
@@ -616,7 +586,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem', flexShrink: 0 }}>
           
-          {/* File Staging Area */}
           {selectedFiles.length > 0 && (
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
               {selectedFiles.map((file, idx) => (
@@ -760,7 +729,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
             </button>
             <button
               type="button"
-              onClick={() => console.log('View Agent Activity Clicked')} // Placeholder action
+              onClick={() => console.log('View Agent Activity Clicked')}
               title="Review Agent Activity"
               onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
               onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}

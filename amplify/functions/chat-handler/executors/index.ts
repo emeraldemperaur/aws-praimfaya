@@ -23,9 +23,11 @@ import { executeLumaVideoPresentation } from './presentation-tools';
 import { executePowerPointGenerator } from './powerpoint-tools';
 import { executeShopifyAdminAgent } from './shopify-admin-tools';
 import { executeETradeFinancial } from './etrade-tools';
+import { schedule_future_task } from './scheduler-tools';
 
 
 export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
+    "schedule_future_task": schedule_future_task,
     'generate_audio': executeAudioGenerator,
     'generate_image': (ctx) => executeImageGenerator({ ...ctx, toolName: 'generate_image' }),
     'generate_enterprise_image': (ctx) => executeImageGenerator({ ...ctx, toolName: 'generate_enterprise_image' }),

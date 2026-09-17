@@ -135,6 +135,14 @@ Follow these instructions strictly to fulfill the user's intent.`;
             functionSchema: {
               functions: [
                 {
+                  name: "schedule_future_task",
+                  description: "Schedules a task to be executed at a specific time in the future.",
+                  parameters: {
+                    "taskDescription": { type: "string", description: "Detailed prompt for the future task.", required: true },
+                    "scheduledTimeIso": { type: "string", description: "UTC future time (yyyy-mm-ddThh:mm:ss).", required: true }
+                  }
+                },
+                {
                   name: "generate_image",
                   description: "Generates high-fidelity images using Stability AI SD3.5 Large.",
                   parameters: { "prompt": { type: "string", description: "Detailed visual description of the image to generate.", required: true } }

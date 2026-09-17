@@ -8,6 +8,7 @@ import { agentProvisioner } from './functions/agent-provisioner/resource';
 import { webhookRouter } from './functions/webhook-router/resource';
 import { agentReaper } from './functions/agent-smith/resource';
 import { chatHandler } from './functions/chat-handler/resource';
+import { agentWorker } from './functions/agent-worker/resource'; 
 
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
@@ -50,6 +51,7 @@ const backend = defineBackend({
   webhookRouter,
   agentReaper,
   chatHandler,
+  agentWorker,
   createCheckoutSession,
   grantPromoCredits,
   stripeWebhook,
@@ -76,6 +78,7 @@ const userProfilesTable = backend.data.resources.tables["UserProfile"];
 const ragArtifactsTable = backend.data.resources.tables["RAGArtifact"];
 const usageRecordsTable = backend.data.resources.tables["UsageRecord"];
 const foundationModelsTable = backend.data.resources.tables["FoundationModel"];
+const terminalMessagesTable = backend.data.resources.tables["TerminalMessage"];
 
 // Serverless Lambdas
 const processVectorLambda = backend.processVector.resources.lambda as lambda.Function;
@@ -84,6 +87,7 @@ const provisionerLambda = backend.agentProvisioner.resources.lambda as lambda.Fu
 const routerLambda = backend.webhookRouter.resources.lambda as lambda.Function;
 const reaperLambda = backend.agentReaper.resources.lambda as lambda.Function;
 const chatLambda = backend.chatHandler.resources.lambda as lambda.Function;
+const workerLambda = backend.agentWorker.resources.lambda as lambda.Function;
 const mediaLambda = backend.multimediaExecutor.resources.lambda as lambda.Function;
 const checkoutLambda = backend.createCheckoutSession.resources.lambda as lambda.Function;
 const webhookLambda = backend.stripeWebhook.resources.lambda as lambda.Function;
@@ -166,7 +170,6 @@ const bedrockKbPolicy = new iam.Policy(customStack, 'BedrockKBPolicy', {
 });
 bedrockKbRole.attachInlinePolicy(bedrockKbPolicy);
 
-// Knowledge Base Configurations
 const titanKb = new bedrock.CfnKnowledgeBase(customStack, 'TitanTextKB', {
   name: 'TitanTextKB',
   roleArn: bedrockKbRole.roleArn,
@@ -278,9 +281,6 @@ syncKbLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableN
 userProfilesTable.grantReadWriteData(syncKbLambda);
 usageRecordsTable.grantReadWriteData(syncKbLambda);
 
-// ==============================================================================
-// CRITICAL FIX: Bind EventBridge Rules & Outputs dynamically to the 'data' Stack
-// ==============================================================================
 
 const bedrockEventRule = new events.Rule(cdk.Stack.of(statusLambda), 'BedrockIngestionStatusRule', {
   eventPattern: {
@@ -341,9 +341,6 @@ new cdk.CfnOutput(cdk.Stack.of(webhookLambda), 'StripeWebhookUrl', {
   description: 'Copy this URL and paste it into the Stripe Webhook Dashboard',
 });
 
-// ==============================================================================
-// Continue standard Lambda routing mapping below
-// ==============================================================================
 
 provisionerLambda.addEventSource(new DynamoEventSource(profilesTable, {
   startingPosition: lambda.StartingPosition.LATEST,
@@ -392,7 +389,60 @@ routerLambda.addPermission('AllowBedrockInvoke', {
   action: 'lambda:InvokeFunction',
 });
 
-// Chat Lambda & Vector Tools Configuration
+chatLambda.addEnvironment('AGENT_WORKER_FUNCTION_NAME', workerLambda.functionName);
+chatLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+chatLambda.addEnvironment('TERMINAL_MESSAGES_TABLE_NAME', terminalMessagesTable.tableName);
+workerLambda.grantInvoke(chatLambda);
+terminalMessagesTable.grantReadWriteData(chatLambda);
+
+workerLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
+workerLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
+workerLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
+workerLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn);
+workerLambda.addEnvironment('YARDI_MCP_URL', process.env.YARDI_MCP_URL || 'https://virtuoso.yardi.com/mcp');
+workerLambda.addEnvironment('MITO_MCP_URL', process.env.MITO_MCP_URL || 'http://mito-ui.com/mcp');
+workerLambda.addEnvironment('APOTHEOSIS_MCP_URL', process.env.APOTHEOSIS_MCP_URL || 'https://apotheosis-ux.com/mcp');
+workerLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+workerLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
+workerLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
+workerLambda.addEnvironment('TERMINAL_MESSAGES_TABLE_NAME', terminalMessagesTable.tableName);
+workerLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
+workerLambda.addEnvironment('TITAN_TEXT_KB_ID', titanKb.ref);
+workerLambda.addEnvironment('VECTOR_COLLECTIONS_BUCKET_NAME', backend.vectorCollectionsS3.resources.bucket.bucketName);
+
+backend.vectorCollectionsS3.resources.bucket.grantReadWrite(workerLambda);
+profilesTable.grantReadData(workerLambda);
+workflowsTable.grantReadData(workerLambda);
+profileWorkflowsTable.grantReadData(workerLambda);
+userProfilesTable.grantReadWriteData(workerLambda);
+ragArtifactsTable.grantReadWriteData(workerLambda);
+usageRecordsTable.grantReadWriteData(workerLambda);
+terminalMessagesTable.grantReadWriteData(workerLambda);
+multimodalBucket.grantReadWrite(workerLambda);
+routerLambda.grantInvoke(workerLambda);
+
+workerLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream', 'bedrock:StartAsyncInvoke', 'bedrock:Retrieve', 'polly:SynthesizeSpeech', 'bedrock:InvokeAgent'],
+  resources: ['*']
+}));
+
+const schedulerRole = new iam.Role(customStack, 'AgentSchedulerRole', {
+  assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
+});
+workerLambda.grantInvoke(schedulerRole);
+
+workerLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['scheduler:CreateSchedule'],
+  resources: ['*'], 
+}));
+workerLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['iam:PassRole'],
+  resources: [schedulerRole.roleArn],
+}));
+
+workerLambda.addEnvironment('SCHEDULER_ROLE_ARN', schedulerRole.roleArn);
+workerLambda.addEnvironment('AGENT_WORKER_FUNCTION_ARN', workerLambda.functionArn);
+
 chatLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName);
 chatLambda.addEnvironment('WORKFLOWS_TABLE_NAME', workflowsTable.tableName);
 chatLambda.addEnvironment('PROFILE_WORKFLOWS_TABLE_NAME', profileWorkflowsTable.tableName);
@@ -400,15 +450,12 @@ chatLambda.addEnvironment('WEBHOOK_ROUTER_LAMBDA_ARN', routerLambda.functionArn)
 chatLambda.addEnvironment('YARDI_MCP_URL', process.env.YARDI_MCP_URL || 'https://virtuoso.yardi.com/mcp');
 chatLambda.addEnvironment('MITO_MCP_URL', process.env.MITO_MCP_URL || 'http://mito-ui.com/mcp');
 chatLambda.addEnvironment('APOTHEOSIS_MCP_URL', process.env.APOTHEOSIS_MCP_URL || 'https://apotheosis-ux.com/mcp');
-chatLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 chatLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
 chatLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
 chatLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
 chatLambda.addEnvironment('TITAN_TEXT_KB_ID', titanKb.ref);
 chatLambda.addEnvironment('VECTOR_COLLECTIONS_BUCKET_NAME', backend.vectorCollectionsS3.resources.bucket.bucketName);
 backend.vectorCollectionsS3.resources.bucket.grantReadWrite(chatLambda);
-
-
 profilesTable.grantReadData(chatLambda);
 workflowsTable.grantReadData(chatLambda);
 profileWorkflowsTable.grantReadData(chatLambda);
@@ -417,7 +464,6 @@ ragArtifactsTable.grantReadWriteData(chatLambda);
 usageRecordsTable.grantReadWriteData(chatLambda);
 multimodalBucket.grantReadWrite(chatLambda);
 routerLambda.grantInvoke(chatLambda);
-
 chatLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream', 'bedrock:StartAsyncInvoke', 'bedrock:Retrieve', 'polly:SynthesizeSpeech'],
   resources: ['*']
@@ -432,24 +478,42 @@ const dagValidatorLambda = new lambda.Function(customStack, 'DagValidatorFunctio
 });
 
 chatLambda.addEnvironment('PYTHON_VALIDATOR_LAMBDA_ARN', dagValidatorLambda.functionArn);
+workerLambda.addEnvironment('PYTHON_VALIDATOR_LAMBDA_ARN', dagValidatorLambda.functionArn);
 dagValidatorLambda.grantInvoke(chatLambda);
-chatLambda.addEnvironment('AIRFLOW_DAGS_BUCKET', airflowDagsBucket.bucketName);
-airflowDagsBucket.grantWrite(chatLambda);
+dagValidatorLambda.grantInvoke(workerLambda);
 
-// Multimedia Executor Configuration
+chatLambda.addEnvironment('AIRFLOW_DAGS_BUCKET', airflowDagsBucket.bucketName);
+workerLambda.addEnvironment('AIRFLOW_DAGS_BUCKET', airflowDagsBucket.bucketName);
+airflowDagsBucket.grantWrite(chatLambda);
+airflowDagsBucket.grantWrite(workerLambda);
+
 mediaLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
 mediaLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
 mediaLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 mediaLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
+mediaLambda.addEnvironment('PROFILES_TABLE_NAME', profilesTable.tableName); // PROFILES TABLE ADDED
+mediaLambda.addEnvironment('SCHEDULER_ROLE_ARN', schedulerRole.roleArn);
+mediaLambda.addEnvironment('AGENT_WORKER_FUNCTION_ARN', workerLambda.functionArn);
 
 multimodalBucket.grantReadWrite(mediaLambda);
 ragArtifactsTable.grantReadWriteData(mediaLambda);
 userProfilesTable.grantReadWriteData(mediaLambda);
 usageRecordsTable.grantReadWriteData(mediaLambda);
+profilesTable.grantReadData(mediaLambda); // PERMISSION ADDED
 
 mediaLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel', 'bedrock:StartAsyncInvoke', 'polly:SynthesizeSpeech'],
   resources: ['*']
+}));
+
+mediaLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['scheduler:CreateSchedule'],
+  resources: ['*'], 
+}));
+
+mediaLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['iam:PassRole'],
+  resources: [schedulerRole.roleArn],
 }));
 
 mediaLambda.addPermission('AllowBedrockAgentInvoke', {
@@ -462,7 +526,7 @@ pollBedrockLambda.addToRolePolicy(new iam.PolicyStatement({
   resources: ['*']
 }));
 
-// Billing Configuration
+// BILLING CONFIGURATION
 checkoutLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || 'price_1UB4nDI2Coxc9y6EopiOCY2v');
 checkoutLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS');
 checkoutLambda.addEnvironment('TOP_UP_PRICE_ID', process.env.TOP_UP_PRICE_ID || 'price_1UB56mI2Coxc9y6Ejo4sGyve');
@@ -484,7 +548,7 @@ promoLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableNa
 userProfilesTable.grantReadWriteData(promoLambda);
 usageRecordsTable.grantReadWriteData(promoLambda);
 
-// Voice Agent Infrastructure
+// VOICE AGENT INFRASTRUCTURE
 const voiceAgentTable = new dynamodb.Table(customStack, 'VoiceAgentCallLogs', {
   partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -494,10 +558,15 @@ const voiceAgentTable = new dynamodb.Table(customStack, 'VoiceAgentCallLogs', {
 lexFulfillmentLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
 postCallAnalysisLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
 chatLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
+workerLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
 
 chatLambda.addEnvironment('CONNECT_INSTANCE_ID', connectInstanceId);
 chatLambda.addEnvironment('CONNECT_CONTACT_FLOW_ID', connectContactFlowId);
 chatLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', connectSourcePhone);
+workerLambda.addEnvironment('CONNECT_INSTANCE_ID', connectInstanceId);
+workerLambda.addEnvironment('CONNECT_CONTACT_FLOW_ID', connectContactFlowId);
+workerLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', connectSourcePhone);
+
 postCallAnalysisLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 postCallAnalysisLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
 mediaLambda.addEnvironment('VOICE_AGENT_TRACKING_TABLE', voiceAgentTable.tableName);
@@ -508,6 +577,7 @@ mediaLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', connectSourcePhone);
 voiceAgentTable.grantReadWriteData(lexFulfillmentLambda);
 voiceAgentTable.grantReadWriteData(postCallAnalysisLambda);
 voiceAgentTable.grantReadWriteData(chatLambda);
+voiceAgentTable.grantReadWriteData(workerLambda);
 voiceAgentTable.grantReadWriteData(mediaLambda);
 userProfilesTable.grantReadWriteData(postCallAnalysisLambda);
 usageRecordsTable.grantReadWriteData(postCallAnalysisLambda);
@@ -529,6 +599,7 @@ const connectPolicy = new iam.PolicyStatement({
 });
 
 chatLambda.addToRolePolicy(connectPolicy);
+workerLambda.addToRolePolicy(connectPolicy);
 mediaLambda.addToRolePolicy(connectPolicy);
 
 lexFulfillmentLambda.addPermission('LexInvokePermission', {

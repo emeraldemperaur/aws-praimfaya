@@ -15,6 +15,22 @@ export const CORE_SYSTEM_TOOLS = [
 
 
 export const NATIVE_TOOLS_REGISTRY = [
+    {
+        toolSpec: {
+            name: "schedule_future_task",
+            description: "Schedules a task to be executed by the agent at a specific time in the future. Use this when the user asks to wait, delay, or perform an action at a later date/time.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        taskDescription: { type: "string", description: "A highly detailed prompt instructing the agent on exactly what to do when it wakes up." },
+                        scheduledTimeIso: { type: "string", description: "The exact UTC future time to wake up in ISO 8601 format without milliseconds or Z (e.g., 2026-09-17T09:00:00)." }
+                    },
+                    required: ["taskDescription", "scheduledTimeIso"]
+                }
+            }
+        }
+    },
     // --- Multimodal & Asset Renders ---
     { 
         toolSpec: { 

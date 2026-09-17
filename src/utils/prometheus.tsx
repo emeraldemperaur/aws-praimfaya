@@ -598,7 +598,7 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
                 userPrompt: "Fetch real-time quotes for '{{ticker_symbol_e.g._NVDA}}' using GET_QUOTE. Compare current market price against target limit price ${{target_price}}. If current market price is within {{price_buffer_pct_e.g._2}}% of the target, execute PREVIEW_ORDER for a LIMIT {{action_BUY_or_SELL}} order of {{quantity}} shares at ${{target_price}} on account '{{account_id_key}}'."
             }
         ],
-        modelAvailability: "STANDARD_ONLY",
+        modelAvailability: "ALL_AGENTS",
         costImpact: "HIGH_COMPUTE"
     },
     {
