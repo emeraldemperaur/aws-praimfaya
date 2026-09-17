@@ -50,6 +50,7 @@ const backend = defineBackend({
 const customStack = cdk.Stack.of(backend.chatHandler.resources.lambda);
 
 const isProd = cdk.Stage.of(customStack)?.stageName === 'prod';
+const envName = cdk.Stage.of(customStack)?.stageName || 'sandbox';
 const connectInstanceId = process.env.CONNECT_INSTANCE_ID || '';
 const connectContactFlowId = process.env.CONNECT_CONTACT_FLOW_ID || '';
 const connectSourcePhone = process.env.CONNECT_SOURCE_PHONE_NUMBER || '';
@@ -167,7 +168,7 @@ bedrockKbRole.attachInlinePolicy(bedrockKbPolicy);
 
 // Knowledge Base Configurations
 const titanKb = new bedrock.CfnKnowledgeBase(customStack, 'TitanTextKB', {
-  name: 'TitanTextKB', roleArn: bedrockKbRole.roleArn,
+  name: `TitanTextKB-${envName}`, roleArn: bedrockKbRole.roleArn,
   knowledgeBaseConfiguration: { type: 'VECTOR', vectorKnowledgeBaseConfiguration: { embeddingModelArn: `arn:aws:bedrock:${customStack.region}::foundation-model/amazon.titan-embed-text-v2:0` } },
   storageConfiguration: { type: 'S3_VECTORS', s3VectorsConfiguration: { vectorBucketArn: vectorBucket.attrVectorBucketArn, indexName: titanIndex.indexName!, indexArn: titanIndex.attrIndexArn } }
 });
@@ -175,7 +176,7 @@ titanKb.node.addDependency(titanIndex);
 titanKb.node.addDependency(bedrockKbPolicy);
 
 new bedrock.CfnDataSource(customStack, 'TitanTextDataSource', {
-  knowledgeBaseId: titanKb.ref, name: 'TitanTextDataSource',
+  knowledgeBaseId: titanKb.ref, name: `TitanTextDataSource-${envName}`,
   dataSourceConfiguration: { type: 'S3', s3Configuration: { bucketArn: backend.vectorCollectionsS3.resources.bucket.bucketArn, inclusionPrefixes: ['vector-collections/text/'] } },
   vectorIngestionConfiguration: { chunkingConfiguration: { chunkingStrategy: 'HIERARCHICAL', hierarchicalChunkingConfiguration: { levelConfigurations: [{ maxTokens: 1500 }, { maxTokens: 300 }], overlapTokens: 60 } } }
 });
@@ -184,7 +185,7 @@ const novaKbCr = new cr.AwsCustomResource(customStack, 'NovaMediaKBCR', {
   onCreate: {
     service: 'BedrockAgent', action: 'CreateKnowledgeBaseCommand',
     parameters: {
-      name: 'NovaMediaKB', roleArn: bedrockKbRole.roleArn,
+      name: `NovaMediaKB-${envName}`, roleArn: bedrockKbRole.roleArn,
       knowledgeBaseConfiguration: { type: 'VECTOR', vectorKnowledgeBaseConfiguration: { embeddingModelArn: `arn:aws:bedrock:${customStack.region}::foundation-model/amazon.nova-2-multimodal-embeddings-v1:0`, supplementalDataStorageConfiguration: { storageLocations: [{ type: 'S3', s3Location: { uri: `s3://${multimodalBucket.bucketName}/` } }] } } },
       storageConfiguration: { type: 'S3_VECTORS', s3VectorsConfiguration: { vectorBucketArn: vectorBucket.attrVectorBucketArn, indexName: novaIndex.indexName!, indexArn: novaIndex.attrIndexArn } }
     },
@@ -201,7 +202,7 @@ novaKbCr.node.addDependency(multimodalBucket);
 novaKbCr.node.addDependency(bedrockKbPolicy);
 
 new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
-  knowledgeBaseId: novaKbCr.getResponseField('knowledgeBase.knowledgeBaseId'), name: 'NovaMediaDataSource',
+  knowledgeBaseId: novaKbCr.getResponseField('knowledgeBase.knowledgeBaseId'), name: `NovaMediaDataSource-${envName}`,
   dataSourceConfiguration: { type: 'S3', s3Configuration: { bucketArn: backend.vectorCollectionsS3.resources.bucket.bucketArn, inclusionPrefixes: ['vector-collections/media/'] } }
 });
 
