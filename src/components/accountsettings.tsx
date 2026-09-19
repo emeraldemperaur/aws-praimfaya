@@ -371,7 +371,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
                             <div className="as-toggle-row">
                                 <div>
                                     <span className="as-toggle-label">Enable Nocturnal Agents</span>
-                                    <span className="as-toggle-sub" style={{ fontFamily: 'Google Sans Code' }}>Allow supervisor agents to execute workflows off-hours.</span>
+                                    <span className="as-toggle-sub" style={{ fontFamily: 'Google Sans Code' }}>Allow agents to execute tools or workflows off-hours.</span>
                                 </div>
                                 <label className="as-switch">
                                     <input type="checkbox" checked={profile.nocturnalAgents} onChange={e => setProfile({...profile, nocturnalAgents: e.target.checked})} />

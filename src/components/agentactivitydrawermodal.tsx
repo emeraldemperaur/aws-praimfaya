@@ -1,0 +1,207 @@
+import React, { useEffect, useState } from 'react';
+import { generateClient } from 'aws-amplify/data';
+import type { Schema } from '../../amplify/data/resource';
+
+const client = generateClient<Schema>();
+
+interface AgentActivityDrawerModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  darkMode: boolean;
+  session: any;
+}
+
+export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> = ({ isOpen, onClose, darkMode, session }) => {
+  const [activities, setActivities] = useState<Schema['AgentActivity']['type'][]>([]);
+  const [isDeusExMachinaEnabled, setIsDeusExMachinaEnabled] = useState(session?.deusExMachina || false);
+  const [isKilling, setIsKilling] = useState(false);
+
+  useEffect(() => {
+    setIsDeusExMachinaEnabled(session?.deusExMachina || false);
+  }, [session?.deusExMachina]);
+
+  useEffect(() => {
+    if (!isOpen || !session?.id) return;
+
+    const sub = client.models.AgentActivity.observeQuery({
+      filter: { terminalId: { eq: session.id } }
+    }).subscribe({
+      next: (data) => {
+        const sorted = [...data.items].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setActivities(sorted);
+      },
+      error: (err) => console.error("Error observing activities:", err)
+    });
+
+    return () => sub.unsubscribe();
+  }, [isOpen, session?.id]);
+
+  const handleToggleDeusExMachina = async () => {
+    if (!session?.id) return;
+    const newState = !isDeusExMachinaEnabled;
+    setIsDeusExMachinaEnabled(newState);
+    try {
+      await client.models.ConsoleTerminal.update({
+        id: session.id,
+        deusExMachina: newState
+      });
+    } catch (err) {
+      console.error("Failed to update Deus Ex Machina state", err);
+      setIsDeusExMachinaEnabled(!newState); 
+    }
+  };
+
+  const handleKillSwitch = async () => {
+    if (!session?.id || !window.confirm("Are you sure you want to terminate all ongoing agent operations for this session?")) return;
+    setIsKilling(true);
+    try {
+      await client.models.ConsoleTerminal.update({
+        id: session.id,
+        status: 'ARCHIVED' 
+      });
+      await client.models.AgentActivity.create({
+        terminalId: session.id,
+        userId: session.userId,
+        lifecycleState: 'FAILED',
+        toolName: 'system_kill_switch',
+        thoughtLog: 'User initiated emergency halt. All operations terminated.',
+        durationMs: 0
+      });
+      onClose();
+    } catch (err) {
+      console.error("Failed to kill agent activity", err);
+    } finally {
+      setIsKilling(false);
+    }
+  };
+
+  const getStateBadge = (state: string | null | undefined) => {
+    switch (state) {
+      case 'RUNNING': return <span style={{ color: '#3b82f6', fontWeight: 600 }}>🟢 Running</span>;
+      case 'SLEEPING': return <span style={{ color: '#eab308', fontWeight: 600 }}>🟡 Sleeping</span>;
+      case 'BLOCKED': return <span style={{ color: '#f97316', fontWeight: 600 }}>🟠 Blocked (Awaiting Approval)</span>;
+      case 'FAILED': return <span style={{ color: '#ef4444', fontWeight: 600 }}>🔴 Failed</span>;
+      case 'COMPLETED': return <span style={{ color: '#10b981', fontWeight: 600 }}>🔵 Completed</span>;
+      default: return <span style={{ color: '#9ca3af', fontWeight: 600 }}>⚪ Unknown</span>;
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 999 }}></div>
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0, width: '480px', maxWidth: '100%',
+        backgroundColor: darkMode ? '#111827' : '#ffffff', borderLeft: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+        zIndex: 1000, display: 'flex', flexDirection: 'column',
+        boxShadow: '-4px 0 15px rgba(0,0,0,0.1)', fontFamily: 'Google Sans Code, monospace'
+      }}>
+        {/* Header */}
+        <div style={{ padding: '1.5rem', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+            <div>
+              <h2 style={{ margin: '0 0 0.25rem 0', color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem', fontFamily: 'Bodoni Moda Variable, serif' }}>Agent Command Center</h2>
+              <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Session: {session?.id?.split('-')[0]}</span>
+            </div>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontSize: '1.25rem' }}><i className="bx bx-x"></i></button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '1rem', borderRadius: '8px', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <strong style={{ display: 'block', fontSize: '0.85rem', color: darkMode ? '#f9fafb' : '#111827' }}>Deus Ex Machina (HITL)</strong>
+                <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Require human approval for critical tool executions.</span>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input type="checkbox" checked={isDeusExMachinaEnabled} onChange={handleToggleDeusExMachina} style={{ width: '2.5rem', height: '1.25rem', cursor: 'pointer', accentColor: '#10b981' }} />
+              </label>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '1rem' }}>
+              <div>
+                <strong style={{ display: 'block', fontSize: '0.85rem', color: darkMode ? '#fca5a5' : '#ef4444' }}>Emergency Kill Switch</strong>
+                <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Instantly halt all background and scheduled processes.</span>
+              </div>
+              <button 
+                onClick={handleKillSwitch}
+                disabled={isKilling || session?.status === 'ARCHIVED'}
+                style={{
+                  padding: '0.4rem 1rem', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px',
+                  fontSize: '0.75rem', fontWeight: 600, cursor: (isKilling || session?.status === 'ARCHIVED') ? 'not-allowed' : 'pointer',
+                  opacity: (isKilling || session?.status === 'ARCHIVED') ? 0.5 : 1
+                }}
+              >
+                {isKilling ? 'Halting...' : 'Halt Agent'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <h3 style={{ margin: 0, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: darkMode ? '#d1d5db' : '#4b5563' }}>Live Telemetry Log</h3>
+          
+          {activities.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem 0', color: darkMode ? '#6b7280' : '#9ca3af', fontSize: '0.85rem' }}>
+              No background activity recorded yet.
+            </div>
+          ) : (
+            activities.map((act) => (
+              <div key={act.id} style={{
+                backgroundColor: darkMode ? '#1f2937' : '#ffffff',
+                border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                borderRadius: '8px', padding: '1rem'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                  <div style={{ fontSize: '0.75rem' }}>{getStateBadge(act.lifecycleState)}</div>
+                  <div style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
+                    {new Date(act.createdAt).toLocaleTimeString()}
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '0.85rem', color: darkMode ? '#f9fafb' : '#111827', marginBottom: '0.75rem', fontWeight: 600 }}>
+                  <i className="fa-solid fa-wrench" style={{ marginRight: '0.5rem', color: '#6366f1' }}></i>
+                  {act.toolName || 'Reasoning Engine'}
+                </div>
+
+                <div style={{
+                  backgroundColor: darkMode ? '#111827' : '#f3f4f6', padding: '0.75rem', borderRadius: '4px',
+                  fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  maxHeight: '150px', overflowY: 'auto'
+                }}>
+                  {act.thoughtLog || 'Executing parameters...'}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '0.75rem' }}>
+                  <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
+                    <i className="fa-solid fa-microchip" style={{ marginRight: '0.25rem' }}></i> {act.modelId?.split('/')[1] || 'us.amazon.nova-pro-v1:0'}
+                  </span>
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }} title="Input Tokens">
+                      <i className="fa-solid fa-arrow-right-to-bracket" style={{ marginRight: '0.25rem' }}></i> {act.inputTokens?.toLocaleString() || 0}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }} title="Output Tokens">
+                      <i className="fa-solid fa-arrow-right-from-bracket" style={{ marginRight: '0.25rem' }}></i> {act.outputTokens?.toLocaleString() || 0}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }} title="Execution Duration">
+                      <i className="fa-solid fa-stopwatch" style={{ marginRight: '0.25rem' }}></i> {(act.durationMs || 0) / 1000}s
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }} title="Compute Credits">
+                      <i className="fa-solid fa-coins" style={{ marginRight: '0.25rem' }}></i> {act.computeCredits || 0}
+                    </span>
+                  </div>
+                </div>
+                
+                {act.scheduledFor && (
+                  <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#eab308', backgroundColor: darkMode ? '#422006' : '#fef08a', padding: '0.5rem', borderRadius: '4px' }}>
+                    <i className="fa-solid fa-clock" style={{ marginRight: '0.25rem' }}></i> Scheduled to resume: {new Date(act.scheduledFor).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </>
+  );
+};

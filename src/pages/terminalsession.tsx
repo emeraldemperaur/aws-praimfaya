@@ -16,9 +16,10 @@ import { CubeIcon } from '../components/cube';
 import { ArtifactsDrawerModal } from '../components/artifactsdrawermodal';
 import { VectorDrawerModal } from '../components/vectordrawermodal';
 import { WorkflowsDrawerModal } from '../components/workflowsdrawermodal';
+import { AgentActivityDrawerModal } from '../components/agentactivitydrawermodal'; 
 
 export const terminalSelectionSet = [
-  'id', 'title', 'totalTokensUsed', 'status', 'contextProfileId', 'userId',
+  'id', 'title', 'totalTokensUsed', 'status', 'contextProfileId', 'userId', 'deusExMachina',
   'contextProfile.*', 'contextProfile.foundationModel.*', 'contextProfile.supervisor.*',
   'contextProfile.collaborators.*', 'contextProfile.vectorCollection.*', 'contextProfile.vectorCollection.documents.*', 'contextProfile.workflows.*', 'contextProfile.workflows.contextWorkflow.*'
 ] as const;
@@ -49,6 +50,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const [isArtifactsModalOpen, setIsArtifactsModalOpen] = useState(false);
   const [isVectorModalOpen, setIsVectorModalOpen] = useState(false);
   const [isWorkflowsModalOpen, setIsWorkflowsModalOpen] = useState(false);
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -62,6 +64,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
     let messagesSub: any;
     let artifactsSub: any;
+    let sessionSub: any;
 
     const hydrateTerminalSession = async () => {
       try {
@@ -77,6 +80,15 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         }
 
         setSession(currentTerminal);
+
+        sessionSub = client.models.ConsoleTerminal.observeQuery({
+          filter: { id: { eq: sessionId } },
+          selectionSet: terminalSelectionSet as any
+        }).subscribe({
+          next: (data: any) => {
+            if (data.items.length > 0) setSession(data.items[0]);
+          }
+        });
 
         messagesSub = client.models.TerminalMessage.observeQuery({
           filter: { terminalId: { eq: sessionId } }
@@ -96,7 +108,10 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 if (lastMsg.role === 'ASSISTANT' && lastMsg.content) {
                   const authMatch = lastMsg.content.match(/<vanguard_auth_request>(.*?)<\/vanguard_auth_request>/);
                   if (authMatch) {
-                    setActiveAuthPrompt(authMatch[1]);
+                    const requestedSecret = authMatch[1];
+                    if (!requestedSecret.startsWith('approved_')) {
+                      setActiveAuthPrompt(requestedSecret);
+                    }
                   }
                 }
               }
@@ -130,6 +145,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     return () => {
       if (messagesSub) messagesSub.unsubscribe();
       if (artifactsSub) artifactsSub.unsubscribe();
+      if (sessionSub) sessionSub.unsubscribe();
     };
   }, [sessionId, navigate]);
 
@@ -411,6 +427,11 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
             const initials = getInitials(avatarName);
             
             let displayContent = msg.content || "";
+            
+            const isHitlRequest = displayContent.includes('<vanguard_auth_request>approved_');
+            const authMatch = displayContent.match(/<vanguard_auth_request>approved_(.*?)<\/vanguard_auth_request>/);
+            const toolToApprove = authMatch ? authMatch[1] : null;
+
             displayContent = displayContent.replace(/<vanguard_auth_request>.*?<\/vanguard_auth_request>/g, '').trim();
 
             const jotformRegex = /https:\/\/form\.jotform\.com\/(\d+)/g;
@@ -499,6 +520,28 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                     >
                       {displayContent}
                     </ReactMarkdown>
+
+                    {isHitlRequest && !isUser && toolToApprove && (
+                      <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', paddingTop: '1rem', borderTop: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}` }}>
+                        <button 
+                          onClick={() => {
+                            const newSecrets = { ...ephemeralSecrets, [`approved_${toolToApprove}`]: true };
+                            setEphemeralSecrets(newSecrets);
+                            handleExecutePrompt(undefined, `[HUMAN AUTHORIZATION GRANTED] Please proceed with executing the tool: ${toolToApprove}.`);
+                          }}
+                          style={{ padding: '0.5rem 1rem', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                          <i className="fa-solid fa-check"></i> Approve Execution
+                        </button>
+                        
+                        <button 
+                          onClick={() => {
+                            handleExecutePrompt(undefined, `[HUMAN AUTHORIZATION DENIED] Do not execute ${toolToApprove}. Please suggest an alternative or abort.`);
+                          }}
+                          style={{ padding: '0.5rem 1rem', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                          <i className="fa-solid fa-xmark"></i> Reject
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
                   {uniqueFormIds.map(formId => (
@@ -629,17 +672,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 backdropFilter: 'blur(10px)',
                 WebkitBackdropFilter: 'blur(10px)',
                 border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
-                borderRadius: '8px',
-                color: darkMode ? '#f9fafb' : '#111827',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.85rem',
-                width: '32px',
-                height: '32px',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-                transition: 'all 0.2s ease',
+                borderRadius: '8px', color: darkMode ? '#f9fafb' : '#111827', cursor: 'pointer', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', width: '32px', height: '32px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.05)', transition: 'all 0.2s ease',
               }}
             >
               <i className="fa-solid fa-paperclip"></i>
@@ -656,17 +691,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 backdropFilter: 'blur(10px)',
                 WebkitBackdropFilter: 'blur(10px)',
                 border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
-                borderRadius: '8px',
-                color: darkMode ? '#f9fafb' : '#111827',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.85rem',
-                width: '32px',
-                height: '32px',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-                transition: 'all 0.2s ease',
+                borderRadius: '8px', color: darkMode ? '#f9fafb' : '#111827', cursor: 'pointer', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', width: '32px', height: '32px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.05)', transition: 'all 0.2s ease',
               }}
             >
               <i className="fa-solid fa-cubes"></i>
@@ -683,17 +710,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 backdropFilter: 'blur(10px)',
                 WebkitBackdropFilter: 'blur(10px)',
                 border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
-                borderRadius: '8px',
-                color: darkMode ? '#f9fafb' : '#111827',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.85rem',
-                width: '32px',
-                height: '32px',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-                transition: 'all 0.2s ease',
+                borderRadius: '8px', color: darkMode ? '#f9fafb' : '#111827', cursor: 'pointer', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', width: '32px', height: '32px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.05)', transition: 'all 0.2s ease',
               }}
             >
               <svg  xmlns="http://www.w3.org/2000/svg" width="24" height="24"  
@@ -712,24 +731,16 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 backdropFilter: 'blur(10px)',
                 WebkitBackdropFilter: 'blur(10px)',
                 border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
-                borderRadius: '8px',
-                color: darkMode ? '#f9fafb' : '#111827',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.85rem',
-                width: '32px',
-                height: '32px',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-                transition: 'all 0.2s ease',
+                borderRadius: '8px', color: darkMode ? '#f9fafb' : '#111827', cursor: 'pointer', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', width: '32px', height: '32px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.05)', transition: 'all 0.2s ease',
               }}
             >
               <i className="fa-solid fa-circle-nodes"></i>
             </button>
             <button
               type="button"
-              onClick={() => console.log('View Agent Activity Clicked')}
+              onClick={() => setIsActivityModalOpen(true)}
               title="Review Agent Activity"
               onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
               onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
@@ -738,17 +749,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 backdropFilter: 'blur(10px)',
                 WebkitBackdropFilter: 'blur(10px)',
                 border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
-                borderRadius: '8px',
-                color: darkMode ? '#f9fafb' : '#111827',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.85rem',
-                width: '32px',
-                height: '32px',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-                transition: 'all 0.2s ease',
+                borderRadius: '8px', color: darkMode ? '#f9fafb' : '#111827', cursor: 'pointer', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', width: '32px', height: '32px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.05)', transition: 'all 0.2s ease',
               }}
             >
               <i className="fa-solid fa-microchip"></i>
@@ -809,23 +812,22 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       <ArtifactsDrawerModal 
         isOpen={isArtifactsModalOpen} 
         onClose={() => setIsArtifactsModalOpen(false)} 
-        darkMode={darkMode} 
-        session={session} 
-        artifacts={artifacts} 
+        darkMode={darkMode} session={session} artifacts={artifacts} 
       />
-      
       <VectorDrawerModal 
         isOpen={isVectorModalOpen} 
         onClose={() => setIsVectorModalOpen(false)} 
-        darkMode={darkMode} 
-        session={session} 
+        darkMode={darkMode} session={session} 
       />
-      
       <WorkflowsDrawerModal 
         isOpen={isWorkflowsModalOpen} 
         onClose={() => setIsWorkflowsModalOpen(false)} 
-        darkMode={darkMode} 
-        session={session} 
+        darkMode={darkMode} session={session} 
+      />
+      <AgentActivityDrawerModal
+        isOpen={isActivityModalOpen}
+        onClose={() => setIsActivityModalOpen(false)}
+        darkMode={darkMode} session={session}
       />
     </>
   );

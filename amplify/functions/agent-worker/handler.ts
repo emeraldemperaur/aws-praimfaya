@@ -27,6 +27,8 @@ const USER_PROFILES_TABLE = process.env.USER_PROFILES_TABLE_NAME!;
 const USAGE_RECORDS_TABLE = process.env.USAGE_RECORDS_TABLE_NAME!;
 const VECTOR_COLLECTIONS_BUCKET = process.env.VECTOR_COLLECTIONS_BUCKET_NAME!;
 const TERMINAL_MESSAGES_TABLE = process.env.TERMINAL_MESSAGES_TABLE_NAME!;
+const CONSOLE_TERMINAL_TABLE = process.env.CONSOLE_TERMINAL_TABLE_NAME || 'ConsoleTerminal';
+const AGENT_ACTIVITY_TABLE = process.env.AGENT_ACTIVITY_TABLE_NAME || 'AgentActivity';
 
 const MAX_CACHE_ENTRIES = 500;
 const workflowEmbeddingCache: Record<string, number[]> = {};
@@ -54,23 +56,15 @@ const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = {
 
 const NOCTURNAL_TOOLS = ['schedule_future_task'];
 
+const IMPACTFUL_TOOLS: string[] = [
+    
+];
+
 const INTERNAL_AWS_TOOLS = [
-    'schedule_future_task',
-    'generate_audio',
-    'generate_image',
-    'generate_enterprise_image',
-    'edit_image',
-    'generate_luma_video',
-    'generate_luma_video_presentation',
-    'generate_document_agent',
-    'generate_powerpoint_agent',
-    'read_user_attachment',
-    'enterprise_voice_agent',
-    'execute_qa_agent_task',
-    'request_secure_credentials',
-    'mito_mcp_agent',
-    'apotheosis_mcp_agent',
-    'byo_mcp_agent'
+    'schedule_future_task', 'generate_audio', 'generate_image', 'generate_enterprise_image', 'edit_image',
+    'generate_luma_video', 'generate_luma_video_presentation', 'generate_document_agent', 'generate_powerpoint_agent',
+    'read_user_attachment', 'enterprise_voice_agent', 'execute_qa_agent_task', 'request_secure_credentials',
+    'mito_mcp_agent', 'apotheosis_mcp_agent', 'byo_mcp_agent'
 ];
 
 const safeJsonParse = (str: any, fallback: any = {}) => {
@@ -84,13 +78,25 @@ const resolveToolCredentials = (toolName: string, userIntegrations: any, ephemer
         return userIntegrations[toolName].find((c: any) => c.priority) || userIntegrations[toolName][0];
     }
     if (ephemeralSecrets[toolName]) return ephemeralSecrets[toolName];
+    if (ephemeralSecrets[`approved_${toolName}`]) return { authorized: true };
     return null;
 };
 
 export const handler = async (event: any) => {
+    const startTime = Date.now();
     try {
         const { profileId, prompt: userMessage, cognitoUserId, sessionId, terminalId, ephemeralSecretsJson, chatHistory, userProfile } = event;
+        const activeSessionId = terminalId || sessionId;
 
+        const terminalRes = await dynamodb.send(new GetCommand({ TableName: CONSOLE_TERMINAL_TABLE, Key: { id: activeSessionId } }));
+        const terminal = terminalRes.Item || {};
+
+        if (terminal.status === 'ARCHIVED' || terminal.status === 'HALTED') {
+            await logActivity(activeSessionId, cognitoUserId, 'FAILED', 'system_kill_switch', 'Execution aborted: User triggered Kill Switch from UI.', "system", startTime);
+            return { error: 'Execution Aborted by Kill Switch' };
+        }
+
+        const isDeusExMachina = terminal.deusExMachina === true;
         const ephemeralSecrets = safeJsonParse(ephemeralSecretsJson, {});
         const history = safeJsonParse(chatHistory, []);
 
@@ -117,7 +123,7 @@ export const handler = async (event: any) => {
         const minimumCreditsNeeded = estimatedInputTokens * multiplier;
 
         if (computeCredits < minimumCreditsNeeded) {
-            console.warn(`Worker halted: Insufficient credits. Need ${minimumCreditsNeeded}, have ${computeCredits}.`);
+            await logActivity(activeSessionId, cognitoUserId, 'FAILED', 'billing_enforcer', `Insufficient compute credits. Need ${minimumCreditsNeeded}, have ${computeCredits}.`, targetModelId, startTime, 0, estimatedInputTokens, 0);
             return;
         }
 
@@ -126,9 +132,6 @@ export const handler = async (event: any) => {
         const citations: any[] = []; 
         let requestedCredentials: string[] = [];
 
-        // ================================================
-        // EXTRACT S3 ATTACHMENTS FOR MULTIMODAL INFERENCE
-        // ================================================
         const userContentBlocks: any[] = [];
         let cleanPromptText = userMessage;
         const agentFiles: any[] = [];
@@ -145,50 +148,24 @@ export const handler = async (event: any) => {
                     
                     try {
                         if (['mp4', 'mov', 'webm'].includes(ext)) {
-                            userContentBlocks.push({
-                                video: {
-                                    format: ext,
-                                    source: { s3Location: { uri: `s3://${VECTOR_COLLECTIONS_BUCKET}/${s3Key}` } }
-                                }
-                            });
+                            userContentBlocks.push({ video: { format: ext, source: { s3Location: { uri: `s3://${VECTOR_COLLECTIONS_BUCKET}/${s3Key}` } } } });
                         } else if (['png', 'jpeg', 'jpg', 'gif', 'webp'].includes(ext)) {
                             const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
                             const bytes = await obj.Body?.transformToByteArray();
-                            if (bytes) {
-                                userContentBlocks.push({
-                                    image: { format: ext === 'jpg' ? 'jpeg' : ext, source: { bytes } }
-                                });
-                            }
+                            if (bytes) userContentBlocks.push({ image: { format: ext === 'jpg' ? 'jpeg' : ext, source: { bytes } } });
                         } else {
                             const formatMap: Record<string, string> = { pdf: 'pdf', csv: 'csv', txt: 'txt', md: 'md', html: 'html', doc: 'doc', docx: 'docx', xls: 'xls', xlsx: 'xlsx' };
                             const docFormat = formatMap[ext] || 'txt';
                             const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
                             const bytes = await obj.Body?.transformToByteArray();
-                            if (bytes) {
-                                userContentBlocks.push({
-                                    document: { name: `file_${Date.now()}`, format: docFormat, source: { bytes } }
-                                });
-                            }
+                            if (bytes) userContentBlocks.push({ document: { name: `file_${Date.now()}`, format: docFormat, source: { bytes } } });
                         }
 
                         if (!['mp4', 'mov', 'webm'].includes(ext)) {
-                             const mimeMap: Record<string, string> = {
-                                pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain', md: 'text/plain', html: 'text/html',
-                                png: 'image/png', jpeg: 'image/jpeg', jpg: 'image/jpeg', webp: 'image/webp'
-                            };
-                            
+                             const mimeMap: Record<string, string> = { pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain', md: 'text/plain', html: 'text/html', png: 'image/png', jpeg: 'image/jpeg', jpg: 'image/jpeg', webp: 'image/webp' };
                             const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
                             const bytes = await obj.Body?.transformToByteArray();
-                            if (bytes) {
-                                agentFiles.push({
-                                    name: s3Key.split('/').pop() || `file_${Date.now()}`,
-                                    source: {
-                                        sourceType: 'BYTE_CONTENT',
-                                        byteContent: { mediaType: mimeMap[ext] || 'text/plain', data: bytes }
-                                    },
-                                    useCase: 'CHAT'
-                                });
-                            }
+                            if (bytes) agentFiles.push({ name: s3Key.split('/').pop() || `file_${Date.now()}`, source: { sourceType: 'BYTE_CONTENT', byteContent: { mediaType: mimeMap[ext] || 'text/plain', data: bytes } }, useCase: 'CHAT' });
                         }
                     } catch (fetchErr) {
                         console.error(`Failed to process attachment ${s3Key}:`, fetchErr);
@@ -202,10 +179,6 @@ export const handler = async (event: any) => {
             userContentBlocks.push({ text: cleanPromptText });
         }
 
-
-        // ================================================
-        // Managed Agent (Supervisor & Collaborator Agents)
-        // ================================================
         if (profile.role === 'SUPERVISOR' && profile.awsAgentId && profile.awsAliasId) {
             const safeSessionId = cognitoUserId.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50) + "-session";
             let dynamicPrompt = profile.systemPrompt || "You are an enterprise supervisor agent.";
@@ -214,24 +187,14 @@ export const handler = async (event: any) => {
                 dynamicPrompt += `\n\n[SYSTEM CONSTRAINT]: You do NOT have permission to schedule tasks or run background jobs. If the user requests this, politely decline and inform them they need to enable 'Nocturnal Agents' in their account settings.`;
             }
 
+            await logActivity(activeSessionId, cognitoUserId, 'RUNNING', 'supervisor_delegation', 'Supervisor Agent initialized and streaming response...', targetModelId, startTime, 0, estimatedInputTokens, 0);
+
             const invokeAgentRes = await bedrockAgentRuntime.send(new InvokeAgentCommand({
-                agentId: profile.awsAgentId,
-                agentAliasId: profile.awsAliasId,
-                sessionId: safeSessionId,
-                inputText: cleanPromptText || "Analyze attached files.",
-                enableTrace: false,
+                agentId: profile.awsAgentId, agentAliasId: profile.awsAliasId, sessionId: safeSessionId,
+                inputText: cleanPromptText || "Analyze attached files.", enableTrace: false,
                 sessionState: {
-                    sessionAttributes: {
-                        userId: cognitoUserId,
-                        terminalId: sessionId || safeSessionId,
-                        terminalTitle: profile.title || 'Managed Agent Session',
-                        contextProfileName: profile.name || 'Supervisor Agent',
-                        contextProfileId: profile.id,
-                    },
-                    promptSessionAttributes: {
-                        dynamicSystemPrompt: dynamicPrompt,
-                        injectedIntegrations: JSON.stringify(userIntegrations)
-                    },
+                    sessionAttributes: { userId: cognitoUserId, terminalId: activeSessionId, terminalTitle: profile.title || 'Managed Agent Session', contextProfileName: profile.name || 'Supervisor Agent', contextProfileId: profile.id },
+                    promptSessionAttributes: { dynamicSystemPrompt: dynamicPrompt, injectedIntegrations: JSON.stringify(userIntegrations) },
                     ...(agentFiles.length > 0 ? { files: agentFiles } : {})
                 }
             }));
@@ -240,7 +203,6 @@ export const handler = async (event: any) => {
             for await (const streamEvent of invokeAgentRes.completion || []) {
                 if (streamEvent.chunk?.bytes) {
                     agentFinalOutput += new TextDecoder("utf-8").decode(streamEvent.chunk.bytes);
-
                     const currentOutputTokens = Math.ceil(agentFinalOutput.length / 4);
                     streamCost = (estimatedInputTokens + currentOutputTokens) * multiplier;
                     if (streamCost >= computeCredits) {
@@ -262,31 +224,23 @@ export const handler = async (event: any) => {
             
             if (llmCost > 0) {
                 await recordUsageTransaction(cognitoUserId, llmCost, {
-                    sessionId: sessionId || safeSessionId,
-                    sessionTitle: profile.title || 'Managed Agent Session',
-                    actionType: 'LLM_INFERENCE', 
-                    modelId: targetModelId,
-                    inputTokens: estimatedInputTokens,
-                    outputTokens: outputTokens
+                    sessionId: activeSessionId, sessionTitle: profile.title || 'Managed Agent Session', actionType: 'LLM_INFERENCE', 
+                    modelId: targetModelId, inputTokens: estimatedInputTokens, outputTokens: outputTokens
                 });
             }
-        }
 
-        // ================================================
-        // Standard Agent (Workflow Routing + Native Tools)
-        // ================================================
+            await logActivity(activeSessionId, cognitoUserId, 'COMPLETED', 'supervisor_delegation', 'Supervisor finished processing response.', targetModelId, startTime, llmCost, estimatedInputTokens, outputTokens);
+        }
         else {
             let systemPrompt = profile.systemPrompt || "You are a helpful AI assistant.";
-            systemPrompt += `\n\n[CRITICAL ROUTING DIRECTIVE]: You act as an intelligent workflow coordinator. Evaluate if an automation workflow (wf_) can fulfill the user's overarching intent first before cascading down to Native Tools. 
-            Note that workflow descriptions contain a [Priority: X/10] indicator; if multiple workflows are relevant, heavily favor the one with the highest user-specified priority.`;
+            systemPrompt += `\n\n[CRITICAL ROUTING DIRECTIVE]: You act as an intelligent workflow coordinator. Evaluate if an automation workflow (wf_) can fulfill the user's overarching intent first before cascading down to Native Tools. Note that workflow descriptions contain a [Priority: X/10] indicator; if multiple workflows are relevant, heavily favor the one with the highest user-specified priority.`;
 
             const llmTemperature = profile.temperature !== undefined && profile.temperature !== null ? profile.temperature : 0.7;
 
             if (profile.vectorCollectionId) {
                 try {
                     const retrieveResponse = await bedrockAgentRuntime.send(new RetrieveCommand({
-                        knowledgeBaseId: profile.vectorCollectionId,
-                        retrievalQuery: { text: cleanPromptText },
+                        knowledgeBaseId: profile.vectorCollectionId, retrievalQuery: { text: cleanPromptText },
                         retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 5 } }
                     }));
                     const ragChunks = retrieveResponse.retrievalResults?.map(r => r.content?.text).filter(Boolean) || [];
@@ -356,14 +310,8 @@ export const handler = async (event: any) => {
             const safeMaxTokens = Math.max(256, Math.min(4096, Math.floor((computeCredits - (estimatedInputTokens * multiplier)) / multiplier)));
 
             let converseResponse = await bedrockRuntime.send(new ConverseCommand({
-                modelId: targetModelId, 
-                messages: messages, 
-                system: [{ text: systemPrompt }], 
-                toolConfig: toolConfig,
-                inferenceConfig: { 
-                    temperature: llmTemperature,
-                    maxTokens: safeMaxTokens
-                }
+                modelId: targetModelId, messages: messages, system: [{ text: systemPrompt }], 
+                toolConfig: toolConfig, inferenceConfig: { temperature: llmTemperature, maxTokens: safeMaxTokens }
             }));
 
             totalInboundTokens += converseResponse.usage?.inputTokens || 0;
@@ -399,8 +347,22 @@ export const handler = async (event: any) => {
                     const toolRequiresAuth = !isWorkflow && !INTERNAL_AWS_TOOLS.includes(toolUse.name);
                     const credentials = resolveToolCredentials(toolUse.name, userIntegrations, ephemeralSecrets);
 
+                    const isImpactful = IMPACTFUL_TOOLS.includes(toolUse.name);
+
+                    if (isDeusExMachina && isImpactful && !ephemeralSecrets[`approved_${toolUse.name}`]) {
+                        const payloadPreview = JSON.stringify(toolInput);
+                        
+                        agentFinalOutput = `<vanguard_auth_request>approved_${toolUse.name}</vanguard_auth_request>\n[HITL INTERVENTION REQUIRED]: Human authorization is strictly required to execute tool: **${toolUse.name}**.\n\nProposed Action Payload:\n\`\`\`json\n${payloadPreview}\n\`\`\`\n\nPlease review the payload and approve to proceed.`;
+                        
+                        await logActivity(activeSessionId, cognitoUserId, 'BLOCKED', toolUse.name, `Awaiting Human-in-the-Loop (HITL) approval. Proposed payload: ${payloadPreview.substring(0, 100)}...`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
+                        isGoingToSleep = true;
+                        break; 
+                    }
+
                     if (toolRequiresAuth && !credentials) {
                         agentFinalOutput = `<vanguard_auth_request>${toolUse.name}</vanguard_auth_request>\nPlease provide credentials to proceed.`;
+                        await logActivity(activeSessionId, cognitoUserId, 'BLOCKED', toolUse.name, `Awaiting external API credentials to execute [${toolUse.name}].`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
+                        isGoingToSleep = true;
                         break; 
                     }
 
@@ -413,48 +375,41 @@ export const handler = async (event: any) => {
                     }
                     else if (TOOL_EXECUTORS[toolUse.name]) {
                         try {
+                            await logActivity(activeSessionId, cognitoUserId, 'RUNNING', toolUse.name, `Executing tool [${toolUse.name}] parameters: ${JSON.stringify(toolInput).substring(0, 100)}...`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
+                            
                             const context = {
-                                toolInput,
-                                credentials,
-                                ephemeralSecrets,
-                                profile,
-                                userProfile: dbUser,
-                                cognitoUserId,
-                                sessionId: sessionId || `session-${Date.now()}`,
-                                citations,
-                                clients: { 
-                                    s3: s3Client, polly: pollyClient, bedrockRuntime: bedrockRuntime,
-                                    dynamodb: dynamodb, lambda: lambdaClient      
-                                },
+                                toolInput, credentials, ephemeralSecrets, profile, userProfile: dbUser,
+                                cognitoUserId, sessionId: activeSessionId, citations,
+                                clients: { s3: s3Client, polly: pollyClient, bedrockRuntime: bedrockRuntime, dynamodb: dynamodb, lambda: lambdaClient },
                                 env: process.env as Record<string, string>
                             };
                             
                             executionResult = await TOOL_EXECUTORS[toolUse.name](context);
                             if (executionResult?.additionalCreditsUsed) flatToolCredits += executionResult.additionalCreditsUsed;
+                            
+                            await logActivity(activeSessionId, cognitoUserId, 'COMPLETED', toolUse.name, `Successfully executed [${toolUse.name}].`, targetModelId, startTime, executionResult?.additionalCreditsUsed || 0, totalInboundTokens, totalOutboundTokens);
 
                             if (executionResult && executionResult.__END_CURRENT_EXECUTION__) {
                                 isGoingToSleep = true;
                                 await dynamodb.send(new PutCommand({
                                     TableName: TERMINAL_MESSAGES_TABLE,
-                                    Item: {
-                                        id: `msg_sleep_${Date.now()}`,
-                                        terminalId: terminalId,
-                                        role: 'SYSTEM',
-                                        content: `[SYSTEM: ${executionResult.message}]`,
-                                        createdAt: new Date().toISOString()
-                                    }
+                                    Item: { id: `msg_sleep_${Date.now()}`, terminalId: activeSessionId, role: 'SYSTEM', content: `[SYSTEM: ${executionResult.message}]`, createdAt: new Date().toISOString() }
                                 }));
                                 break; 
                             }
                         } catch (err: any) {
                             executionResult = { error: `Tool Execution Error: ${err.message}` };
+                            await logActivity(activeSessionId, cognitoUserId, 'FAILED', toolUse.name, `Tool execution failed: ${err.message}`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                         }
                     } 
                     else if (isWorkflow) {
                         const matchedWf = assignedWorkflows.find(wf => sanitizeToolName(`wf_${wf.id}`) === toolUse.name);
+                        await logActivity(activeSessionId, cognitoUserId, 'RUNNING', toolUse.name, `Routing to Workflow Engine: ${matchedWf?.name || 'Unknown'}`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                         executionResult = matchedWf ? await invokeWebhookRouter(matchedWf.id, toolInput) : { error: "Workflow not found." };
+                        await logActivity(activeSessionId, cognitoUserId, 'COMPLETED', toolUse.name, `Workflow execution complete.`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                     } 
                     else if (profile.customMcpUrl) {
+                        await logActivity(activeSessionId, cognitoUserId, 'RUNNING', toolUse.name, `Calling Custom MCP Server...`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                         executionResult = await executeMcpTool(profile.customMcpUrl, toolUse.name, toolInput);
                     }
 
@@ -479,12 +434,8 @@ export const handler = async (event: any) => {
 
             if (totalDeduction > 0) {
                 await recordUsageTransaction(cognitoUserId, totalDeduction, {
-                    sessionId: sessionId,
-                    sessionTitle: profile.title,
-                    actionType: 'LLM_INFERENCE', 
-                    modelId: targetModelId,
-                    inputTokens: totalInboundTokens,
-                    outputTokens: totalOutboundTokens
+                    sessionId: activeSessionId, sessionTitle: profile.title, actionType: 'LLM_INFERENCE', 
+                    modelId: targetModelId, inputTokens: totalInboundTokens, outputTokens: totalOutboundTokens
                 });
             }
         }
@@ -495,13 +446,9 @@ export const handler = async (event: any) => {
             await dynamodb.send(new PutCommand({
                 TableName: TERMINAL_MESSAGES_TABLE,
                 Item: {
-                    id: `msg_ai_${Date.now()}`,
-                    terminalId: terminalId,
-                    role: 'ASSISTANT',
-                    content: agentFinalOutput,
-                    contextSources: citations.map(c => c.uri || c.type),
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
+                    id: `msg_ai_${Date.now()}`, terminalId: activeSessionId, role: 'ASSISTANT',
+                    content: agentFinalOutput, contextSources: citations.map(c => c.uri || c.type),
+                    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
                 }
             }));
         }
@@ -510,23 +457,33 @@ export const handler = async (event: any) => {
         console.error("Worker Execution Error:", error);
         await dynamodb.send(new PutCommand({
             TableName: process.env.TERMINAL_MESSAGES_TABLE_NAME!,
-            Item: {
-                id: `msg_err_${Date.now()}`,
-                terminalId: event.terminalId || `session-${Date.now()}`,
-                role: 'ASSISTANT',
-                content: `[SYSTEM FAILURE]: ${error.message}`,
-                createdAt: new Date().toISOString()
-            }
+            Item: { id: `msg_err_${Date.now()}`, terminalId: event.terminalId || event.sessionId || `session-${Date.now()}`, role: 'ASSISTANT', content: `[SYSTEM FAILURE]: ${error.message}`, createdAt: new Date().toISOString() }
         }));
     }
 };
 
+
+async function logActivity(
+    terminalId: string, userId: string, lifecycleState: string, toolName: string, 
+    thoughtLog: string, modelId: string, startTime: number, computeCredits: number = 0,
+    inputTokens: number = 0, outputTokens: number = 0
+) {
+    const durationMs = Date.now() - startTime;
+    try {
+        await dynamodb.send(new PutCommand({
+            TableName: AGENT_ACTIVITY_TABLE,
+            Item: {
+                id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, terminalId, userId, lifecycleState, toolName, thoughtLog, modelId, computeCredits, inputTokens, outputTokens, durationMs, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            }
+        }));
+    } catch (err) {
+        console.error("Failed to write to AgentActivity table", err);
+    }
+}
+
 async function getEmbedding(text: string): Promise<number[]> { 
     try { 
-        const res = await bedrockRuntime.send(new InvokeModelCommand({ 
-            modelId: "amazon.titan-embed-text-v2:0", contentType: "application/json", accept: "application/json", 
-            body: JSON.stringify({ inputText: text, dimensions: 1024, normalize: true }) 
-        })); 
+        const res = await bedrockRuntime.send(new InvokeModelCommand({ modelId: "amazon.titan-embed-text-v2:0", contentType: "application/json", accept: "application/json", body: JSON.stringify({ inputText: text, dimensions: 1024, normalize: true }) })); 
         return JSON.parse(new TextDecoder().decode(res.body)).embedding || []; 
     } catch { return []; } 
 }
@@ -538,20 +495,14 @@ function cosineSimilarity(a: number[], b: number[]): number {
 
 async function invokeWebhookRouter(id: string, payload: any) { 
     try { 
-        const res = await lambdaClient.send(new InvokeCommand({ 
-            FunctionName: WEBHOOK_ROUTER_ARN, 
-            Payload: Buffer.from(JSON.stringify({ parameters: [{ name: 'workflowId', value: id }, { name: 'payloadJson', value: JSON.stringify(payload) }] })) 
-        })); 
+        const res = await lambdaClient.send(new InvokeCommand({ FunctionName: WEBHOOK_ROUTER_ARN, Payload: Buffer.from(JSON.stringify({ parameters: [{ name: 'workflowId', value: id }, { name: 'payloadJson', value: JSON.stringify(payload) }] })) })); 
         const out = JSON.parse(Buffer.from(res.Payload!).toString()); 
         return out?.response?.functionResponse?.responseBody?.TEXT?.body ? JSON.parse(out.response.functionResponse.responseBody.TEXT.body) : out; 
     } catch (err: any) { return { error: err.message }; } 
 }
 
 async function getAssignedWorkflows(pid: string) { 
-    const m = await dynamodb.send(new QueryCommand({ 
-        TableName: PROFILE_WORKFLOWS_TABLE, IndexName: 'byProfile', 
-        KeyConditionExpression: 'contextProfileId = :pid', ExpressionAttributeValues: { ':pid': pid } 
-    })); 
+    const m = await dynamodb.send(new QueryCommand({ TableName: PROFILE_WORKFLOWS_TABLE, IndexName: 'byProfile', KeyConditionExpression: 'contextProfileId = :pid', ExpressionAttributeValues: { ':pid': pid } })); 
     const wfs = []; 
     for (const wId of (m.Items?.map(i => i.contextWorkflowId) || [])) { 
         const r = await dynamodb.send(new GetCommand({ TableName: WORKFLOWS_TABLE, Key: { id: wId } })); 
@@ -566,9 +517,7 @@ async function executeMcpTool(url: string, name: string, args: any) {
 }
 
 function mapToBedrockType(t?: string): string { 
-    switch (t?.toLowerCase()) { 
-        case 'number': case 'float': return 'number'; case 'boolean': return 'boolean'; case 'array': return 'array'; case 'object': return 'object'; default: return 'string'; 
-    } 
+    switch (t?.toLowerCase()) { case 'number': case 'float': return 'number'; case 'boolean': return 'boolean'; case 'array': return 'array'; case 'object': return 'object'; default: return 'string'; } 
 }
 
 function buildJsonSchemaFromParams(params?: any[]) { 
@@ -595,8 +544,6 @@ async function recordUsageTransaction(
         }));
     } catch (err) {
         console.error(`CRITICAL: Transaction failed for user ${userId}. Attempting direct credit deduction fallback.`, err);
-        try {
-            await dynamodb.send(new UpdateCommand({ TableName: USER_PROFILES_TABLE!, Key: { cognitoUserId: userId }, UpdateExpression: "SET computeCredits = computeCredits - :cost", ExpressionAttributeValues: { ":cost": cost } }));
-        } catch (fallbackErr) { console.error(`FATAL: Fallback credit deduction failed for user ${userId}:`, fallbackErr); }
+        try { await dynamodb.send(new UpdateCommand({ TableName: USER_PROFILES_TABLE!, Key: { cognitoUserId: userId }, UpdateExpression: "SET computeCredits = computeCredits - :cost", ExpressionAttributeValues: { ":cost": cost } })); } catch (fallbackErr) { console.error(`FATAL: Fallback credit deduction failed for user ${userId}:`, fallbackErr); }
     }
 }

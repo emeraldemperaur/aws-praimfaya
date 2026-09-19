@@ -65,6 +65,7 @@ const usageRecordsTable = backend.data.resources.tables["UsageRecord"];
 const foundationModelsTable = backend.data.resources.tables["FoundationModel"];
 const terminalMessagesTable = backend.data.resources.tables["TerminalMessage"];
 
+
 // Serverless Lambdas
 const processVectorLambda = backend.processVector.resources.lambda as lambda.Function;
 const statusLambda = backend.updateVectorStatus.resources.lambda as lambda.Function;
@@ -274,7 +275,9 @@ const sharedContextVars = {
   'VECTOR_COLLECTIONS_BUCKET_NAME': backend.vectorCollectionsS3.resources.bucket.bucketName,
   'CONNECT_INSTANCE_ID': connectInstanceId,
   'CONNECT_CONTACT_FLOW_ID': connectContactFlowId,
-  'CONNECT_SOURCE_PHONE_NUMBER': connectSourcePhone
+  'CONNECT_SOURCE_PHONE_NUMBER': connectSourcePhone,
+  'CONSOLE_TERMINAL_TABLE_NAME': backend.data.resources.tables["ConsoleTerminal"].tableName,
+  'AGENT_ACTIVITY_TABLE_NAME': backend.data.resources.tables["AgentActivity"].tableName,
 };
 
 Object.entries(sharedContextVars).forEach(([key, value]) => {

@@ -146,6 +146,8 @@ const schema = a.schema({
       contextProfileId: a.id(),
       contextProfile: a.belongsTo('ContextProfile', 'contextProfileId'),
       messages: a.hasMany('TerminalMessage', 'terminalId'),
+      deusExMachina: a.boolean().default(false),
+      activities: a.hasMany('AgentActivity', 'terminalId')
     })
     .authorization(headerRBAC),
 
@@ -256,6 +258,21 @@ const schema = a.schema({
       index("userId").sortKeys(["createdAt"]),
       index("sessionId").sortKeys(["createdAt"])
     ]),
+  
+  AgentActivity: a.model({
+      terminalId: a.id().required(),
+      userId: a.string(),
+      lifecycleState: a.string(),
+      toolName: a.string(),
+      computeCredits: a.float(),
+      inputTokens: a.integer(), 
+      outputTokens: a.integer(),
+      modelId: a.string(),
+      durationMs: a.integer(),
+      thoughtLog: a.string(),
+      scheduledFor: a.datetime(),
+      terminal: a.belongsTo('ConsoleTerminal', 'terminalId')
+    }).authorization(headerRBAC),
 
   createCheckoutSession: a.mutation()
     .arguments({ planTier: a.enum(['VANGUARD', 'VANGUARD_ELITE', 'TOP_UP']) })
