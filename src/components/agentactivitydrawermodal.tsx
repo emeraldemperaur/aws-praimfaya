@@ -90,6 +90,17 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
 
   return (
     <>
+      <style>
+        {`
+          .hitl-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+          .hitl-switch input { opacity: 0; width: 0; height: 0; }
+          .hitl-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: ${darkMode ? '#4b5563' : '#ccc'}; transition: .3s; border-radius: 34px; }
+          .hitl-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+          .hitl-switch input:checked + .hitl-slider { background-color: ${darkMode ? '#ffffff' : '#0B0B45'}; }
+          .hitl-switch input:checked + .hitl-slider:before { transform: translateX(20px); background-color: ${darkMode ? '#0B0B45' : '#ffffff'}; }
+        `}
+      </style>
+
       <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 999 }}></div>
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, width: '480px', maxWidth: '100%',
@@ -97,7 +108,6 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
         zIndex: 1000, display: 'flex', flexDirection: 'column',
         boxShadow: '-4px 0 15px rgba(0,0,0,0.1)', fontFamily: 'Google Sans Code, monospace'
       }}>
-        {/* Header */}
         <div style={{ padding: '1.5rem', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
             <div>
@@ -113,9 +123,16 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
                 <strong style={{ display: 'block', fontSize: '0.85rem', color: darkMode ? '#f9fafb' : '#111827' }}>Deus Ex Machina (HITL)</strong>
                 <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Require human approval for critical tool executions.</span>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                <input type="checkbox" checked={isDeusExMachinaEnabled} onChange={handleToggleDeusExMachina} style={{ width: '2.5rem', height: '1.25rem', cursor: 'pointer', accentColor: '#10b981' }} />
+              
+              <label className="hitl-switch">
+                <input 
+                  type="checkbox" 
+                  checked={isDeusExMachinaEnabled} 
+                  onChange={handleToggleDeusExMachina} 
+                />
+                <span className="hitl-slider"></span>
               </label>
+
             </div>
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '1rem' }}>
