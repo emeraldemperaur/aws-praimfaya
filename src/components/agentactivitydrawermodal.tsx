@@ -115,8 +115,9 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
         <div style={{ padding: '1.5rem', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
             <div>
-              <h2 style={{ margin: '0 0 0.25rem 0', color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem', fontFamily: 'Bodoni Moda Variable, serif' }}>Agent Command Center</h2>
-              <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Session: {session?.id?.split('-')[0]}</span>
+              <h2 style={{ margin: '0 0 0.25rem 0', color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem', fontFamily: 'Bodoni Moda Variable, serif' }}>Agent Activity Center</h2>
+              <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Soubriquet: {session?.title}</span><br/>
+              <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Session ID: {session?.id}</span>
             </div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontSize: '1.25rem' }}><i className="bx bx-x"></i></button>
           </div>
@@ -143,7 +144,7 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '1rem' }}>
               <div>
                 <strong style={{ display: 'block', fontSize: '0.85rem', color: darkMode ? '#9e0f33' : '#800020', fontFamily: 'Bodoni Moda Variable' }}>Emergency Kill Switch</strong>
-                <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Instantly halt all background and scheduled processes.</span>
+                <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Immediately halt all background and scheduled processes.</span>
               </div>
               <button 
                 onClick={handleKillSwitch}
