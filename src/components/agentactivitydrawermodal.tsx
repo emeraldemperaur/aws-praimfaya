@@ -111,7 +111,7 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
         <div style={{ padding: '1.5rem', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
             <div>
-              <h2 style={{ margin: '0 0 0.25rem 0', color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem', fontFamily: 'Bodoni Moda Variable, serif' }}>Agent Command Center</h2>
+              <h2 style={{ margin: '0 0 0.25rem 0', color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem', fontFamily: 'Bodoni Moda Variable, serif' }}>Agent Activity Center</h2>
               <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Session: {session?.id?.split('-')[0]}</span>
             </div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontSize: '1.25rem' }}><i className="bx bx-x"></i></button>
@@ -120,7 +120,7 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '1rem', borderRadius: '8px', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <strong style={{ display: 'block', fontSize: '0.85rem', color: darkMode ? '#f9fafb' : '#111827' }}>Deus Ex Machina (HITL)</strong>
+                <strong style={{ display: 'block', fontSize: '0.85rem', color: darkMode ? '#f9fafb' : '#111827', fontFamily: 'Bodoni Moda Variable' }}>Deus Ex Machina (HITL)</strong>
                 <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Require human approval for critical tool executions.</span>
               </div>
               
@@ -137,15 +137,16 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '1rem' }}>
               <div>
-                <strong style={{ display: 'block', fontSize: '0.85rem', color: darkMode ? '#fca5a5' : '#ef4444' }}>Emergency Kill Switch</strong>
+                <strong style={{ display: 'block', fontSize: '0.85rem', color: darkMode ? '#fca5a5' : '#800020', fontFamily: 'Bodoni Moda Variable' }}>Emergency Kill Switch</strong>
                 <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Instantly halt all background and scheduled processes.</span>
               </div>
               <button 
                 onClick={handleKillSwitch}
                 disabled={isKilling || session?.status === 'ARCHIVED'}
                 style={{
-                  padding: '0.4rem 1rem', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px',
-                  fontSize: '0.75rem', fontWeight: 600, cursor: (isKilling || session?.status === 'ARCHIVED') ? 'not-allowed' : 'pointer',
+                  padding: '0.4rem 1rem', backgroundColor: '#800020', color: 'white', border: 'none', borderRadius: '4px',
+                  fontSize: '0.75rem', fontWeight: 700, cursor: (isKilling || session?.status === 'ARCHIVED') ? 'not-allowed' : 'pointer',
+                  fontFamily: 'Bodoni Moda Variable', letterSpacing: '0.13rem', textTransform: 'uppercase',
                   opacity: (isKilling || session?.status === 'ARCHIVED') ? 0.5 : 1
                 }}
               >
