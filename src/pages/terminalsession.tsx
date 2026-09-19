@@ -81,13 +81,25 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
         setSession(currentTerminal);
 
-        sessionSub = client.models.ConsoleTerminal.observeQuery({
-          filter: { id: { eq: sessionId } },
-          selectionSet: terminalSelectionSet as any
+     
+        sessionSub = client.models.ConsoleTerminal.onUpdate({
+          filter: { id: { eq: sessionId } }
         }).subscribe({
-          next: (data: any) => {
-            if (data.items.length > 0) setSession(data.items[0]);
-          }
+          next: (updatedTerminal: any) => {
+            setSession((prevSession: any) => {
+              if (!prevSession) return prevSession;
+              return {
+                ...prevSession,
+                status: updatedTerminal.status ?? prevSession.status,
+                deusExMachina: updatedTerminal.deusExMachina !== undefined ? updatedTerminal.deusExMachina : prevSession.deusExMachina,
+                totalTokensUsed: updatedTerminal.totalTokensUsed ?? prevSession.totalTokensUsed,
+                title: updatedTerminal.title ?? prevSession.title,
+                // Nested relationships are safely preserved below:
+                contextProfile: prevSession.contextProfile
+              };
+            });
+          },
+          error: (err: any) => console.warn('Terminal subscription error:', err)
         });
 
         messagesSub = client.models.TerminalMessage.observeQuery({
