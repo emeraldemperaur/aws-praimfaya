@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom'; // <-- 1. ADDED IMPORT
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../amplify/data/resource';
 
@@ -88,7 +89,8 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
 
   if (!isOpen) return null;
 
-  return (
+  // 2. WRAP THE ENTIRE COMPONENT IN createPortal AND ATTACH TO document.body
+  return createPortal(
     <>
       <style>
         {`
@@ -101,22 +103,25 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
         `}
       </style>
 
-      <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 999 }}></div>
+      {/* 3. BUMPED zIndex to 9999 / 10000 to clear global navigation bars */}
+      <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 9999 }}></div>
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, width: '480px', maxWidth: '100%',
         backgroundColor: darkMode ? '#111827' : '#ffffff', borderLeft: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-        zIndex: 1000, display: 'flex', flexDirection: 'column',
+        zIndex: 10000, display: 'flex', flexDirection: 'column',
         boxShadow: '-4px 0 15px rgba(0,0,0,0.1)', fontFamily: 'Google Sans Code, monospace'
       }}>
+        {/* Header */}
         <div style={{ padding: '1.5rem', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
             <div>
-              <h2 style={{ margin: '0 0 0.25rem 0', color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem', fontFamily: 'Bodoni Moda Variable, serif' }}>Agent Activity Center</h2>
+              <h2 style={{ margin: '0 0 0.25rem 0', color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem', fontFamily: 'Bodoni Moda Variable, serif' }}>Agent Command Center</h2>
               <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Session: {session?.id?.split('-')[0]}</span>
             </div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontSize: '1.25rem' }}><i className="bx bx-x"></i></button>
           </div>
 
+          {/* Controls */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', backgroundColor: darkMode ? '#1f2937' : '#f9fafb', padding: '1rem', borderRadius: '8px', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -137,7 +142,7 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '1rem' }}>
               <div>
-                <strong style={{ display: 'block', fontSize: '0.85rem', color: darkMode ? '#fca5a5' : '#800020', fontFamily: 'Bodoni Moda Variable' }}>Emergency Kill Switch</strong>
+                <strong style={{ display: 'block', fontSize: '0.85rem', color: darkMode ? '#9e0f33' : '#800020', fontFamily: 'Bodoni Moda Variable' }}>Emergency Kill Switch</strong>
                 <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Instantly halt all background and scheduled processes.</span>
               </div>
               <button 
@@ -156,6 +161,7 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
           </div>
         </div>
 
+        {/* Activity Stream */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <h3 style={{ margin: 0, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: darkMode ? '#d1d5db' : '#4b5563' }}>Live Telemetry Log</h3>
           
@@ -220,6 +226,7 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
           )}
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 };
