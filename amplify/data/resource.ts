@@ -147,6 +147,7 @@ const schema = a.schema({
       contextProfile: a.belongsTo('ContextProfile', 'contextProfileId'),
       messages: a.hasMany('TerminalMessage', 'terminalId'),
       deusExMachina: a.boolean().default(false),
+      haltRequested: a.boolean().default(false),
       activities: a.hasMany('AgentActivity', 'terminalId')
     })
     .authorization(headerRBAC),

@@ -26,6 +26,7 @@ import SystemBootstrap from './components/systembootstrap';
 import AutomationWorkflowsUI from './pages/automationworkflows';
 import RAGArtifactsUI from './pages/ragartifacts';
 import UsageWatchtower from './pages/watchtowerdashboard';
+import AgentActivity from './pages/agentsactivity';
 
 const apiClient = generateClient<Schema>();
 
@@ -99,6 +100,9 @@ function App() {
             }/>
             <Route path='dashboard/usage-watchtower' element={
               isAuthenticated ? <UsageWatchtower darkMode={darkMode}/> : <Navigate to="/" replace />
+            }/>
+            <Route path='dashboard/agents-activity' element={
+              isAuthenticated ? <AgentActivity darkMode={darkMode}/> : <Navigate to="/" replace />
             }/>
              <Route path='dashboard/rag-artifacts' element={
               isAuthenticated ? <RAGArtifactsUI darkMode={darkMode}/> : <Navigate to="/" replace />

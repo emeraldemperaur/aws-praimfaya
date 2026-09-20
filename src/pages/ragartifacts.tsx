@@ -119,7 +119,7 @@ const RAGArtifactsUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           <h1 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '2rem' }}>
             RAG Artifacts
           </h1>
-          <p style={{ margin: 0, fontSize: '0.85rem', color: darkMode ? '#9ca3af' : '#6b7280', fontFamily: 'Bodoni Moda Variable' }}>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: darkMode ? '#9ca3af' : '#6b7280', fontFamily: 'Google Sans Code' }}>
             Generated media, documents, and assets across your Console Terminal sessions.
           </p>
         </div>
