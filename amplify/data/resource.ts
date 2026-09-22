@@ -268,12 +268,8 @@ const schema = a.schema({
       durationMs: a.integer(),
       thoughtLog: a.string(),
       scheduledFor: a.datetime(),
-      timeCreated: a.datetime(),
       terminal: a.belongsTo('ConsoleTerminal', 'terminalId')
-    }).authorization(headerRBAC)
-    .secondaryIndexes(index => [
-      index("userId").sortKeys(["timeCreated"])
-    ]),
+    }).authorization(headerRBAC),
 
   createCheckoutSession: a.mutation()
     .arguments({ planTier: a.enum(['VANGUARD', 'VANGUARD_ELITE', 'TOP_UP']) })
@@ -322,3 +318,4 @@ export const data = defineData({
     defaultAuthorizationMode: 'userPool',
   },
 });
+// CACHE BUST: 001 - Force schema recompile and VTL generation

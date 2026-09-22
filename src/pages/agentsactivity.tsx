@@ -480,7 +480,7 @@ const AgentActivity: React.FC<AgentActivityDashboardProps> = ({ darkMode = false
                     onClick={() => setKillModal({ isOpen: false, type: null })} 
                     style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05rem' }}
                  >
-                   Acknowledged
+                    Acknowledged
                  </button>
                </div>
              ) : (
@@ -489,13 +489,13 @@ const AgentActivity: React.FC<AgentActivityDashboardProps> = ({ darkMode = false
                     onClick={() => setKillModal({ isOpen: false, type: null })} 
                     style={{ background: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, color: darkMode ? '#d1d5db' : '#4b5563', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
                  >
-                   Cancel
+                    Cancel
                  </button>
                  <button 
                     onClick={killModal.type === 'GLOBAL' ? confirmGlobalKill : confirmLocalKill} 
                     style={{ background: '#800020', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, letterSpacing: '0.05rem', textTransform: 'uppercase' }}
                  >
-                   {killModal.type === 'GLOBAL' ? 'Halt All Agents' : 'Halt Agent'}
+                    {killModal.type === 'GLOBAL' ? 'Halt All Agents' : 'Halt Agent'}
                  </button>
                </div>
              )

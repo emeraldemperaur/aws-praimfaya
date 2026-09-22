@@ -502,7 +502,6 @@ async function logActivity(
                 inputTokens,
                 outputTokens,
                 durationMs,
-                timeCreated: now,
                 createdAt: now,
                 updatedAt: now,
             }

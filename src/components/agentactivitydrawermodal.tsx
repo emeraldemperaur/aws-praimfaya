@@ -32,11 +32,7 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
         }).subscribe({
         next: (data) => {
             const sorted = [...data.items]
-            .sort((a, b) => {
-                const timeB = new Date(b.timeCreated || b.createdAt || 0).getTime();
-                const timeA = new Date(a.timeCreated || a.createdAt || 0).getTime();
-                return timeB - timeA;
-            })
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .slice(0, 50); 
             setActivities(sorted);
         },
@@ -82,8 +78,7 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
         toolName: 'system_kill_switch',
         thoughtLog: 'User initiated emergency halt. Active execution cancelled.',
         modelId: session?.contextProfile?.foundationModel?.apiIdentifier || 'amazon.nova-pro-v1:0',
-        durationMs: 0,
-        timeCreated: new Date().toISOString()
+        durationMs: 0
       });
       onClose();
     } catch (err) {
