@@ -5,7 +5,6 @@ import { grantPromoCredits } from '../functions/admin-promo/resource';
 import { chatHandler } from '../functions/chat-handler/resource';
 import { syncKnowledgeBase } from '../functions/sync-kyb/resource';
 import { pollBedrock } from '../functions/poll-bedrock/resource';
-import { updateUserGroup } from '../functions/update-user-group/resource';
 
 const headerRBAC = (allow: any) => [
   allow.owner(),
@@ -317,16 +316,7 @@ const schema = a.schema({
     .handler(a.handler.function(pollBedrock))
     .authorization((allow) => [allow.authenticated()]),
 
-  updateUserGroup: a.mutation()
-    .arguments({ 
-        targetCognitoUserId: a.string().required(), 
-        groupName: a.string().required() 
-    })
-    .returns(a.boolean())
-    .authorization((allow) => [
-        allow.groups(['superadmin', 'root', 'admin']) 
-    ])
-    .handler(a.handler.function(updateUserGroup)),
+ 
 
 });
 

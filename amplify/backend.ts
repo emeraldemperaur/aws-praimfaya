@@ -36,8 +36,6 @@ import { foundationModelSeeder } from './functions/foundation-model-seeder/resou
 import { syncKnowledgeBase } from './functions/sync-kyb/resource';
 import { pollBedrock } from './functions/poll-bedrock/resource';
 
-// --- NEW IMPORT: Update User Group ---
-import { updateUserGroup } from './functions/update-user-group/resource';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -47,7 +45,6 @@ const backend = defineBackend({
   agentProvisioner, webhookRouter, agentReaper, chatHandler, agentWorker,
   createCheckoutSession, grantPromoCredits, stripeWebhook, multimediaExecutor,
   lexFulfillment, postCallAnalysis, foundationModelSeeder, syncKnowledgeBase, pollBedrock,
-  updateUserGroup // <-- Added to backend
 });
 
 // FOLD STACKS: Attach everything to the Data stack to eliminate nested stack loops
@@ -88,7 +85,6 @@ const seederLambda = backend.foundationModelSeeder.resources.lambda as lambda.Fu
 const syncKbLambda = backend.syncKnowledgeBase.resources.lambda as lambda.Function;
 const pollBedrockLambda = backend.pollBedrock.resources.lambda as lambda.Function;
 
-const updateUserGroupLambda = backend.updateUserGroup.resources.lambda as lambda.Function;
 
 const getGlobalDecoupledPolicy = () => new iam.PolicyStatement({
   actions: [
@@ -120,17 +116,6 @@ lexFulfillmentLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 postCallAnalysisLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 syncKbLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 pollBedrockLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['bedrock:GetAsyncInvoke'], resources: ['*'] }));
-
-// --- IDENTITY GROUP MANAGEMENT (IAM & ENV SECURING) ---
-updateUserGroupLambda.addEnvironment('USER_POOL_ID', backend.auth.resources.userPool.userPoolId);
-updateUserGroupLambda.addToRolePolicy(new iam.PolicyStatement({
-  actions: [
-    "cognito-idp:AdminAddUserToGroup",
-    "cognito-idp:AdminRemoveUserFromGroup",
-    "cognito-idp:AdminListGroupsForUser"
-  ],
-  resources: [backend.auth.resources.userPool.userPoolArn]
-}));
 
 
 const streamDlq = new sqs.Queue(customStack, 'DynamoStreamDLQ', {

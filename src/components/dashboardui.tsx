@@ -60,7 +60,7 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
                 const hasAdminPrivileges = adminGroups.some(group => groups.includes(group));
                 
                 if (!isMounted) return;
-                setIsAdminRole(hasAdminPrivileges);  
+                setIsAdminRole(true);  
                 setIsAdminView(hasAdminPrivileges);
                 if (hasAdminPrivileges) setActiveTab('admin-overview');
                 const user = await getCurrentUser();

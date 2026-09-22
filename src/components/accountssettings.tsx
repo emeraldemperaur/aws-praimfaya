@@ -41,7 +41,6 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
     // --- Form States for Modals ---
     const [creditAmount, setCreditAmount] = useState<number | ''>('');
     const [creditAction, setCreditAction] = useState<'CREDIT' | 'DEBIT'>('CREDIT');
-    const [roleSelection, setRoleSelection] = useState<string>('standard');
 
     // --- 1. BULLETPROOF PAGINATION & COST CONTROL ---
     const fetchUsers = async (showRefreshState = false) => {
@@ -239,22 +238,7 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
         }
     };
 
-    const submitRoleUpdate = async () => {
-        if (!modal.user) return;
-        setIsMutating(true);
-        try {
-            await client.mutations.updateUserGroup({
-                targetCognitoUserId: modal.user.cognitoUserId,
-                groupName: roleSelection
-            });
-            alert(`Successfully updated identity group to: ${roleSelection.toUpperCase()}`);
-        } catch (err) {
-            console.error("[Vanguard] Failed to update role:", err);
-            alert("Failed to update Identity Group. Ensure you have Superadmin permissions.");
-        } finally {
-            setIsMutating(false);
-        }
-    };
+   
 
     const closeModal = () => {
         setModal({ isOpen: false, type: null, user: null });
@@ -407,32 +391,7 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                             </div>
                         </div>
 
-                        <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '1.5rem' }}>
-                            <h4 style={{ margin: '0 0 1rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '1.1rem' }}>Access & Role Assignment</h4>
-                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                <select 
-                                    value={roleSelection} 
-                                    onChange={(e) => setRoleSelection(e.target.value)}
-                                    style={{ fontFamily: 'Google Sans Code', padding: '0.5rem 1rem', borderRadius: '4px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, background: darkMode ? '#1f2937' : '#fff', color: darkMode ? '#f9fafb' : '#111827', outline: 'none' }}
-                                >
-                                    <option value="standard">Standard User</option>
-                                    <option value="admin">Admin</option>
-                                    <option value="heda">HEDA / Read-Only Admin</option>
-                                    <option value="superadmin">Superadmin</option>
-                                    <option value="root">Root Authority</option>
-                                </select>
-                                <button 
-                                    onClick={submitRoleUpdate} 
-                                    disabled={isMutating}
-                                    style={{ fontFamily: 'Bodoni Moda Variable', padding: '0.5rem 1rem', background: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
-                                        color: darkMode ? '#d1d5db' : '#4b5563', borderRadius: '4px', cursor: isMutating ? 'not-allowed' : 'pointer', fontWeight: 600,
-                                        display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: isMutating ? 0.5 : 1 }}
-                                >
-                                    {isMutating ? <i className="bx bx-loader-alt bx-spin"></i> : null}
-                                    {isMutating ? 'Updating...' : 'Update Identity Group'}
-                                </button>
-                            </div>
-                        </div>
+                        
 
                         <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <h4 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '1.1rem' }}>Platform Feature Flags</h4>
