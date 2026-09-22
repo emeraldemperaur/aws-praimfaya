@@ -60,16 +60,10 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
                 const hasAdminPrivileges = adminGroups.some(group => groups.includes(group));
                 
                 if (!isMounted) return;
-                
-                // CRITICAL FIX: Removed hardcoded 'true'. Replaced with actual evaluation.
-                setIsAdminRole(true);
-                
+                setIsAdminRole(hasAdminPrivileges);  
                 setIsAdminView(hasAdminPrivileges);
                 if (hasAdminPrivileges) setActiveTab('admin-overview');
-                
                 const user = await getCurrentUser();
-                
-                // NOTE: Ensure UserProfile has a secondary index on 'cognitoUserId' in schema to prevent Table Scans
                 const { data: profiles } = await client.models.UserProfile.list({
                     filter: { cognitoUserId: { eq: user.userId } }
                 });

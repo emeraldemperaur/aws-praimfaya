@@ -274,11 +274,11 @@ const schema = a.schema({
       durationMs: a.integer(),
       thoughtLog: a.string(),
       scheduledFor: a.datetime(),
+      timeCreated: a.datetime(),
       terminal: a.belongsTo('ConsoleTerminal', 'terminalId')
     }).authorization(headerRBAC)
     .secondaryIndexes(index => [
-      // @ts-expect-error
-      index("userId").sortKeys(["createdAt"])
+      index("userId").sortKeys(["timeCreated"])
     ]),
 
   createCheckoutSession: a.mutation()

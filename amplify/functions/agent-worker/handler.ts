@@ -486,11 +486,25 @@ async function logActivity(
     inputTokens: number = 0, outputTokens: number = 0
 ) {
     const durationMs = Date.now() - startTime;
+    const now = new Date().toISOString();
     try {
         await dynamodb.send(new PutCommand({
             TableName: AGENT_ACTIVITY_TABLE,
             Item: {
-                id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, terminalId, userId, lifecycleState, toolName, thoughtLog, modelId, computeCredits, inputTokens, outputTokens, durationMs, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+                id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                terminalId,
+                userId,
+                lifecycleState,
+                toolName,
+                thoughtLog,
+                modelId,
+                computeCredits,
+                inputTokens,
+                outputTokens,
+                durationMs,
+                timeCreated: now,
+                createdAt: now,
+                updatedAt: now,
             }
         }));
     } catch (err) {

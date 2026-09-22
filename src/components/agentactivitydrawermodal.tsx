@@ -28,16 +28,20 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
     if (!isOpen || !session?.id) return;
 
     const sub = client.models.AgentActivity.observeQuery({
-      filter: { terminalId: { eq: session.id } }
-    }).subscribe({
-      next: (data) => {
-        const sorted = [...data.items]
-          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-          .slice(0, 50); 
-        setActivities(sorted);
-      },
-      error: (err) => console.error("Error observing activities:", err)
-    });
+        filter: { terminalId: { eq: session.id } }
+        }).subscribe({
+        next: (data) => {
+            const sorted = [...data.items]
+            .sort((a, b) => {
+                const timeB = new Date(b.timeCreated || b.createdAt || 0).getTime();
+                const timeA = new Date(a.timeCreated || a.createdAt || 0).getTime();
+                return timeB - timeA;
+            })
+            .slice(0, 50); 
+            setActivities(sorted);
+        },
+        error: (err) => console.error("Error observing activities:", err)
+        });
 
     return () => sub.unsubscribe();
   }, [isOpen, session?.id]);
@@ -78,7 +82,8 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
         toolName: 'system_kill_switch',
         thoughtLog: 'User initiated emergency halt. Active execution cancelled.',
         modelId: session?.contextProfile?.foundationModel?.apiIdentifier || 'amazon.nova-pro-v1:0',
-        durationMs: 0
+        durationMs: 0,
+        timeCreated: new Date().toISOString()
       });
       onClose();
     } catch (err) {
