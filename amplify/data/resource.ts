@@ -38,11 +38,6 @@ const ModelCaliber = ['FAST', 'MODERATE', 'HIGH_PERFORMANCE', 'ULTRA_PERFORMANCE
 const ModelRegion = ['DEFAULT', 'GLOBAL', 'US', 'EU', 'APAC'] as const;
 
 const schema = a.schema({
-  Todo: a
-    .model({
-      content: a.string(),
-    })
-    .authorization((allow) => [allow.owner()]),
     
   Chronos: a.query()
     .arguments({ name: a.string() })
