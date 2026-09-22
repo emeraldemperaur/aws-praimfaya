@@ -294,7 +294,6 @@ const schema = a.schema({
     .returns(a.boolean())
 
     .authorization((allow) => [
-      allow.authenticated(),
       allow.groups(['superadmin', 'admin', 'root', 'heda'])])
     .handler(a.handler.function(grantPromoCredits)),
 
