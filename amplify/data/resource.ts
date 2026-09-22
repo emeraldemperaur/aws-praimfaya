@@ -5,6 +5,7 @@ import { grantPromoCredits } from '../functions/admin-promo/resource';
 import { chatHandler } from '../functions/chat-handler/resource';
 import { syncKnowledgeBase } from '../functions/sync-kyb/resource';
 import { pollBedrock } from '../functions/poll-bedrock/resource';
+import { updateUserGroup } from '../functions/update-user-group/resource';
 
 const headerRBAC = (allow: any) => [
   allow.owner(),
@@ -239,7 +240,8 @@ const schema = a.schema({
       nocturnalAgents: a.boolean().default(false),
       integrations: a.json(),
     })
-    .authorization(iamRBAC),
+    .authorization(iamRBAC)
+    .secondaryIndexes(index => [index("cognitoUserId")]),
 
   UsageRecord: a.model({
       id: a.id(),
@@ -273,7 +275,11 @@ const schema = a.schema({
       thoughtLog: a.string(),
       scheduledFor: a.datetime(),
       terminal: a.belongsTo('ConsoleTerminal', 'terminalId')
-    }).authorization(headerRBAC),
+    }).authorization(headerRBAC)
+    .secondaryIndexes(index => [
+      // @ts-expect-error
+      index("userId").sortKeys(["createdAt"])
+    ]),
 
   createCheckoutSession: a.mutation()
     .arguments({ planTier: a.enum(['VANGUARD', 'VANGUARD_ELITE', 'TOP_UP']) })
@@ -307,6 +313,18 @@ const schema = a.schema({
     .returns(a.string())
     .handler(a.handler.function(pollBedrock))
     .authorization((allow) => [allow.authenticated()]),
+
+  updateUserGroup: a.mutation()
+    .arguments({ 
+        targetCognitoUserId: a.string().required(), 
+        groupName: a.string().required() 
+    })
+    .returns(a.boolean())
+    .authorization((allow) => [
+        allow.authenticated('identityPool'),
+        allow.groups(['superadmin', 'root', 'admin']) 
+    ])
+    .handler(a.handler.function(updateUserGroup)),
 
   
 

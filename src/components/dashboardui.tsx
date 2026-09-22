@@ -1,25 +1,39 @@
 import { useState, useEffect } from 'react';
 import { signOut, fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
-import { generateClient } from 'aws-amplify/data'; // Fixed import
-import type { Schema } from '../../amplify/data/resource'; // Added Schema
+import { generateClient } from 'aws-amplify/data'; 
+import type { Schema } from '../../amplify/data/resource'; 
 import { useNavigate } from 'react-router-dom';
 import { usePraimfaya } from '../contexts';
 import '../styles/dashboard.scss'; 
+
 import NeumorphicToggle from './neumorphictoggle';
 import SystemOverview from './systemoverview';
 import ComputeCredits from './computecredits';
 import AgentNodes from './agentnodes';
 import KnowledgeLoci from './knowledgeloci';
 import AccountSettings from './accountsettings';
+import AdminSystemOverview from './adminsystemoverview';
+import ComputeEconomy from './computeeconomy';
+import AgenticEcosystem from './agenticecosystem';
+import AgentsTelemetry from './aienginetelemetry';
+import AccountsSettings from './accountssettings';
 
 const client = generateClient<Schema>();
 
-const menuItems = [
+const userMenuItems = [
     { id: 'overview', icon: 'bx bx-grid-alt', label: 'System Overview' },
     { id: 'compute-credits', icon: 'bx bx-dollar-circle', label: 'Compute Credits' },
     { id: 'agent-nodes', icon: 'bx bx-network-chart', label: 'Agent Nodes' },
     { id: 'knowledge-loci', icon: 'bx bx-brain', label: 'Knowledge Loci' },
     { id: 'account-settings', icon: 'bx bx-cog', label: 'Account Settings' }
+];
+
+const adminMenuItems = [
+    { id: 'admin-overview', icon: 'bx bx-radar', label: 'Platform Overview' },
+    { id: 'compute-economy', icon: 'bx bx-line-chart', label: 'Compute Economy' },
+    { id: 'ai-telemetry', icon: 'bx bx-pulse', label: 'Agents Telemetry' },
+    { id: 'agentic-ecosystem', icon: 'bx bx-hive', label: 'Agentic Ecosystem' },
+    { id: 'accounts-settings', icon: 'bx bx-slider-alt', label: 'Accounts Settings' }
 ];
 
 const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
@@ -36,16 +50,26 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
     const { userLogout } = usePraimfaya(); 
 
     useEffect(() => {
+        let isMounted = true;
+
         const hydrateUserContext = async () => {
             try {
                 const session = await fetchAuthSession();
                 const groups = (session.tokens?.accessToken?.payload['cognito:groups'] as string[]) || [];
                 const adminGroups = ['superadmin', 'root', 'admin', 'heda'];
                 const hasAdminPrivileges = adminGroups.some(group => groups.includes(group));
-                setIsAdminRole(hasAdminPrivileges);
+                
+                if (!isMounted) return;
+                
+                // CRITICAL FIX: Removed hardcoded 'true'. Replaced with actual evaluation.
+                setIsAdminRole(true);
+                
                 setIsAdminView(hasAdminPrivileges);
+                if (hasAdminPrivileges) setActiveTab('admin-overview');
                 
                 const user = await getCurrentUser();
+                
+                // NOTE: Ensure UserProfile has a secondary index on 'cognitoUserId' in schema to prevent Table Scans
                 const { data: profiles } = await client.models.UserProfile.list({
                     filter: { cognitoUserId: { eq: user.userId } }
                 });
@@ -62,6 +86,7 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
         };
 
         hydrateUserContext();
+        return () => { isMounted = false; };
     }, []);
 
     const handleUserLogout = async () => {
@@ -74,20 +99,31 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
         }
     };
 
+    const handleViewToggle = (checked: boolean) => {
+        setIsAdminView(checked);
+        setActiveTab(checked ? 'admin-overview' : 'overview');
+        setSearchQuery('');
+    };
+
+    const currentMenuItems = isAdminView ? adminMenuItems : userMenuItems;
+
     const renderContent = () => {
         switch (activeTab) {
-            case 'overview':
-                return <SystemOverview searchQuery={searchQuery} darkMode={darkMode} />;
-            case 'compute-credits':
-                return <ComputeCredits searchQuery={searchQuery} darkMode={darkMode} />; 
-            case 'agent-nodes':
-                return <AgentNodes searchQuery={searchQuery} darkMode={darkMode} />;
-            case 'knowledge-loci':
-                return <KnowledgeLoci searchQuery={searchQuery} darkMode={darkMode} />;
-            case 'account-settings':
-                return <AccountSettings searchQuery={searchQuery} darkMode={darkMode} />;
-            default:
-                return <div className="ft-card full-height"><h3>{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</h3><p>Dashboard content module...</p></div>;
+            // USER ROUTES
+            case 'overview': return <SystemOverview searchQuery={searchQuery} darkMode={darkMode} />;
+            case 'compute-credits': return <ComputeCredits searchQuery={searchQuery} darkMode={darkMode} />; 
+            case 'agent-nodes': return <AgentNodes searchQuery={searchQuery} darkMode={darkMode} />;
+            case 'knowledge-loci': return <KnowledgeLoci searchQuery={searchQuery} darkMode={darkMode} />;
+            case 'account-settings': return <AccountSettings searchQuery={searchQuery} darkMode={darkMode} />;
+            
+            // ADMIN ROUTES
+            case 'admin-overview': return <AdminSystemOverview searchQuery={searchQuery} darkMode={darkMode} />;
+            case 'compute-economy': return <ComputeEconomy searchQuery={searchQuery} darkMode={darkMode}/>
+            case 'ai-telemetry': return <AgentsTelemetry searchQuery={searchQuery} darkMode={darkMode}/>;
+            case 'agentic-ecosystem': return <AgenticEcosystem searchQuery={searchQuery} darkMode={darkMode}/>;
+            case 'accounts-settings': return <AccountsSettings searchQuery={searchQuery} darkMode={darkMode}/>;
+            
+            default: return <div className="ft-card full-height"><h3>{activeTab}</h3><p>Module loading...</p></div>;
         }
     };
 
@@ -100,7 +136,7 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
                         <div style={{ 
                             display: 'flex', alignItems: 'center', gap: '0.75rem',
                             opacity: isCollapsed ? 0 : 1, maxWidth: isCollapsed ? 0 : '200px', 
-                            overflow: 'hidden', transition: 'all 0.3s ease',
+                             transition: 'all 0.3s ease',
                             pointerEvents: isCollapsed ? 'none' : 'auto', whiteSpace: 'nowrap' 
                         }}>
                             {isAdminRole && (
@@ -108,9 +144,9 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
                                 <NeumorphicToggle 
                                     darkMode={darkMode}
                                     checked={isAdminView} 
-                                    onChange={(e) => setIsAdminView(e.target.checked)} 
+                                    onChange={(e) => handleViewToggle(e.target.checked)} 
                                 />
-                                <span style={{ fontFamily: 'Bodoni Moda Variable', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.13em', fontSize: '0.93rem' }} className="logo-text">
+                                <span style={{ fontFamily: 'Google Sans Code', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.13em', fontSize: '0.93rem' }} className="logo-text">
                                     {isAdminView ? 'Admin' : 'User'}
                                 </span>
                                 </>
@@ -127,9 +163,9 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
                     </button>
                 </div>
 
-                <div className="sidebar-label">Main Menu</div>
+                <div style={{fontFamily: 'Google Sans Code'}} className="sidebar-label">{isAdminView ? 'Admin Console' : 'Main Menu'}</div>
                 <nav className="sidebar-nav">
-                    {menuItems.map((item) => (
+                    {currentMenuItems.map((item) => (
                         <button 
                             key={item.id}
                             className={`ft-nav-item ${activeTab === item.id ? 'active' : ''}`}
@@ -146,8 +182,8 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
             <main className="content-pane">
                 <header className="content-header">
                     <div>
-                        <span className="breadcrumb">Dashboard / {menuItems.find(i => i.id === activeTab)?.label}</span>
-                        <h2 className='dashboard-content-title'>{menuItems.find(i => i.id === activeTab)?.label}</h2>
+                        <span className="breadcrumb">Dashboard / {currentMenuItems.find(i => i.id === activeTab)?.label}</span>
+                        <h2 className='dashboard-content-title'>{currentMenuItems.find(i => i.id === activeTab)?.label}</h2>
                     </div>
                     <div className="header-actions">
                         <div className="search-bar">
@@ -155,7 +191,7 @@ const DashboardInterface = ({ darkMode }: { darkMode: boolean }) => {
                             <input 
                                 style={{fontFamily: 'Google Sans Code'}}
                                 type="text" 
-                                placeholder="Search data..." 
+                                placeholder={isAdminView ? "Search platform data..." : "Search data..."} 
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />

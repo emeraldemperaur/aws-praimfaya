@@ -61,7 +61,6 @@ const AgentActivity: React.FC<AgentActivityDashboardProps> = ({ darkMode = false
         }).subscribe({
           next: (data) => {
             if (!isMounted) return;
-            // FIX 2: Truncate to the 100 most recent records to prevent DOM/Memory crashes
             const sorted = [...data.items]
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                 .slice(0, 100);
