@@ -249,7 +249,7 @@ const schema = a.schema({
       sessionId: a.string().required(),
       sessionTitle: a.string(),
       actionType: a.enum(['LLM_INFERENCE', 'TOOL_EXECUTION', 'TOP_UP']),
-      modelId: a.string(),      
+      modelId: a.string(),       
       toolName: a.string(),
       creditsUsed: a.integer().required(),
       inputTokens: a.integer(),
@@ -293,7 +293,10 @@ const schema = a.schema({
   grantPromoCredits: a.mutation()
     .arguments({ targetCognitoUserId: a.string().required(), creditAmount: a.integer().required() })
     .returns(a.boolean())
-    .authorization((allow) => [allow.groups(['superadmin', 'admin', 'root', 'heda'])])
+
+    .authorization((allow) => [
+      allow.authenticated(),
+      allow.groups(['superadmin', 'admin', 'root', 'heda'])])
     .handler(a.handler.function(grantPromoCredits)),
 
   syncKnowledgeBase: a.mutation()
@@ -324,8 +327,6 @@ const schema = a.schema({
         allow.groups(['superadmin', 'root', 'admin']) 
     ])
     .handler(a.handler.function(updateUserGroup)),
-
-  
 
 });
 
