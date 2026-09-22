@@ -2,7 +2,7 @@ import { BedrockRuntimeClient, ConverseCommand, InvokeModelCommand } from "@aws-
 import { BedrockAgentRuntimeClient, RetrieveCommand, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand, PutCommand, BatchGetCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { PollyClient } from "@aws-sdk/client-polly";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 
@@ -57,11 +57,7 @@ const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = {
 const NOCTURNAL_TOOLS = ['schedule_future_task'];
 
 const IMPACTFUL_TOOLS: string[] = [
-    'execute_database_migration',
-    'send_email',
-    'process_refund',
-    'write_to_salesforce',
-    'generate_luma_video'
+    
 ];
 
 const INTERNAL_AWS_TOOLS = [
@@ -88,40 +84,15 @@ const resolveToolCredentials = (toolName: string, userIntegrations: any, ephemer
 
 export const handler = async (event: any) => {
     const startTime = Date.now();
-    
-    let totalInboundTokens = 0; 
-    let totalOutboundTokens = 0; 
-    let flatToolCredits = 0;
-    let safeTargetModelId = "amazon.nova-pro-v1:0";
-    let safeCognitoUserId = event.cognitoUserId;
-    let safeActiveSessionId = event.terminalId || event.sessionId;
-    let safeMultiplier = 2;
-    let safeSessionTitle = 'Terminal Session';
-
     try {
-        const { profileId, prompt: userMessage, ephemeralSecretsJson, chatHistory, userProfile } = event;
+        const { profileId, prompt: userMessage, cognitoUserId, sessionId, terminalId, ephemeralSecretsJson, chatHistory, userProfile } = event;
+        const activeSessionId = terminalId || sessionId;
 
-        const terminalRes = await dynamodb.send(new GetCommand({ TableName: CONSOLE_TERMINAL_TABLE, Key: { id: safeActiveSessionId } }));
+        const terminalRes = await dynamodb.send(new GetCommand({ TableName: CONSOLE_TERMINAL_TABLE, Key: { id: activeSessionId } }));
         const terminal = terminalRes.Item || {};
 
-        const profileRes = await dynamodb.send(new GetCommand({ TableName: PROFILES_TABLE, Key: { id: profileId } }));
-        const profile = profileRes.Item;
-        if (!profile) throw new Error("Context Profile not found.");
-
-        safeTargetModelId = profile.llmModelId || "amazon.nova-pro-v1:0";
-        safeMultiplier = MODEL_CREDIT_MULTIPLIERS[safeTargetModelId] || 2;
-        safeSessionTitle = profile.title || terminal.title || 'Managed Agent Session';
-
-        if (terminal.status === 'ARCHIVED' || terminal.haltRequested === true) {
-            if (terminal.haltRequested) {
-                await dynamodb.send(new UpdateCommand({
-                    TableName: CONSOLE_TERMINAL_TABLE,
-                    Key: { id: safeActiveSessionId },
-                    UpdateExpression: "SET haltRequested = :f",
-                    ExpressionAttributeValues: { ":f": false }
-                }));
-            }
-            await logActivity(safeActiveSessionId, safeCognitoUserId, 'FAILED', 'system_kill_switch', 'Execution aborted: User triggered Kill Switch from UI.', safeTargetModelId, startTime, 0, 0, 0);
+        if (terminal.status === 'ARCHIVED' || terminal.status === 'HALTED') {
+            await logActivity(activeSessionId, cognitoUserId, 'FAILED', 'system_kill_switch', 'Execution aborted: User triggered Kill Switch from UI.', "system", startTime);
             return { error: 'Execution Aborted by Kill Switch' };
         }
 
@@ -131,21 +102,28 @@ export const handler = async (event: any) => {
 
         let dbUser = userProfile;
         if (!dbUser) {
-            const uRes = await dynamodb.send(new GetCommand({ TableName: USER_PROFILES_TABLE, Key: { cognitoUserId: safeCognitoUserId } }));
+            const uRes = await dynamodb.send(new GetCommand({ TableName: USER_PROFILES_TABLE, Key: { cognitoUserId } }));
             dbUser = uRes.Item;
         }
 
         const computeCredits = dbUser?.computeCredits ?? 0;
         const isNocturnalEnabled = dbUser?.nocturnalAgents === true;
         const userIntegrations = typeof dbUser?.integrations === 'string' ? JSON.parse(dbUser.integrations) : (dbUser?.integrations || {});
+
+        const profileRes = await dynamodb.send(new GetCommand({ TableName: PROFILES_TABLE, Key: { id: profileId } }));
+        const profile = profileRes.Item;
+        if (!profile) throw new Error("Context Profile not found.");
+
+        const targetModelId = profile.llmModelId || "amazon.nova-pro-v1:0";
+        const multiplier = MODEL_CREDIT_MULTIPLIERS[targetModelId] || 2;
         
         const historyString = JSON.stringify(history);
         const systemPromptStr = profile.systemPrompt || "";
         const estimatedInputTokens = Math.ceil((userMessage.length + historyString.length + systemPromptStr.length + 1000) / 4);
-        const minimumCreditsNeeded = estimatedInputTokens * safeMultiplier;
+        const minimumCreditsNeeded = estimatedInputTokens * multiplier;
 
         if (computeCredits < minimumCreditsNeeded) {
-            await logActivity(safeActiveSessionId, safeCognitoUserId, 'FAILED', 'billing_enforcer', `Insufficient compute credits. Need ${minimumCreditsNeeded}, have ${computeCredits}.`, safeTargetModelId, startTime, 0, estimatedInputTokens, 0);
+            await logActivity(activeSessionId, cognitoUserId, 'FAILED', 'billing_enforcer', `Insufficient compute credits. Need ${minimumCreditsNeeded}, have ${computeCredits}.`, targetModelId, startTime, 0, estimatedInputTokens, 0);
             return;
         }
 
@@ -171,27 +149,23 @@ export const handler = async (event: any) => {
                     try {
                         if (['mp4', 'mov', 'webm'].includes(ext)) {
                             userContentBlocks.push({ video: { format: ext, source: { s3Location: { uri: `s3://${VECTOR_COLLECTIONS_BUCKET}/${s3Key}` } } } });
-                        } else {
+                        } else if (['png', 'jpeg', 'jpg', 'gif', 'webp'].includes(ext)) {
                             const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
-                            
-                            if (obj.ContentLength && obj.ContentLength < 4500000) {
-                                const bytes = await obj.Body?.transformToByteArray();
-                                if (bytes) {
-                                    if (['png', 'jpeg', 'jpg', 'gif', 'webp'].includes(ext)) {
-                                        userContentBlocks.push({ image: { format: ext === 'jpg' ? 'jpeg' : ext, source: { bytes } } });
-                                    } else {
-                                        const formatMap: Record<string, string> = { pdf: 'pdf', csv: 'csv', txt: 'txt', md: 'md', html: 'html', doc: 'doc', docx: 'docx', xls: 'xls', xlsx: 'xlsx' };
-                                        userContentBlocks.push({ document: { name: `file_${Date.now()}`, format: formatMap[ext] || 'txt', source: { bytes } } });
-                                    }
-                                    
-                                    if (!['mp4', 'mov', 'webm', 'png', 'jpeg', 'jpg', 'webp'].includes(ext)) {
-                                        const mimeMap: Record<string, string> = { pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain', md: 'text/plain', html: 'text/html' };
-                                        agentFiles.push({ name: s3Key.split('/').pop() || `file_${Date.now()}`, source: { sourceType: 'BYTE_CONTENT', byteContent: { mediaType: mimeMap[ext] || 'text/plain', data: bytes } }, useCase: 'CHAT' });
-                                    }
-                                }
-                            } else {
-                                console.warn(`Skipped loading ${s3Key} into memory because it exceeded 4.5MB Bedrock limit.`);
-                            }
+                            const bytes = await obj.Body?.transformToByteArray();
+                            if (bytes) userContentBlocks.push({ image: { format: ext === 'jpg' ? 'jpeg' : ext, source: { bytes } } });
+                        } else {
+                            const formatMap: Record<string, string> = { pdf: 'pdf', csv: 'csv', txt: 'txt', md: 'md', html: 'html', doc: 'doc', docx: 'docx', xls: 'xls', xlsx: 'xlsx' };
+                            const docFormat = formatMap[ext] || 'txt';
+                            const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
+                            const bytes = await obj.Body?.transformToByteArray();
+                            if (bytes) userContentBlocks.push({ document: { name: `file_${Date.now()}`, format: docFormat, source: { bytes } } });
+                        }
+
+                        if (!['mp4', 'mov', 'webm'].includes(ext)) {
+                             const mimeMap: Record<string, string> = { pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain', md: 'text/plain', html: 'text/html', png: 'image/png', jpeg: 'image/jpeg', jpg: 'image/jpeg', webp: 'image/webp' };
+                            const obj = await s3Client.send(new GetObjectCommand({ Bucket: VECTOR_COLLECTIONS_BUCKET, Key: s3Key }));
+                            const bytes = await obj.Body?.transformToByteArray();
+                            if (bytes) agentFiles.push({ name: s3Key.split('/').pop() || `file_${Date.now()}`, source: { sourceType: 'BYTE_CONTENT', byteContent: { mediaType: mimeMap[ext] || 'text/plain', data: bytes } }, useCase: 'CHAT' });
                         }
                     } catch (fetchErr) {
                         console.error(`Failed to process attachment ${s3Key}:`, fetchErr);
@@ -206,20 +180,20 @@ export const handler = async (event: any) => {
         }
 
         if (profile.role === 'SUPERVISOR' && profile.awsAgentId && profile.awsAliasId) {
-            const safeSessionId = safeCognitoUserId.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50) + "-session";
+            const safeSessionId = cognitoUserId.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50) + "-session";
             let dynamicPrompt = profile.systemPrompt || "You are an enterprise supervisor agent.";
             
             if (!isNocturnalEnabled) {
                 dynamicPrompt += `\n\n[SYSTEM CONSTRAINT]: You do NOT have permission to schedule tasks or run background jobs. If the user requests this, politely decline and inform them they need to enable 'Nocturnal Agents' in their account settings.`;
             }
 
-            await logActivity(safeActiveSessionId, safeCognitoUserId, 'RUNNING', 'supervisor_delegation', 'Supervisor Agent initialized and streaming response...', safeTargetModelId, startTime, 0, estimatedInputTokens, 0);
+            await logActivity(activeSessionId, cognitoUserId, 'RUNNING', 'supervisor_delegation', 'Supervisor Agent initialized and streaming response...', targetModelId, startTime, 0, estimatedInputTokens, 0);
 
             const invokeAgentRes = await bedrockAgentRuntime.send(new InvokeAgentCommand({
                 agentId: profile.awsAgentId, agentAliasId: profile.awsAliasId, sessionId: safeSessionId,
                 inputText: cleanPromptText || "Analyze attached files.", enableTrace: false,
                 sessionState: {
-                    sessionAttributes: { userId: safeCognitoUserId, terminalId: safeActiveSessionId, terminalTitle: safeSessionTitle, contextProfileName: profile.name || 'Supervisor Agent', contextProfileId: profile.id },
+                    sessionAttributes: { userId: cognitoUserId, terminalId: activeSessionId, terminalTitle: profile.title || 'Managed Agent Session', contextProfileName: profile.name || 'Supervisor Agent', contextProfileId: profile.id },
                     promptSessionAttributes: { dynamicSystemPrompt: dynamicPrompt, injectedIntegrations: JSON.stringify(userIntegrations) },
                     ...(agentFiles.length > 0 ? { files: agentFiles } : {})
                 }
@@ -230,7 +204,7 @@ export const handler = async (event: any) => {
                 if (streamEvent.chunk?.bytes) {
                     agentFinalOutput += new TextDecoder("utf-8").decode(streamEvent.chunk.bytes);
                     const currentOutputTokens = Math.ceil(agentFinalOutput.length / 4);
-                    streamCost = (estimatedInputTokens + currentOutputTokens) * safeMultiplier;
+                    streamCost = (estimatedInputTokens + currentOutputTokens) * multiplier;
                     if (streamCost >= computeCredits) {
                         agentFinalOutput += "\n\n[SYSTEM: EXECUTION HALTED - COMPUTE CREDITS EXHAUSTED. PLEASE TOP UP TO CONTINUE.]";
                         break; 
@@ -245,11 +219,17 @@ export const handler = async (event: any) => {
             }
             
             agentFinalOutput = agentFinalOutput.replace(authRegex, '').trim();
+            const outputTokens = Math.ceil(agentFinalOutput.length / 4);
+            const llmCost = Math.ceil((estimatedInputTokens + outputTokens) * multiplier);
             
-            totalInboundTokens = estimatedInputTokens;
-            totalOutboundTokens = Math.ceil(agentFinalOutput.length / 4);
+            if (llmCost > 0) {
+                await recordUsageTransaction(cognitoUserId, llmCost, {
+                    sessionId: activeSessionId, sessionTitle: profile.title || 'Managed Agent Session', actionType: 'LLM_INFERENCE', 
+                    modelId: targetModelId, inputTokens: estimatedInputTokens, outputTokens: outputTokens
+                });
+            }
 
-            await logActivity(safeActiveSessionId, safeCognitoUserId, 'COMPLETED', 'supervisor_delegation', 'Supervisor finished processing response.', safeTargetModelId, startTime, Math.ceil((totalInboundTokens + totalOutboundTokens) * safeMultiplier), totalInboundTokens, totalOutboundTokens);
+            await logActivity(activeSessionId, cognitoUserId, 'COMPLETED', 'supervisor_delegation', 'Supervisor finished processing response.', targetModelId, startTime, llmCost, estimatedInputTokens, outputTokens);
         }
         else {
             let systemPrompt = profile.systemPrompt || "You are a helpful AI assistant.";
@@ -324,10 +304,13 @@ export const handler = async (event: any) => {
             const toolConfig = allTools.length > 0 ? { tools: allTools as any[] } : undefined;
             const messages = [...history, { role: "user", content: userContentBlocks }];
 
-            const safeMaxTokens = Math.max(256, Math.min(4096, Math.floor((computeCredits - (estimatedInputTokens * safeMultiplier)) / safeMultiplier)));
+            let totalInboundTokens = 0; 
+            let totalOutboundTokens = 0; 
+            let flatToolCredits = 0;
+            const safeMaxTokens = Math.max(256, Math.min(4096, Math.floor((computeCredits - (estimatedInputTokens * multiplier)) / multiplier)));
 
             let converseResponse = await bedrockRuntime.send(new ConverseCommand({
-                modelId: safeTargetModelId, messages: messages, system: [{ text: systemPrompt }], 
+                modelId: targetModelId, messages: messages, system: [{ text: systemPrompt }], 
                 toolConfig: toolConfig, inferenceConfig: { temperature: llmTemperature, maxTokens: safeMaxTokens }
             }));
 
@@ -356,6 +339,10 @@ export const handler = async (event: any) => {
                     const toolInput: any = toolUse.input || {};
                     let executionResult: any;
 
+                    if (MULTIMODAL_TOOL_FLAT_COSTS[toolUse.name]) {
+                        flatToolCredits += MULTIMODAL_TOOL_FLAT_COSTS[toolUse.name];
+                    }
+
                     const isWorkflow = toolUse.name.startsWith('wf_');
                     const toolRequiresAuth = !isWorkflow && !INTERNAL_AWS_TOOLS.includes(toolUse.name);
                     const credentials = resolveToolCredentials(toolUse.name, userIntegrations, ephemeralSecrets);
@@ -364,16 +351,17 @@ export const handler = async (event: any) => {
 
                     if (isDeusExMachina && isImpactful && !ephemeralSecrets[`approved_${toolUse.name}`]) {
                         const payloadPreview = JSON.stringify(toolInput);
+                        
                         agentFinalOutput = `<vanguard_auth_request>approved_${toolUse.name}</vanguard_auth_request>\n[HITL INTERVENTION REQUIRED]: Human authorization is strictly required to execute tool: **${toolUse.name}**.\n\nProposed Action Payload:\n\`\`\`json\n${payloadPreview}\n\`\`\`\n\nPlease review the payload and approve to proceed.`;
                         
-                        await logActivity(safeActiveSessionId, safeCognitoUserId, 'BLOCKED', toolUse.name, `Awaiting Human-in-the-Loop (HITL) approval. Proposed payload: ${payloadPreview.substring(0, 100)}...`, safeTargetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
+                        await logActivity(activeSessionId, cognitoUserId, 'BLOCKED', toolUse.name, `Awaiting Human-in-the-Loop (HITL) approval. Proposed payload: ${payloadPreview.substring(0, 100)}...`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                         isGoingToSleep = true;
                         break; 
                     }
 
                     if (toolRequiresAuth && !credentials) {
                         agentFinalOutput = `<vanguard_auth_request>${toolUse.name}</vanguard_auth_request>\nPlease provide credentials to proceed.`;
-                        await logActivity(safeActiveSessionId, safeCognitoUserId, 'BLOCKED', toolUse.name, `Awaiting external API credentials to execute [${toolUse.name}].`, safeTargetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
+                        await logActivity(activeSessionId, cognitoUserId, 'BLOCKED', toolUse.name, `Awaiting external API credentials to execute [${toolUse.name}].`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                         isGoingToSleep = true;
                         break; 
                     }
@@ -387,47 +375,41 @@ export const handler = async (event: any) => {
                     }
                     else if (TOOL_EXECUTORS[toolUse.name]) {
                         try {
-                            await logActivity(safeActiveSessionId, safeCognitoUserId, 'RUNNING', toolUse.name, `Executing tool [${toolUse.name}] parameters: ${JSON.stringify(toolInput).substring(0, 100)}...`, safeTargetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
+                            await logActivity(activeSessionId, cognitoUserId, 'RUNNING', toolUse.name, `Executing tool [${toolUse.name}] parameters: ${JSON.stringify(toolInput).substring(0, 100)}...`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                             
                             const context = {
                                 toolInput, credentials, ephemeralSecrets, profile, userProfile: dbUser,
-                                cognitoUserId: safeCognitoUserId, sessionId: safeActiveSessionId, citations,
+                                cognitoUserId, sessionId: activeSessionId, citations,
                                 clients: { s3: s3Client, polly: pollyClient, bedrockRuntime: bedrockRuntime, dynamodb: dynamodb, lambda: lambdaClient },
                                 env: process.env as Record<string, string>
                             };
                             
                             executionResult = await TOOL_EXECUTORS[toolUse.name](context);
+                            if (executionResult?.additionalCreditsUsed) flatToolCredits += executionResult.additionalCreditsUsed;
                             
-                            if (MULTIMODAL_TOOL_FLAT_COSTS[toolUse.name]) {
-                                flatToolCredits += MULTIMODAL_TOOL_FLAT_COSTS[toolUse.name];
-                            }
-                            if (executionResult?.additionalCreditsUsed) {
-                                flatToolCredits += executionResult.additionalCreditsUsed;
-                            }
-                            
-                            await logActivity(safeActiveSessionId, safeCognitoUserId, 'COMPLETED', toolUse.name, `Successfully executed [${toolUse.name}].`, safeTargetModelId, startTime, executionResult?.additionalCreditsUsed || 0, totalInboundTokens, totalOutboundTokens);
+                            await logActivity(activeSessionId, cognitoUserId, 'COMPLETED', toolUse.name, `Successfully executed [${toolUse.name}].`, targetModelId, startTime, executionResult?.additionalCreditsUsed || 0, totalInboundTokens, totalOutboundTokens);
 
                             if (executionResult && executionResult.__END_CURRENT_EXECUTION__) {
                                 isGoingToSleep = true;
                                 await dynamodb.send(new PutCommand({
                                     TableName: TERMINAL_MESSAGES_TABLE,
-                                    Item: { id: `msg_sleep_${Date.now()}`, terminalId: safeActiveSessionId, role: 'SYSTEM', content: `[SYSTEM: ${executionResult.message}]`, createdAt: new Date().toISOString() }
+                                    Item: { id: `msg_sleep_${Date.now()}`, terminalId: activeSessionId, role: 'SYSTEM', content: `[SYSTEM: ${executionResult.message}]`, createdAt: new Date().toISOString() }
                                 }));
                                 break; 
                             }
                         } catch (err: any) {
                             executionResult = { error: `Tool Execution Error: ${err.message}` };
-                            await logActivity(safeActiveSessionId, safeCognitoUserId, 'FAILED', toolUse.name, `Tool execution failed: ${err.message}`, safeTargetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
+                            await logActivity(activeSessionId, cognitoUserId, 'FAILED', toolUse.name, `Tool execution failed: ${err.message}`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                         }
                     } 
                     else if (isWorkflow) {
                         const matchedWf = assignedWorkflows.find(wf => sanitizeToolName(`wf_${wf.id}`) === toolUse.name);
-                        await logActivity(safeActiveSessionId, safeCognitoUserId, 'RUNNING', toolUse.name, `Routing to Workflow Engine: ${matchedWf?.name || 'Unknown'}`, safeTargetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
+                        await logActivity(activeSessionId, cognitoUserId, 'RUNNING', toolUse.name, `Routing to Workflow Engine: ${matchedWf?.name || 'Unknown'}`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                         executionResult = matchedWf ? await invokeWebhookRouter(matchedWf.id, toolInput) : { error: "Workflow not found." };
-                        await logActivity(safeActiveSessionId, safeCognitoUserId, 'COMPLETED', toolUse.name, `Workflow execution complete.`, safeTargetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
+                        await logActivity(activeSessionId, cognitoUserId, 'COMPLETED', toolUse.name, `Workflow execution complete.`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                     } 
                     else if (profile.customMcpUrl) {
-                        await logActivity(safeActiveSessionId, safeCognitoUserId, 'RUNNING', toolUse.name, `Calling Custom MCP Server...`, safeTargetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
+                        await logActivity(activeSessionId, cognitoUserId, 'RUNNING', toolUse.name, `Calling Custom MCP Server...`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                         executionResult = await executeMcpTool(profile.customMcpUrl, toolUse.name, toolInput);
                     }
 
@@ -439,13 +421,22 @@ export const handler = async (event: any) => {
                 messages.push({ role: "user", content: toolResults });
                 
                 converseResponse = await bedrockRuntime.send(new ConverseCommand({ 
-                    modelId: safeTargetModelId, messages: messages, system: [{ text: systemPrompt }],
+                    modelId: targetModelId, messages: messages, system: [{ text: systemPrompt }],
                     toolConfig: toolConfig, inferenceConfig: { temperature: llmTemperature, maxTokens: safeMaxTokens }
                 }));
 
                 totalInboundTokens += converseResponse.usage?.inputTokens || 0;
                 totalOutboundTokens += converseResponse.usage?.outputTokens || 0;
                 loopCount++;
+            }
+
+            const totalDeduction = Math.ceil((totalInboundTokens + totalOutboundTokens) * multiplier) + flatToolCredits;
+
+            if (totalDeduction > 0) {
+                await recordUsageTransaction(cognitoUserId, totalDeduction, {
+                    sessionId: activeSessionId, sessionTitle: profile.title, actionType: 'LLM_INFERENCE', 
+                    modelId: targetModelId, inputTokens: totalInboundTokens, outputTokens: totalOutboundTokens
+                });
             }
         }
 
@@ -455,7 +446,7 @@ export const handler = async (event: any) => {
             await dynamodb.send(new PutCommand({
                 TableName: TERMINAL_MESSAGES_TABLE,
                 Item: {
-                    id: `msg_ai_${Date.now()}`, terminalId: safeActiveSessionId, role: 'ASSISTANT',
+                    id: `msg_ai_${Date.now()}`, terminalId: activeSessionId, role: 'ASSISTANT',
                     content: agentFinalOutput, contextSources: citations.map(c => c.uri || c.type),
                     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
                 }
@@ -466,19 +457,11 @@ export const handler = async (event: any) => {
         console.error("Worker Execution Error:", error);
         await dynamodb.send(new PutCommand({
             TableName: process.env.TERMINAL_MESSAGES_TABLE_NAME!,
-            Item: { id: `msg_err_${Date.now()}`, terminalId: safeActiveSessionId, role: 'ASSISTANT', content: `[SYSTEM FAILURE]: ${error.message}`, createdAt: new Date().toISOString() }
+            Item: { id: `msg_err_${Date.now()}`, terminalId: event.terminalId || event.sessionId || `session-${Date.now()}`, role: 'ASSISTANT', content: `[SYSTEM FAILURE]: ${error.message}`, createdAt: new Date().toISOString() }
         }));
-    } finally {
-        const totalDeduction = Math.ceil((totalInboundTokens + totalOutboundTokens) * safeMultiplier) + flatToolCredits;
-
-        if (totalDeduction > 0 && safeCognitoUserId && safeActiveSessionId) {
-            await recordUsageTransaction(safeCognitoUserId, totalDeduction, {
-                sessionId: safeActiveSessionId, sessionTitle: safeSessionTitle, actionType: 'LLM_INFERENCE', 
-                modelId: safeTargetModelId, inputTokens: totalInboundTokens, outputTokens: totalOutboundTokens
-            });
-        }
     }
 };
+
 
 async function logActivity(
     terminalId: string, userId: string, lifecycleState: string, toolName: string, 
@@ -533,19 +516,11 @@ async function invokeWebhookRouter(id: string, payload: any) {
 
 async function getAssignedWorkflows(pid: string) { 
     const m = await dynamodb.send(new QueryCommand({ TableName: PROFILE_WORKFLOWS_TABLE, IndexName: 'byProfile', KeyConditionExpression: 'contextProfileId = :pid', ExpressionAttributeValues: { ':pid': pid } })); 
-    const wIds = m.Items?.map(i => i.contextWorkflowId) || []; 
-    if (wIds.length === 0) return [];
-    
-    const wfs = [];
-    for (let i = 0; i < wIds.length; i += 100) {
-        const chunk = wIds.slice(i, i + 100);
-        const keys = chunk.map(id => ({ id }));
-        const r = await dynamodb.send(new BatchGetCommand({
-            RequestItems: { [WORKFLOWS_TABLE]: { Keys: keys } }
-        }));
-        const fetched = r.Responses?.[WORKFLOWS_TABLE] || [];
-        wfs.push(...fetched.filter((wf: any) => !wf.archived));
-    }
+    const wfs = []; 
+    for (const wId of (m.Items?.map(i => i.contextWorkflowId) || [])) { 
+        const r = await dynamodb.send(new GetCommand({ TableName: WORKFLOWS_TABLE, Key: { id: wId } })); 
+        if (r.Item && !r.Item.archived) wfs.push(r.Item); 
+    } 
     return wfs; 
 }
 

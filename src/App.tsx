@@ -101,7 +101,7 @@ function App() {
             <Route path='dashboard/usage-watchtower' element={
               isAuthenticated ? <UsageWatchtower darkMode={darkMode}/> : <Navigate to="/" replace />
             }/>
-            <Route path='dashboard/agents-activity' element={
+             <Route path='dashboard/agents-activity' element={
               isAuthenticated ? <AgentActivity darkMode={darkMode}/> : <Navigate to="/" replace />
             }/>
              <Route path='dashboard/rag-artifacts' element={
