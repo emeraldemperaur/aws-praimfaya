@@ -234,8 +234,7 @@ const schema = a.schema({
       nocturnalAgents: a.boolean().default(false),
       integrations: a.json(),
     })
-    .authorization(iamRBAC)
-    .secondaryIndexes(index => [index("cognitoUserId")]),
+    .authorization(iamRBAC),
 
   UsageRecord: a.model({
       id: a.id(),
@@ -306,7 +305,9 @@ const schema = a.schema({
     .handler(a.handler.function(pollBedrock))
     .authorization((allow) => [allow.authenticated()]),
 
- 
+  
+
+  
 
 });
 

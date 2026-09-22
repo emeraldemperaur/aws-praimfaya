@@ -36,6 +36,7 @@ import { foundationModelSeeder } from './functions/foundation-model-seeder/resou
 import { syncKnowledgeBase } from './functions/sync-kyb/resource';
 import { pollBedrock } from './functions/poll-bedrock/resource';
 
+// --- NEW IMPORT: Update User Group ---
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

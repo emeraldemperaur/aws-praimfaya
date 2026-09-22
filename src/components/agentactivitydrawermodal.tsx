@@ -28,16 +28,16 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
     if (!isOpen || !session?.id) return;
 
     const sub = client.models.AgentActivity.observeQuery({
-        filter: { terminalId: { eq: session.id } }
-        }).subscribe({
-        next: (data) => {
-            const sorted = [...data.items]
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-            .slice(0, 50); 
-            setActivities(sorted);
-        },
-        error: (err) => console.error("Error observing activities:", err)
-        });
+      filter: { terminalId: { eq: session.id } }
+    }).subscribe({
+      next: (data) => {
+        const sorted = [...data.items]
+          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+          .slice(0, 50); 
+        setActivities(sorted);
+      },
+      error: (err) => console.error("Error observing activities:", err)
+    });
 
     return () => sub.unsubscribe();
   }, [isOpen, session?.id]);
@@ -182,7 +182,7 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                   <div style={{ fontSize: '0.75rem' }}>{getStateBadge(act.lifecycleState)}</div>
                   <div style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
-                    {new Date(act.createdAt || 0).toLocaleTimeString()}
+                    {new Date(act.createdAt).toLocaleTimeString()}
                   </div>
                 </div>
 
