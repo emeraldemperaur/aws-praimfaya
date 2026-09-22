@@ -132,7 +132,7 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
             <div>
               <h2 style={{ margin: '0 0 0.25rem 0', color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem', fontFamily: 'Bodoni Moda Variable, serif' }}>Agent Activity Center</h2>
               <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Soubriquet: {session?.title}</span><br/>
-              <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Session ID: {session?.id?.split('-')[0]}</span>
+              <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Session ID: {session?.id}</span>
             </div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontSize: '1.25rem' }}><i className="bx bx-x"></i></button>
           </div>

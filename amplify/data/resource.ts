@@ -321,7 +321,6 @@ const schema = a.schema({
     })
     .returns(a.boolean())
     .authorization((allow) => [
-        allow.authenticated('identityPool'),
         allow.groups(['superadmin', 'root', 'admin']) 
     ])
     .handler(a.handler.function(updateUserGroup)),
