@@ -5,7 +5,7 @@ import type { Schema } from '../../amplify/data/resource';
 import DataTable, { type ColumnDef } from '../components/datatable';
 import SearchRibbon from '../components/searchribbon';
 import ExtraLargeModal from '../components/extralargemodal';
-import { TIMEZONES } from '../utils/chronos'; // Enterprise Dictionary Import
+import { TIMEZONES } from '../utils/chronos';
 import { NATIVE_TOOLS_TEMPLATES } from '../utils/prometheus';
 
 const client = generateClient<Schema>();
@@ -24,7 +24,6 @@ interface ModalState {
 }
 
 const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMode = false }) => {
-    // --- Data & Filtering State ---
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [ribbonSearch, setRibbonSearch] = useState('');
@@ -102,7 +101,6 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
         });
     }, [users, searchQuery, ribbonSearch, selectedFilter]);
 
-    // --- 3. LAZY-LOADED METRICS (Cost Efficient) ---
     useEffect(() => {
         let isMounted = true;
         
@@ -168,7 +166,6 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
         }
     }, [modal.user?.integrations]);
 
-    // --- 4. SECURE MUTATION HANDLERS ---
     const handleToggleAttribute = async (attribute: 'mcpDiscovery' | 'nocturnalAgents') => {
         if (!modal.user) return;
         const newValue = !modal.user[attribute];
@@ -246,7 +243,6 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
         setCreditAction('CREDIT');
     };
 
-    // --- 5. DATATABLE CONFIG ---
     const columns: ColumnDef<UserProfile>[] = [
         { header: 'User ID', accessor: 'cognitoUserId', sortable: true, width: '25%', render: (row) => <code onClick={() => setModal({ isOpen: true, type: 'MANAGE', user: row })} 
         style={{cursor: 'pointer', fontFamily: 'Google Sans Code', fontSize: '0.88rem', backgroundColor: darkMode ? '#374151' : '#f3f4f6', padding: '0.2rem 0.4rem', borderRadius: '4px', whiteSpace: 'normal', wordBreak: 'break-all', display: 'inline-block', lineHeight: '1.2' }}>{row.cognitoUserId}</code> },
@@ -487,7 +483,7 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                             </>
                         ) : (
                             <>
-                                You are about to <strong style={{ color: '#063223' }}>Activate</strong> the account for <strong>{modal.user.firstName} {modal.user.lastName}</strong>.<br/><br/>
+                                You are about to <strong style={{ color: '#169b6e' }}>Activate</strong> the account for <strong>{modal.user.firstName} {modal.user.lastName}</strong>.<br/><br/>
                                 This will restore their SaaS subscription status to ACTIVE, granting immediate access to their previously configured infrastructure and workflows.
                             </>
                         )}
