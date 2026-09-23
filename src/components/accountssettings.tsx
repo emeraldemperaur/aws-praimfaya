@@ -5,6 +5,7 @@ import type { Schema } from '../../amplify/data/resource';
 import DataTable, { type ColumnDef } from '../components/datatable';
 import SearchRibbon from '../components/searchribbon';
 import ExtraLargeModal from '../components/extralargemodal';
+import BottomRightModal from '../components/bottomrightmodal';
 import { TIMEZONES } from '../utils/chronos';
 import { NATIVE_TOOLS_TEMPLATES } from '../utils/prometheus';
 
@@ -40,6 +41,13 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
     // --- Form States for Modals ---
     const [creditAmount, setCreditAmount] = useState<number | ''>('');
     const [creditAction, setCreditAction] = useState<'CREDIT' | 'DEBIT'>('CREDIT');
+    
+    // --- Role Assignment State ---
+    const [roleSelection, setRoleSelection] = useState<string>('standard');
+    const [isUpdatingRole, setIsUpdatingRole] = useState(false);
+
+    // --- Notification State ---
+    const [notification, setNotification] = useState<{isOpen: boolean, title: string, message: string, type: 'SUCCESS' | 'ERROR'}>({ isOpen: false, title: '', message: '', type: 'SUCCESS' });
 
     // --- 1. BULLETPROOF PAGINATION & COST CONTROL ---
     const fetchUsers = async (showRefreshState = false) => {
@@ -183,6 +191,43 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
         }
     };
 
+    const submitRoleUpdate = async () => {
+        if (!modal.user) return;
+        setIsUpdatingRole(true);
+        try {
+            const response = await client.mutations.updateUserGroup({
+                targetCognitoUserId: modal.user.cognitoUserId,
+                groupName: roleSelection
+            });
+            
+            if (response.data) {
+                setNotification({
+                    isOpen: true,
+                    title: 'Role Assigned',
+                    message: `Successfully elevated user identity group to: ${roleSelection.toUpperCase()}`,
+                    type: 'SUCCESS'
+                });
+            } else {
+                setNotification({
+                    isOpen: true,
+                    title: 'Role Assignment Failed',
+                    message: 'The IAM policy rejected the request. Please verify Lambda permissions.',
+                    type: 'ERROR'
+                });
+            }
+        } catch (err) {
+            console.error('[Vanguard] Role update error:', err);
+            setNotification({
+                isOpen: true,
+                title: 'System Exception',
+                message: 'An unexpected error occurred while communicating with AWS Cognito.',
+                type: 'ERROR'
+            });
+        } finally {
+            setIsUpdatingRole(false);
+        }
+    };
+
     const submitCreditUpdate = async () => {
         if (!modal.user || !creditAmount || Number(creditAmount) <= 0) return;
         setIsMutating(true);
@@ -207,9 +252,10 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                     : Math.max(0, (u.computeCredits || 0) - Number(creditAmount)) 
             } : u));
             closeModal();
+            setNotification({ isOpen: true, title: 'Credits Updated', message: `Successfully ${creditAction === 'CREDIT' ? 'added' : 'removed'} ${creditAmount} credits.`, type: 'SUCCESS' });
         } catch (err) {
             console.error("[Vanguard] Credit transaction failed", err);
-            alert("Transaction failed. Please check IAM permissions or AWS logs.");
+            setNotification({ isOpen: true, title: 'Transaction Failed', message: 'Transaction failed. Please check IAM permissions or AWS logs.', type: 'ERROR' });
         } finally {
             setIsMutating(false);
         }
@@ -227,20 +273,20 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
             
             setUsers(prev => prev.map(u => u.id === modal.user!.id ? { ...u, subscriptionStatus: newStatus } : u));
             closeModal();
+            setNotification({ isOpen: true, title: 'Status Updated', message: `User status is now ${newStatus}.`, type: 'SUCCESS' });
         } catch (err) {
             console.error("[Vanguard] Status update failed", err);
-            alert("Failed to update status. Please check connection.");
+            setNotification({ isOpen: true, title: 'Update Failed', message: 'Failed to update status. Please check connection.', type: 'ERROR' });
         } finally {
             setIsMutating(false);
         }
     };
 
-   
-
     const closeModal = () => {
         setModal({ isOpen: false, type: null, user: null });
         setCreditAmount('');
         setCreditAction('CREDIT');
+        setRoleSelection('standard');
     };
 
     const columns: ColumnDef<UserProfile>[] = [
@@ -344,7 +390,6 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                         </div>
                     }
                 >
-                    {/* FIX: Applied maxHeight and overflowY to safely scroll overflow content */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', padding: '1rem 0', maxHeight: '65vh', overflowY: 'auto', paddingRight: '0.5rem' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                             <div style={infoCard(darkMode)}>
@@ -361,7 +406,6 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                             </div>
                             <div style={infoCard(darkMode)}>
                                 <span style={infoLabel(darkMode)}>Time Zone</span>
-                                {/* FIX: Maps tzIdentifier to readable string from TIMEZONES dictionary */}
                                 <strong style={{ fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={TIMEZONES.find(tz => tz.tzIdentifier === modal.user?.timeZone)?.label || modal.user.timeZone || 'UTC'}>
                                     {TIMEZONES.find(tz => tz.tzIdentifier === modal.user?.timeZone)?.label || modal.user.timeZone || 'UTC'}
                                 </strong>
@@ -369,7 +413,6 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                         </div>
 
                         <div style={{ display: 'flex', gap: '1rem' }}>
-                            {/* FIX: Appended native title attribute for integration tooltip details and info icon */}
                             <div style={{ ...infoCard(darkMode), flex: 1, backgroundColor: darkMode ? '#3730a320' : '#e0e7ff50', border: `1px solid ${darkMode ? '#3730a3' : '#c7d2fe'}`, position: 'relative' }} title={integrationTooltip}>
                                 <span style={{ ...infoLabel(darkMode), display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     Connected Integrations
@@ -387,7 +430,57 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                             </div>
                         </div>
 
-                        
+                        {/* Access & Role Assignment */}
+                        <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <h4 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '1.1rem' }}>Access & Role Assignment</h4>
+                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', backgroundColor: darkMode ? '#111827' : '#f9fafb', padding: '1rem', borderRadius: '8px', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
+                                
+                                <div style={{ flex: 1 }}>
+                                    <strong style={{ display: 'block', fontSize: '0.9rem' }}>Cognito Identity Group</strong>
+                                    <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', fontFamily: 'Google Sans Code' }}>Elevate or restrict platform access levels.</span>
+                                </div>
+
+                                <select 
+                                    value={roleSelection} 
+                                    onChange={(e) => setRoleSelection(e.target.value)}
+                                    style={{ 
+                                        padding: '0.65rem 1rem', 
+                                        borderRadius: '6px', 
+                                        backgroundColor: darkMode ? '#1f2937' : '#ffffff',
+                                        color: darkMode ? '#f9fafb' : '#111827',
+                                        border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                                        fontFamily: 'Google Sans Code',
+                                        minWidth: '200px'
+                                    }}
+                                >
+                                    <option value="standard">Standard User</option>
+                                    <option value="admin">Administrator</option>
+                                    <option value="superadmin">Super Admin</option>
+                                    <option value="heda">Commander (Heda)</option>
+                                </select>
+                                
+                                <button 
+                                    onClick={submitRoleUpdate} 
+                                    disabled={isUpdatingRole}
+                                    style={{
+                                        padding: '0.65rem 1.5rem',
+                                        backgroundColor: '#3b82f6',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: isUpdatingRole ? 'not-allowed' : 'pointer',
+                                        fontWeight: 600,
+                                        fontFamily: 'Bodoni Moda Variable',
+                                        letterSpacing: '0.1em',
+                                        textTransform: 'uppercase',
+                                        opacity: isUpdatingRole ? 0.5 : 1,
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    {isUpdatingRole ? 'Updating...' : 'Apply Role'}
+                                </button>
+                            </div>
+                        </div>
 
                         <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <h4 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '1.1rem' }}>Platform Feature Flags</h4>
@@ -489,6 +582,35 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                         )}
                     </div>
                 </ExtraLargeModal>, document.body
+            )}
+
+            {notification.isOpen && createPortal(
+                <BottomRightModal
+                    isOpen={notification.isOpen}
+                    onClose={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+                    title={notification.title}
+                    icon={<i className={`fa-solid ${notification.type === 'SUCCESS' ? 'fa-circle-check' : 'fa-triangle-exclamation'}`} style={{ color: notification.type === 'SUCCESS' ? '#10b981' : '#ef4444' }}></i>}
+                    darkMode={darkMode}
+                    footer={
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+                            <button 
+                                onClick={() => setNotification(prev => ({ ...prev, isOpen: false }))} 
+                                style={{ 
+                                    background: notification.type === 'SUCCESS' ? '#10b981' : '#800020', 
+                                    color: 'white', border: 'none', padding: '0.5rem 1.5rem', borderRadius: '4px', cursor: 'pointer', 
+                                    fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'Bodoni Moda Variable' 
+                                }}
+                            >
+                                Acknowledged
+                            </button>
+                        </div>
+                    }
+                >
+                    <div style={{ fontSize: '0.9rem', color: darkMode ? '#d1d5db' : '#4b5563', lineHeight: 1.5, fontFamily: 'Google Sans Code, monospace' }}>
+                        {notification.message}
+                    </div>
+                </BottomRightModal>,
+                document.body
             )}
 
         </div>

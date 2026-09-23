@@ -35,8 +35,7 @@ import { postCallAnalysis } from './functions/post-call-analysis/resource';
 import { foundationModelSeeder } from './functions/foundation-model-seeder/resource';
 import { syncKnowledgeBase } from './functions/sync-kyb/resource';
 import { pollBedrock } from './functions/poll-bedrock/resource';
-
-// --- NEW IMPORT: Update User Group ---
+import { updateUserGroup } from './functions/update-user-group/resource';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -45,10 +44,10 @@ const backend = defineBackend({
   auth, data, vectorCollectionsS3, ragArtifactsS3, processVector, updateVectorStatus,
   agentProvisioner, webhookRouter, agentReaper, chatHandler, agentWorker,
   createCheckoutSession, grantPromoCredits, stripeWebhook, multimediaExecutor,
-  lexFulfillment, postCallAnalysis, foundationModelSeeder, syncKnowledgeBase, pollBedrock,
+  lexFulfillment, postCallAnalysis, foundationModelSeeder, syncKnowledgeBase, pollBedrock, 
+  updateUserGroup 
 });
 
-// FOLD STACKS: Attach everything to the Data stack to eliminate nested stack loops
 const customStack = cdk.Stack.of(backend.chatHandler.resources.lambda);
 
 const isProd = cdk.Stage.of(customStack)?.stageName === 'prod';
@@ -85,6 +84,7 @@ const postCallAnalysisLambda = backend.postCallAnalysis.resources.lambda as lamb
 const seederLambda = backend.foundationModelSeeder.resources.lambda as lambda.Function;
 const syncKbLambda = backend.syncKnowledgeBase.resources.lambda as lambda.Function;
 const pollBedrockLambda = backend.pollBedrock.resources.lambda as lambda.Function;
+const updateUserGroupLambda = backend.updateUserGroup.resources.lambda as lambda.Function;
 
 
 const getGlobalDecoupledPolicy = () => new iam.PolicyStatement({
@@ -117,6 +117,16 @@ lexFulfillmentLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 postCallAnalysisLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 syncKbLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 pollBedrockLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['bedrock:GetAsyncInvoke'], resources: ['*'] }));
+
+updateUserGroupLambda.addEnvironment('USER_POOL_ID', backend.auth.resources.userPool.userPoolId);
+updateUserGroupLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: [
+    "cognito-idp:AdminAddUserToGroup",
+    "cognito-idp:AdminRemoveUserFromGroup",
+    "cognito-idp:AdminListGroupsForUser"
+  ],
+  resources: [backend.auth.resources.userPool.userPoolArn]
+}));
 
 
 const streamDlq = new sqs.Queue(customStack, 'DynamoStreamDLQ', {
