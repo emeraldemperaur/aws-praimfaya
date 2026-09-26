@@ -6,6 +6,7 @@ import DataTable, { type ColumnDef } from '../components/datatable';
 import SearchRibbon from '../components/searchribbon';
 import ExtraLargeModal from '../components/extralargemodal';
 import BottomRightModal from '../components/bottomrightmodal';
+import { CubeIcon } from '../components/cube';
 import { TIMEZONES } from '../utils/chronos';
 import { NATIVE_TOOLS_TEMPLATES } from '../utils/prometheus';
 
@@ -17,6 +18,7 @@ interface AccountsSettingsProps {
 }
 
 type UserProfile = Schema['UserProfile']['type'];
+type AgentActivity = Schema['AgentActivity']['type'];
 
 interface ModalState {
     isOpen: boolean;
@@ -29,27 +31,22 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
     const [isLoading, setIsLoading] = useState(true);
     const [ribbonSearch, setRibbonSearch] = useState('');
     const [selectedFilter, setSelectedFilter] = useState('ALL');
-
-    // --- Modal & Action State ---
     const [modal, setModal] = useState<ModalState>({ isOpen: false, type: null, user: null });
     const [isMutating, setIsMutating] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
-
-    // --- Lazy Loaded Metrics ---
     const [activeUserMetrics, setActiveUserMetrics] = useState({ activityCount: 0, integrationsCount: 0, isLoading: false });
-
-    // --- Form States for Modals ---
     const [creditAmount, setCreditAmount] = useState<number | ''>('');
     const [creditAction, setCreditAction] = useState<'CREDIT' | 'DEBIT'>('CREDIT');
-    
-    // --- Role Assignment State ---
     const [roleSelection, setRoleSelection] = useState<string>('standard');
     const [isUpdatingRole, setIsUpdatingRole] = useState(false);
-
-    // --- Notification State ---
+    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+    const [userActivities, setUserActivities] = useState<AgentActivity[]>([]);
+    const [isFetchingActivities, setIsFetchingActivities] = useState(false);
+    const [isKillingGlobal, setIsKillingGlobal] = useState(false);
+    const [killingLocalId, setKillingLocalId] = useState<string | null>(null);
     const [notification, setNotification] = useState<{isOpen: boolean, title: string, message: string, type: 'SUCCESS' | 'ERROR'}>({ isOpen: false, title: '', message: '', type: 'SUCCESS' });
+    const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, action: 'GLOBAL_KILL' | null}>({ isOpen: false, action: null });
 
-    // --- 1. BULLETPROOF PAGINATION & COST CONTROL ---
     const fetchUsers = async (showRefreshState = false) => {
         if (showRefreshState) setIsRefreshing(true);
         else setIsLoading(true);
@@ -89,7 +86,6 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
         fetchUsers();
     }, []);
 
-    // --- 2. MEMOIZED DUAL-FILTERING ---
     const filteredUsers = useMemo(() => {
         return users.filter((user) => {
             const globalMatch = !searchQuery || 
@@ -282,11 +278,108 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
         }
     };
 
+    const handleOpenActivityDrawer = async () => {
+        if (!modal.user) return;
+        setIsDrawerOpen(true);
+        setIsFetchingActivities(true);
+        try {
+            const { data } = await client.models.AgentActivity.list({
+                filter: { userId: { eq: modal.user.cognitoUserId } },
+                limit: 100,
+                selectionSet: ['id', 'lifecycleState', 'toolName', 'inputTokens', 'outputTokens', 'computeCredits', 'createdAt', 'durationMs', 'terminalId', 'thoughtLog', 'scheduledFor'] as any
+            });
+            const sorted = data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            
+            setUserActivities(sorted as unknown as AgentActivity[]);
+            
+        } catch (err) {
+            console.error("[Vanguard] Failed to fetch user activities", err);
+            setNotification({ isOpen: true, title: 'Telemetry Error', message: 'Failed to retrieve agent activity logs.', type: 'ERROR' });
+        } finally {
+            setIsFetchingActivities(false);
+        }
+    };
+
+    const initiateGlobalKill = () => {
+        if (!modal.user) return;
+        setConfirmModal({ isOpen: true, action: 'GLOBAL_KILL' });
+    };
+
+    const executeGlobalKill = async () => {
+        if (!modal.user) return;
+        
+        setConfirmModal({ isOpen: false, action: null });
+        setIsKillingGlobal(true);
+        
+        try {
+            const response = await client.models.AgentActivity.list({
+                filter: { userId: { eq: modal.user.cognitoUserId } } 
+            });
+            
+            const activeTerminals = Array.from(new Set(
+                response.data
+                .filter(a => ['RUNNING', 'SLEEPING', 'BLOCKED'].includes(a.lifecycleState || ''))
+                .map(a => a.terminalId)
+            ));
+            
+            if (activeTerminals.length === 0) {
+                setNotification({ isOpen: true, title: 'No Agents Found', message: 'User has no active or scheduled agents to halt.', type: 'SUCCESS' });
+                return;
+            }
+
+            for (const tId of activeTerminals) {
+                await client.models.ConsoleTerminal.update({ id: tId, haltRequested: true });
+                await client.models.AgentActivity.create({
+                     terminalId: tId, 
+                     userId: modal.user.cognitoUserId, 
+                     lifecycleState: 'FAILED',
+                     toolName: 'admin_kill_switch', 
+                     thoughtLog: 'Administrator manually triggered a Global Kill Switch. Active execution cancelled.', 
+                     durationMs: 0
+                });
+            }
+            
+            setNotification({ isOpen: true, title: 'Agents Terminated', message: `Successfully halted operations across ${activeTerminals.length} terminal(s).`, type: 'SUCCESS' });
+            if (isDrawerOpen) handleOpenActivityDrawer(); 
+            
+        } catch (error) {
+            console.error("[Vanguard] Global kill error", error);
+            setNotification({ isOpen: true, title: 'Halt Failed', message: 'Failed to halt agents. Check AWS CloudWatch for details.', type: 'ERROR' });
+        } finally {
+            setIsKillingGlobal(false);
+        }
+    };
+
+    const submitLocalKill = async (activityId: string, terminalId: string) => {
+        setKillingLocalId(activityId);
+        try {
+            await client.models.ConsoleTerminal.update({ id: terminalId, haltRequested: true });
+            setUserActivities(prev => prev.map(a => a.id === activityId ? { ...a, lifecycleState: 'FAILED' } : a));
+        } catch(err) {
+            console.error("[Vanguard] Local halt error", err);
+            setNotification({ isOpen: true, title: 'Halt Failed', message: 'Could not halt the specific operation.', type: 'ERROR' });
+        } finally {
+            setKillingLocalId(null);
+        }
+    };
+
+    const getStateBadge = (state: string | null | undefined) => {
+        switch (state) {
+            case 'RUNNING': return <span style={{ color: '#3b82f6', fontWeight: 600 }}>🟢 Running</span>;
+            case 'SLEEPING': return <span style={{ color: '#eab308', fontWeight: 600 }}>🟡 Scheduled</span>;
+            case 'BLOCKED': return <span style={{ color: '#f97316', fontWeight: 600 }}>🟠 Blocked (HITL)</span>;
+            case 'FAILED': return <span style={{ color: '#ef4444', fontWeight: 600 }}>🔴 Failed</span>;
+            case 'COMPLETED': return <span style={{ color: '#10b981', fontWeight: 600 }}>🔵 Completed</span>;
+            default: return <span style={{ color: '#9ca3af', fontWeight: 600 }}>⚪ Unknown</span>;
+        }
+    };
+
     const closeModal = () => {
         setModal({ isOpen: false, type: null, user: null });
         setCreditAmount('');
         setCreditAction('CREDIT');
         setRoleSelection('standard');
+        setIsDrawerOpen(false);
     };
 
     const columns: ColumnDef<UserProfile>[] = [
@@ -430,7 +523,16 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                             </div>
                         </div>
 
-                        {/* Access & Role Assignment */}
+                        <div style={{ display: 'flex', gap: '1rem', marginTop: '-0.5rem', marginBottom: '0.5rem' }}>
+                            <button onClick={handleOpenActivityDrawer} style={{ flex: 1, padding: '0.75rem', backgroundColor: 'transparent', border: `1px solid ${darkMode ? '#6366f1' : '#4f46e5'}`, color: darkMode ? '#818cf8' : '#4f46e5', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'all 0.2s', fontFamily: 'Bodoni Moda Variable', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                <i className="fa-solid fa-list-check"></i> Manage Agent Activity
+                            </button>
+                            <button onClick={initiateGlobalKill} disabled={isKillingGlobal} style={{ flex: 1, padding: '0.75rem', backgroundColor: '#800020', border: 'none', color: 'white', borderRadius: '6px', cursor: isKillingGlobal ? 'not-allowed' : 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'all 0.2s', opacity: isKillingGlobal ? 0.6 : 1, fontFamily: 'Bodoni Moda Variable', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                {isKillingGlobal ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-radiation"></i>}
+                                {isKillingGlobal ? 'Halting Operations...' : 'Global Kill Switch'}
+                            </button>
+                        </div>
+
                         <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <h4 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '1.1rem' }}>Access & Role Assignment</h4>
                             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', backgroundColor: darkMode ? '#111827' : '#f9fafb', padding: '1rem', borderRadius: '8px', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
@@ -456,7 +558,7 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                                     <option value="standard">Standard User</option>
                                     <option value="admin">Administrator</option>
                                     <option value="superadmin">Super Admin</option>
-                                    <option value="heda">Commander (Heda)</option>
+                                    <option value="heda">Heda</option>
                                 </select>
                                 
                                 <button 
@@ -509,6 +611,70 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                         </div>
                     </div>
                 </ExtraLargeModal>, document.body
+            )}
+
+            {isDrawerOpen && createPortal(
+                <>
+                    <div onClick={() => setIsDrawerOpen(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 10001 }}></div>
+                    <div style={{
+                        position: 'fixed', top: 0, right: 0, bottom: 0, width: '500px', maxWidth: '100%',
+                        backgroundColor: darkMode ? '#111827' : '#ffffff', borderLeft: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                        zIndex: 10002, display: 'flex', flexDirection: 'column',
+                        boxShadow: '-4px 0 15px rgba(0,0,0,0.1)', fontFamily: 'Google Sans Code, monospace'
+                    }}>
+                        <div style={{ padding: '1.5rem', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                            <div>
+                                <h2 style={{ margin: '0 0 0.25rem 0', color: darkMode ? '#f9fafb' : '#111827', fontSize: '1.25rem', fontFamily: 'Bodoni Moda Variable, serif' }}>Agent Telemetry</h2>
+                                <span style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>Target User ID: {modal.user?.cognitoUserId}</span>
+                            </div>
+                            <button onClick={() => setIsDrawerOpen(false)} style={{ background: 'none', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontSize: '1.5rem' }}><i className="bx bx-x"></i></button>
+                        </div>
+
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {isFetchingActivities ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: darkMode ? '#9ca3af' : '#6b7280' }}>
+                                    <CubeIcon width={30} height={30} darkMode={darkMode} edgeColor={darkMode ? '#ffffff' : '#0B0B45'} animationDuration="2s" />
+                                    <span style={{ marginTop: '1rem', fontSize: '0.85rem', fontFamily: 'Bodoni Moda Variable', letterSpacing: '0.1em' }}>LOADING TELEMETRY...</span>
+                                </div>
+                            ) : userActivities.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '2rem 0', color: darkMode ? '#6b7280' : '#9ca3af', fontSize: '0.85rem' }}>
+                                    No agent activity recorded for this user profile.
+                                </div>
+                            ) : (
+                                userActivities.map(act => (
+                                    <div key={act.id} style={{ backgroundColor: darkMode ? '#1f2937' : '#f9fafb', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px', padding: '1rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                                            <div style={{ fontSize: '0.75rem' }}>{getStateBadge(act.lifecycleState)}</div>
+                                            <div style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>{new Date(act.createdAt).toLocaleString()}</div>
+                                        </div>
+                                        <div style={{ fontSize: '0.85rem', color: darkMode ? '#f9fafb' : '#111827', marginBottom: '0.75rem', fontWeight: 600 }}>
+                                            <i className="fa-solid fa-wrench" style={{ marginRight: '0.5rem', color: '#6366f1' }}></i>
+                                            {act.toolName || 'Reasoning Engine'}
+                                        </div>
+                                        <div style={{ backgroundColor: darkMode ? '#111827' : '#ffffff', padding: '0.75rem', borderRadius: '4px', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '100px', overflowY: 'auto', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
+                                            {act.thoughtLog || 'Executing reasoning trace...'}
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: '0.75rem' }}>
+                                            <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
+                                                <i className="fa-solid fa-microchip" style={{ marginRight: '0.25rem' }}></i> {act.modelId?.split('/')[1] || 'us.amazon.nova'}
+                                            </span>
+                                            {(act.lifecycleState === 'RUNNING' || act.lifecycleState === 'SLEEPING' || act.lifecycleState === 'BLOCKED') && (
+                                                <button 
+                                                    onClick={() => submitLocalKill(act.id, act.terminalId)}
+                                                    disabled={killingLocalId === act.id}
+                                                    style={{ background: '#ef444415', color: '#ef4444', border: '1px solid #ef444450', padding: '0.4rem 0.75rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: killingLocalId === act.id ? 'not-allowed' : 'pointer' }}
+                                                >
+                                                    {killingLocalId === act.id ? 'Halting...' : 'Halt Agent'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </>,
+                document.body
             )}
 
             {modal.type === 'CREDIT' && modal.user && createPortal(
@@ -608,6 +774,41 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
                 >
                     <div style={{ fontSize: '0.9rem', color: darkMode ? '#d1d5db' : '#4b5563', lineHeight: 1.5, fontFamily: 'Google Sans Code, monospace' }}>
                         {notification.message}
+                    </div>
+                </BottomRightModal>,
+                document.body
+            )}
+
+            {confirmModal.isOpen && createPortal(
+                <BottomRightModal
+                    isOpen={confirmModal.isOpen}
+                    onClose={() => setConfirmModal({ isOpen: false, action: null })}
+                    title="Confirm Global Halt"
+                    icon={<i className="fa-solid fa-radiation" style={{ color: '#800020' }}></i>}
+                    darkMode={darkMode}
+                    footer={
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', width: '100%' }}>
+                            <button 
+                                onClick={() => setConfirmModal({ isOpen: false, action: null })} 
+                                style={{ background: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, color: darkMode ? '#d1d5db' : '#4b5563', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', 
+                                fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.13em' }}
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={executeGlobalKill} 
+                                style={{ background: '#800020', color: 'white', border: 'none', padding: '0.5rem 1.5rem', borderRadius: '4px', cursor: 'pointer', 
+                                    fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.13em', fontFamily: 'Bodoni Moda Variable' }}
+                            >
+                                Confirm Halt
+                            </button>
+                        </div>
+                    }
+                >
+                    <div style={{ fontSize: '0.9rem', color: darkMode ? '#d1d5db' : '#4b5563', lineHeight: 1.5, fontFamily: 'Bodoni Moda Variable, monospace' }}>
+                        Are you absolutely sure?<br/><br/>This will permanently halt all active and scheduled agents for this user. 
+                        <br/><br/>
+                        <strong style={{ color: darkMode ? '#9e0f33' : '#dc2626' }}>This action cannot be undone.</strong>
                     </div>
                 </BottomRightModal>,
                 document.body
