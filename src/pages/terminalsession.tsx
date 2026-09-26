@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { generateClient } from 'aws-amplify/data';
 import { uploadData } from 'aws-amplify/storage';
+import { getCurrentUser } from 'aws-amplify/auth';
 import type { SelectionSet } from 'aws-amplify/data';
 import type { Schema } from '../../amplify/data/resource'; 
 import { getInitials, getModelIcon } from '../utils/voltaire';
@@ -41,6 +42,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const [ephemeralSecrets, setEphemeralSecrets] = useState<EphemeralSecrets>({});
   const [activeAuthPrompt, setActiveAuthPrompt] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(20);
+  const [userProfile, setUserProfile] = useState<Schema['UserProfile']['type'] | null>(null);
+  const [isVerifyingCredits, setIsVerifyingCredits] = useState(true);
+  const [latestActivity, setLatestActivity] = useState<Schema['AgentActivity']['type'] | null>(null);
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,10 +57,11 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const [isVectorModalOpen, setIsVectorModalOpen] = useState(false);
   const [isWorkflowsModalOpen, setIsWorkflowsModalOpen] = useState(false);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+  const isOutOfCredits = userProfile ? ((userProfile.computeCredits || 0) <= 0 || userProfile.subscriptionStatus !== 'ACTIVE') : false;
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isAiTyping]);
+  }, [messages, isAiTyping, latestActivity]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -68,6 +73,28 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   }, [inputMessage]);
 
   useEffect(() => {
+    let isMounted = true;
+    const fetchUser = async () => {
+      try {
+        const user = await getCurrentUser();
+        const { data: profiles } = await client.models.UserProfile.list({ 
+          filter: { cognitoUserId: { eq: user.userId } },
+          limit: 1
+        });
+        if (isMounted) {
+          if (profiles && profiles.length > 0) setUserProfile(profiles[0]);
+          setIsVerifyingCredits(false);
+        }
+      } catch (err) {
+        console.error("Failed to fetch Vanguard user profile:", err);
+        if (isMounted) setIsVerifyingCredits(false);
+      }
+    };
+    fetchUser();
+    return () => { isMounted = false; };
+  }, []);
+
+  useEffect(() => {
     if (!sessionId) {
       navigate('/console-terminal');
       return;
@@ -76,6 +103,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     let messagesSub: any;
     let artifactsSub: any;
     let sessionSub: any;
+    let activitySub: any;
 
     const hydrateTerminalSession = async () => {
       try {
@@ -112,7 +140,8 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         });
 
         messagesSub = client.models.TerminalMessage.observeQuery({
-          filter: { terminalId: { eq: sessionId } }
+          filter: { terminalId: { eq: sessionId } },
+          selectionSet: ['id', 'role', 'content', 'createdAt', 'contextSources'] as any
         }).subscribe({
           next: (data: any) => {
             const chronologyLog = [...data.items].sort(
@@ -142,7 +171,8 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         });
 
         artifactsSub = client.models.RAGArtifact.observeQuery({
-           filter: { terminalId: { eq: sessionId } }
+           filter: { terminalId: { eq: sessionId } },
+           selectionSet: ['id', 'createdAt', 'fileName', 'fileUrl', 'fileType'] as any
         }).subscribe({
           next: (data: any) => {
             const sortedArtifacts = [...data.items].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -152,6 +182,18 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           error: (err: any) => {
             console.error("Error observing artifacts:", err);
             setIsLoading(false);
+          }
+        });
+
+        activitySub = client.models.AgentActivity.observeQuery({
+          filter: { terminalId: { eq: sessionId } },
+          selectionSet: ['id', 'createdAt', 'lifecycleState', 'toolName', 'thoughtLog', 'modelId'] as any
+        }).subscribe({
+          next: (data: any) => {
+            const sorted = [...data.items].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            if (sorted.length > 0) {
+              setLatestActivity(sorted[0]);
+            }
           }
         });
 
@@ -167,6 +209,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       if (messagesSub) messagesSub.unsubscribe();
       if (artifactsSub) artifactsSub.unsubscribe();
       if (sessionSub) sessionSub.unsubscribe();
+      if (activitySub) activitySub.unsubscribe();
     };
   }, [sessionId, navigate]);
 
@@ -186,15 +229,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     setInputMessage(e.target.value);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleExecutePrompt(e);
-    }
-  };
-
   const handleExecutePrompt = async (e?: React.SyntheticEvent, overridePrompt?: string) => {
     if (e) e.preventDefault();
+    if (isOutOfCredits) return;
     
     let queryText = (overridePrompt || inputMessage).trim();
     if (!queryText && selectedFiles.length === 0) return;
@@ -340,7 +377,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
             <CubeIcon width={30} height={30} darkMode={darkMode} edgeColor={darkMode ? '#ffffff' : '#0B0B45'} animationDuration="2s" />
           </div>
           <h3 style={{ margin: '0 0 0.5rem 0' }}>INITIALIZING RAG SESSION...</h3>
-          <p style={{ opacity: 0.5, fontSize: '0.85rem', margin: 0 }}>Mapping Context Profiles and allocating parallel tensor buffers.</p>
+          <p style={{ opacity: 0.5, fontSize: '0.85rem', margin: 0, letterSpacing: '0.13em' }}>Mapping Context Profiles and allocating parallel tensor buffers.</p>
         </div>
       </div>
     );
@@ -448,7 +485,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           
           <div style={{ 
             flex: 1, overflowY: 'auto', padding: '1.5rem', 
-            paddingBottom: '180px',
+            paddingBottom: '180px', 
             display: 'flex', flexDirection: 'column', gap: '1.5rem' 
           }}>
             
@@ -474,6 +511,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
               const isUser = msg.role === 'USER';
               const avatarName = isUser ? (session?.userId?.split('@')[0] || 'Anonymous') : (session?.contextProfile?.name || 'Vanguard AI');
               const initials = getInitials(avatarName);
+              const agentRole = !isUser && msg.content ? session?.contextProfile?.role || 'STANDARD' : null;
               
               let displayContent = msg.content || "";
               
@@ -501,11 +539,17 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                   {!isUser && (
                     <div style={{
                       width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
-                      backgroundColor: darkMode ? '#374151' : '#e5e7eb', color: darkMode ? '#f9fafb' : '#111827',
+                      backgroundColor: darkMode ? '#1f2937' : '#f9fafb',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '0.75rem', fontWeight: 'bold', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`
+                      border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                      overflow: 'hidden'
                     }}>
-                      {initials}
+                      <CubeIcon 
+                        width={22} height={22} 
+                        darkMode={darkMode} 
+                        edgeColor={darkMode ? '#ffffff' : '#0B0B45'} 
+                        animationDuration={isAiTyping && index === visibleMessages.length - 1 ? "1.5s" : "0s"} 
+                      />
                     </div>
                   )}
 
@@ -518,8 +562,19 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                     borderBottomLeftRadius: !isUser ? '0.25rem' : '1rem',
                     boxShadow: isUser ? '0 4px 6px -1px rgba(128, 0, 32, 0.2)' : '0 1px 3px 0 rgba(0, 0, 0, 0.05)'
                   }}>
-                    <div style={{ fontSize: '0.675rem', opacity: isUser ? 0.8 : 0.5, marginBottom: '0.4rem', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em', fontFamily: 'Google Sans Code, monospace' }}>
-                      {avatarName} • {new Date(msg.createdAt || 0).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    <div style={{ fontSize: '0.675rem', opacity: isUser ? 0.8 : 0.5, marginBottom: '0.4rem', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em', fontFamily: 'Google Sans Code, monospace', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span>{avatarName} • {new Date(msg.createdAt || 0).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                      {!isUser && agentRole && agentRole !== 'STANDARD' && (
+                        <span style={{ 
+                          padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.6rem', 
+                          backgroundColor: agentRole === 'SUPERVISOR' ? '#8b5cf620' : '#10b98120', 
+                          color: agentRole === 'SUPERVISOR' ? '#8b5cf6' : '#10b981', 
+                          border: `1px solid ${agentRole === 'SUPERVISOR' ? '#8b5cf650' : '#10b98150'}` 
+                        }}>
+                          <i className={`fa-solid ${agentRole === 'SUPERVISOR' ? 'fa-network-wired' : 'fa-people-group'}`} style={{ marginRight: '3px' }}></i>
+                          {agentRole}
+                        </span>
+                      )}
                     </div>
                     
                     <div style={{ fontSize: '0.925rem', lineHeight: 1.6, fontFamily: 'inherit' }}>
@@ -666,18 +721,42 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
             })}
 
             {isAiTyping && (
-              <div style={{ alignSelf: 'flex-start', marginLeft: '3rem', padding: '0.85rem 1.15rem', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '0.85rem', fontFamily: 'Google Sans Code, monospace' }}>
-                <span style={{ fontStyle: 'italic' }}>
-                  {isUploading ? 'Uploading attachments to secure S3 bucket...' : 
-                   (modalityType === 'IMAGE' || modalityType === 'VIDEO' ? 'Generating asset pipeline rendering...' : 'Fusing text matrices and visual multimodal indexes...')}
-                </span>
+              <div style={{ alignSelf: 'flex-start', marginLeft: '3rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '85%' }}>
+                {/* Status Indicator */}
+                <div style={{ padding: '0.85rem 1.15rem', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '0.85rem', fontFamily: 'Google Sans Code, monospace' }}>
+                  <span style={{ fontStyle: 'italic' }}>
+                    {isUploading ? 'Uploading attachments to secure S3 bucket...' : 
+                    (modalityType === 'IMAGE' || modalityType === 'VIDEO' ? 'Generating asset pipeline rendering...' : 'Fusing text matrices and visual multimodal indexes...')}
+                  </span>
+                </div>
+                
+                {latestActivity && latestActivity.lifecycleState === 'RUNNING' && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem',
+                    backgroundColor: darkMode ? '#111827' : '#f3f4f6', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+                    borderRadius: '8px', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', fontFamily: 'Google Sans Code, monospace',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)', animation: 'bubbleFadeIn 0.3s ease-out forwards', marginTop: '0.5rem'
+                  }}>
+                    <img src={getModelIcon(latestActivity.modelId?.split('/')[1] || '')} alt="Tool Engine" style={{ width: '24px', height: '24px' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                      <strong style={{ color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.7rem' }}>
+                          Action: {latestActivity.toolName || 'Reasoning Engine'}
+                      </strong>
+                      <span style={{ opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {latestActivity.thoughtLog || 'Processing execution parameters...'}
+                      </span>
+                    </div>
+                    <div style={{ marginLeft: '1rem', flexShrink: 0 }}>
+                      <i className="fa-solid fa-circle-notch fa-spin" style={{ color: '#10b981', fontSize: '1rem' }}></i>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             <div ref={scrollRef} />
           </div>
         </div>
 
-     
         <div style={{ 
           position: 'absolute', bottom: 0, left: 0, right: 0, 
           borderTopLeftRadius: '0.5rem', borderTopRightRadius: '0.5rem',
@@ -822,42 +901,82 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
               ref={textareaRef}
               value={inputMessage}
               onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
               rows={1}
               placeholder={
-                session?.status === 'ARCHIVED' 
+                isVerifyingCredits 
+                  ? "Verifying compute authorization..."
+                  : isOutOfCredits 
+                  ? "Compute credits exhausted. Please top up to continue..." 
+                  : session?.status === 'ARCHIVED' 
                   ? "This session is archived and read-only." 
                   : `Ask ${session?.contextProfile?.name || 'Praimfaya'} a question or attach files...`
               }
-              disabled={isAiTyping || session?.status === 'ARCHIVED'}
+              disabled={isAiTyping || session?.status === 'ARCHIVED' || isOutOfCredits || isVerifyingCredits}
               style={{
                 flex: 1, padding: '0.85rem 1.25rem', borderRadius: '0.375rem', fontSize: '0.925rem',
                 border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
-                backgroundColor: session?.status === 'ARCHIVED' ? (darkMode ? '#111827' : '#f3f4f6') : (darkMode ? '#1f2937' : '#ffffff'),
+                backgroundColor: session?.status === 'ARCHIVED' || isOutOfCredits || isVerifyingCredits ? (darkMode ? '#111827' : '#f3f4f6') : (darkMode ? '#1f2937' : '#ffffff'),
                 color: darkMode ? '#f9fafb' : '#111827',
-                cursor: session?.status === 'ARCHIVED' ? 'not-allowed' : 'text',
+                cursor: session?.status === 'ARCHIVED' || isOutOfCredits || isVerifyingCredits ? 'not-allowed' : 'text',
                 fontFamily: 'Google Sans Code',
                 resize: 'none',
-                maxHeight: '100px', 
+                maxHeight: '100px',
                 overflowY: 'auto',
                 lineHeight: '1.5'
               }}
             />
-            <button
-              type="button"
-              onClick={(e) => handleExecutePrompt(e)}
-              title="Submit"
-              disabled={isAiTyping || session?.status === 'ARCHIVED' || (!inputMessage.trim() && selectedFiles.length === 0)}
-              style={{
-                padding: '0 2.25rem', height: '46px', backgroundColor: '#800020', color: 'white', border: 'none', borderRadius: '0.375rem',
-                fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.09em', fontFamily: 'Google Sans Code',
-                cursor: (isAiTyping || session?.status === 'ARCHIVED' || (!inputMessage.trim() && selectedFiles.length === 0)) ? 'not-allowed' : 'pointer',
-                opacity: (isAiTyping || session?.status === 'ARCHIVED' || (!inputMessage.trim() && selectedFiles.length === 0)) ? 0.5 : 1,
-                whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}
-            >
-              <i className="fa-regular fa-paper-plane"></i>
-            </button>
+            
+            {isAiTyping ? (
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  if (!sessionId) return;
+                  try {
+                    await client.models.ConsoleTerminal.update({ id: sessionId as string, haltRequested: true });
+                    setIsAiTyping(false);
+                  } catch (err) { console.error(err); }
+                }}
+                title="Stop Processing"
+                style={{
+                  padding: '0', width: '46px', height: '46px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '0.375rem',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 6px rgba(239, 68, 68, 0.2)'
+                }}
+              >
+                <i className="fa-solid fa-stop" style={{ fontSize: '1.2rem' }}></i>
+              </button>
+            ) : isOutOfCredits && !isVerifyingCredits ? (
+              <button
+                type="button"
+                onClick={() => navigate('/user-profile')}
+                title="Subscription Required"
+                style={{
+                  padding: '0 1.5rem', height: '46px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '0.375rem',
+                  fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.13em', fontFamily: 'Bodoni Moda Variable',
+                  cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center',
+                  boxShadow: '0 4px 6px rgba(245, 158, 11, 0.2)'
+                }}
+              >
+                <i className="fa-solid fa-credit-card"></i> Top Up
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => handleExecutePrompt(e)}
+                title="Submit"
+                disabled={session?.status === 'ARCHIVED' || isVerifyingCredits || (!inputMessage.trim() && selectedFiles.length === 0)}
+                style={{
+                  padding: '0 2.25rem', height: '46px', backgroundColor: '#800020', color: 'white', border: 'none', borderRadius: '0.375rem',
+                  fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.09em', fontFamily: 'Google Sans Code',
+                  cursor: (session?.status === 'ARCHIVED' || isVerifyingCredits || (!inputMessage.trim() && selectedFiles.length === 0)) ? 'not-allowed' : 'pointer',
+                  opacity: (session?.status === 'ARCHIVED' || isVerifyingCredits || (!inputMessage.trim() && selectedFiles.length === 0)) ? 0.5 : 1,
+                  whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+              >
+                {isVerifyingCredits ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-regular fa-paper-plane"></i>}
+              </button>
+            )}
           </form>
 
         </div>

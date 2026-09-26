@@ -14,9 +14,9 @@ import TerminalConsoleUI from './pages/terminalconsole';
 import LoaderGate from './components/loadergate';
 import './styles/styles.scss';
 import './App.scss';
-import { generateClient } from 'aws-amplify/api';
-import type { Schema } from '../amplify/data/resource';
 import { Amplify } from 'aws-amplify';
+import { fetchAuthSession, getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth'; // Added required auth imports
+import { CubeIcon } from './components/cube'; 
 import VectorCollectionsUI from './pages/vectorcollections';
 import AmazonBedrockUI from './pages/amazonbedrock';
 import FoundationModelsUI from './pages/foundationmodels';
@@ -28,21 +28,12 @@ import RAGArtifactsUI from './pages/ragartifacts';
 import UsageWatchtower from './pages/watchtowerdashboard';
 import AgentActivity from './pages/agentsactivity';
 
-const apiClient = generateClient<Schema>();
-
-async function testAmplify() {
-  try {
-    const result = await apiClient.queries.Chronos({ name: "TestChronosFunction" });
-    console.log("API Result:", result);
-  } catch (error) {
-    console.error("Error calling Chronos function:", error);
-  }
-}
-
 function App() {
   const { logUser, userLog, isAuthenticated } = usePraimfaya();
   const systemPreferenceDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const [darkMode, setDarkMode] = useState<boolean>(systemPreferenceDark);
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
+
   console.log(`Context :: ${logUser} : ${userLog}`);
 
   useEffect(() => {
@@ -51,10 +42,45 @@ function App() {
     document.body.style.transition = "background-color 0.3s ease, color 0.3s ease";
     console.log('Amplify.configure:');
     console.log(Amplify.getConfig());
-    testAmplify();
   }, [darkMode]); 
+
+  useEffect(() => {
+    const verifySession = async () => {
+      try {
+        const { username, userId } = await getCurrentUser();
+        const attributes = await fetchUserAttributes();
+        const session = await fetchAuthSession();
+        const tokenPayload = session.tokens?.accessToken?.payload;
+        const groups = (tokenPayload?.['cognito:groups'] as string[]) || [];
+        const authTimeEpoch = tokenPayload?.auth_time as number;
+        const lastSignInTime = authTimeEpoch 
+            ? new Date(authTimeEpoch * 1000).toISOString() 
+            : new Date().toISOString();
+        
+        userLog(attributes.email || username || 'aws-user', 'verified', userId, lastSignInTime, groups);
+      } catch (error) {
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+    verifySession();
+  }, []);
   
   const toggleDarkMode = () => { setDarkMode(!darkMode)}
+
+  if (isInitializing) {
+    return (
+      <div className={`App ${darkMode ? 'praimfaya-dark' : 'praimfaya-light'}`} style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: darkMode ? "#1b1c1d" : "#ffffff", color: darkMode ? '#f9fafb' : '#111827', fontFamily: 'Google Sans Code, monospace' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
+            <CubeIcon width={40} height={40} darkMode={darkMode} edgeColor={darkMode ? '#ffffff' : '#0B0B45'} animationDuration="2s" />
+          </div>
+          <h3 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', letterSpacing: '0.1em' }}>AUTHENTICATING...</h3>
+          <p style={{ opacity: 0.5, fontSize: '0.85rem', margin: 0, fontFamily: 'Google Sans Code', letterSpacing: '0.13em' }}>Verifying secure session.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

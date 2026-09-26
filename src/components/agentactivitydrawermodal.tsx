@@ -28,13 +28,14 @@ export const AgentActivityDrawerModal: React.FC<AgentActivityDrawerModalProps> =
     if (!isOpen || !session?.id) return;
 
     const sub = client.models.AgentActivity.observeQuery({
-      filter: { terminalId: { eq: session.id } }
+      filter: { terminalId: { eq: session.id } },
+      selectionSet: ['id', 'createdAt', 'lifecycleState', 'toolName', 'thoughtLog', 'modelId', 'inputTokens', 'outputTokens', 'durationMs', 'computeCredits', 'scheduledFor'] as any
     }).subscribe({
       next: (data) => {
         const sorted = [...data.items]
           .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
           .slice(0, 50); 
-        setActivities(sorted);
+        setActivities(sorted as unknown as Schema['AgentActivity']['type'][]);
       },
       error: (err) => console.error("Error observing activities:", err)
     });
