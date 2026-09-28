@@ -77,9 +77,10 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
 
   const safeComputeCredits = subscription.computeCredits ?? 0;
   const safeMaxCredits = subscription.maxCredits ?? 1;
-  
   const creditPercentage = Math.min(100, Math.max(0, (safeComputeCredits / safeMaxCredits) * 100));
   const isLowCredits = safeComputeCredits < (safeMaxCredits * 0.15);
+  const isActivePeriod = subscription.status === 'active' || 
+    (subscription.status === 'canceled' && !!subscription.currentPeriodEnd && new Date(subscription.currentPeriodEnd) > new Date());
 
   return (
     <div className={`profile-card ${darkMode ? 'dark' : ''}`}>
@@ -180,7 +181,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
               </div>
             </div>
 
-            {subscription.status === 'active' && (
+            {isActivePeriod && (
               <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '0.5rem' }}>
                   <dt className="profile-detail-label">Compute Credits</dt>

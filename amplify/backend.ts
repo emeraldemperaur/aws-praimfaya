@@ -36,6 +36,7 @@ import { foundationModelSeeder } from './functions/foundation-model-seeder/resou
 import { syncKnowledgeBase } from './functions/sync-kyb/resource';
 import { pollBedrock } from './functions/poll-bedrock/resource';
 import { updateUserGroup } from './functions/update-user-group/resource';
+import { createPortalSession } from './functions/stripe-portal/resource';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -45,7 +46,7 @@ const backend = defineBackend({
   agentProvisioner, webhookRouter, agentReaper, chatHandler, agentWorker,
   createCheckoutSession, grantPromoCredits, stripeWebhook, multimediaExecutor,
   lexFulfillment, postCallAnalysis, foundationModelSeeder, syncKnowledgeBase, pollBedrock, 
-  updateUserGroup 
+  updateUserGroup , createPortalSession
 });
 
 const customStack = cdk.Stack.of(backend.chatHandler.resources.lambda);
@@ -77,6 +78,7 @@ const chatLambda = backend.chatHandler.resources.lambda as lambda.Function;
 const workerLambda = backend.agentWorker.resources.lambda as lambda.Function;
 const mediaLambda = backend.multimediaExecutor.resources.lambda as lambda.Function;
 const checkoutLambda = backend.createCheckoutSession.resources.lambda as lambda.Function;
+const stripePortalLambda = backend.createPortalSession.resources.lambda as lambda.Function;
 const webhookLambda = backend.stripeWebhook.resources.lambda as lambda.Function;
 const promoLambda = backend.grantPromoCredits.resources.lambda as lambda.Function;
 const lexFulfillmentLambda = backend.lexFulfillment.resources.lambda as lambda.Function;
@@ -221,7 +223,6 @@ new bedrock.CfnDataSource(customStack, 'NovaMediaDataSource', {
   dataSourceConfiguration: { type: 'S3', s3Configuration: { bucketArn: backend.vectorCollectionsS3.resources.bucket.bucketArn, inclusionPrefixes: ['vector-collections/media/'] } }
 });
 
-// Decoupled EventBridge S3 upload trigger
 const cfnVectorBucket = backend.vectorCollectionsS3.resources.bucket.node.defaultChild as s3.CfnBucket;
 cfnVectorBucket.notificationConfiguration = { eventBridgeConfiguration: { eventBridgeEnabled: true } };
 
@@ -342,6 +343,10 @@ checkoutLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID
 checkoutLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS');
 checkoutLambda.addEnvironment('TOP_UP_PRICE_ID', process.env.TOP_UP_PRICE_ID || 'price_1UB56mI2Coxc9y6Ejo4sGyve');
 checkoutLambda.addEnvironment('FRONTEND_URL', process.env.FRONTEND_URL || 'http://localhost:5173');
+
+stripePortalLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
+stripePortalLambda.addEnvironment('FRONTEND_URL', process.env.FRONTEND_URL || 'https://prometheus-fire.dcie4i9xtobfi.amplifyapp.com');
+userProfilesTable.grantReadData(stripePortalLambda);
 
 webhookLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS');
 webhookLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS');

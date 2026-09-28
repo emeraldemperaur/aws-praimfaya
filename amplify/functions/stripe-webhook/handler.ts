@@ -26,12 +26,17 @@ export const handler = async (event: any) => {
       let priceId = '';
       let customerId = '';
       let periodEnd = new Date().toISOString(); 
+      let monetaryValue = 0;
+      let invoiceId = '';
 
       if (stripeEvent.type === 'checkout.session.completed') {
         const session = stripeEvent.data.object as Stripe.Checkout.Session;
         cognitoUserId = session.client_reference_id!;
         customerId = session.customer as string;
         mode = session.mode;
+        
+        monetaryValue = (session.amount_total || 0) / 100;
+        invoiceId = (session.invoice as string) || `cs_${session.id}`;
 
         if (mode === 'subscription') {
           const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
@@ -47,6 +52,9 @@ export const handler = async (event: any) => {
         }
         customerId = invoice.customer as string;
         mode = 'subscription';
+        
+        monetaryValue = (invoice.amount_paid || 0) / 100;
+        invoiceId = invoice.id;
         
         const rawPrice = invoice.lines.data[0].pricing?.price_details?.price;
         priceId = typeof rawPrice === 'string' ? rawPrice : (rawPrice as Stripe.Price)?.id || '';
@@ -82,20 +90,31 @@ export const handler = async (event: any) => {
                     Update: {
                         TableName: USER_PROFILES_TABLE,
                         Key: { cognitoUserId },
-                        UpdateExpression: "SET stripeCustomerId = :sid, subscriptionStatus = :status, planName = :plan, computeCredits = :credits, maxCredits = :credits, currentPeriodEnd = :periodEnd",
+                        UpdateExpression: "SET stripeCustomerId = :sid, subscriptionStatus = :status, planName = :plan, computeCredits = if_not_exists(computeCredits, :zero) + :credits, maxCredits = if_not_exists(maxCredits, :zero) + :credits, currentPeriodEnd = :periodEnd",
                         ExpressionAttributeValues: {
                             ":sid": customerId,
                             ":status": "ACTIVE",
                             ":plan": planName,
                             ":credits": allocatedCredits,
                             ":periodEnd": periodEnd,
+                            ":zero": 0
                         }
                     }
                 },
                 {
                     Put: {
                         TableName: USAGE_RECORDS_TABLE,
-                        Item: { id: recordId, userId: cognitoUserId, sessionId: 'system-billing', sessionTitle: 'Subscription Purchase/Renewal', actionType: 'TOP_UP', creditsUsed: -allocatedCredits, createdAt: now }
+                        Item: { 
+                          id: recordId, 
+                          userId: cognitoUserId, 
+                          sessionId: 'system-billing', 
+                          sessionTitle: 'Subscription Purchase/Renewal', 
+                          actionType: 'TOP_UP', 
+                          creditsUsed: -allocatedCredits, 
+                          monetaryValue: monetaryValue,
+                          stripeInvoiceId: invoiceId,       
+                          createdAt: now 
+                        }
                     }
                 }
             ]
@@ -114,14 +133,24 @@ export const handler = async (event: any) => {
                 {
                     Put: {
                         TableName: USAGE_RECORDS_TABLE,
-                        Item: { id: recordId, userId: cognitoUserId, sessionId: 'system-billing', sessionTitle: 'One-Time Credit Top-Up', actionType: 'TOP_UP', creditsUsed: -allocatedCredits, createdAt: now }
+                        Item: { 
+                          id: recordId, 
+                          userId: cognitoUserId, 
+                          sessionId: 'system-billing', 
+                          sessionTitle: 'One-Time Credit Top-Up', 
+                          actionType: 'TOP_UP', 
+                          creditsUsed: -allocatedCredits, 
+                          monetaryValue: monetaryValue,     
+                          stripeInvoiceId: invoiceId,     
+                          createdAt: now 
+                        }
                     }
                 }
             ]
         }));
       }
     } 
-   
+    
     else if (stripeEvent.type === 'invoice.payment_failed') {
       const invoice = stripeEvent.data.object as Stripe.Invoice;
       

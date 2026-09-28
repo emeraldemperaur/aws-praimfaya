@@ -6,6 +6,7 @@ import { getCurrentUser } from 'aws-amplify/auth';
 import type { SelectionSet } from 'aws-amplify/data';
 import type { Schema } from '../../amplify/data/resource'; 
 import { getInitials, getModelIcon } from '../utils/voltaire';
+import { NATIVE_TOOLS_TEMPLATES } from '../utils/prometheus';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import EphemeralCredentialsModal from '../components/ephemeralcredentialsmodal';
@@ -13,7 +14,6 @@ import type { EphemeralSecrets } from '../data/consoleterminal';
 import { JotformEmbed } from '../components/jotformportal';
 import { HaikusDropdown } from '../components/haikusdropdown';
 import { CubeIcon } from '../components/cube';
-
 import { ArtifactsDrawerModal } from '../components/artifactsdrawermodal';
 import { VectorDrawerModal } from '../components/vectordrawermodal';
 import { WorkflowsDrawerModal } from '../components/workflowsdrawermodal';
@@ -722,7 +722,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
             {isAiTyping && (
               <div style={{ alignSelf: 'flex-start', marginLeft: '3rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '85%' }}>
-                {/* Status Indicator */}
                 <div style={{ padding: '0.85rem 1.15rem', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '0.5rem', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: '0.85rem', fontFamily: 'Google Sans Code, monospace' }}>
                   <span style={{ fontStyle: 'italic' }}>
                     {isUploading ? 'Uploading attachments to secure S3 bucket...' : 
@@ -731,25 +730,34 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 </div>
                 
                 {latestActivity && latestActivity.lifecycleState === 'RUNNING' && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem',
-                    backgroundColor: darkMode ? '#111827' : '#f3f4f6', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
-                    borderRadius: '8px', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', fontFamily: 'Google Sans Code, monospace',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)', animation: 'bubbleFadeIn 0.3s ease-out forwards', marginTop: '0.5rem'
-                  }}>
-                    <img src={getModelIcon(latestActivity.modelId?.split('/')[1] || '')} alt="Tool Engine" style={{ width: '24px', height: '24px' }} />
-                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-                      <strong style={{ color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.7rem' }}>
-                          Action: {latestActivity.toolName || 'Reasoning Engine'}
-                      </strong>
-                      <span style={{ opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {latestActivity.thoughtLog || 'Processing execution parameters...'}
-                      </span>
-                    </div>
-                    <div style={{ marginLeft: '1rem', flexShrink: 0 }}>
-                      <i className="fa-solid fa-circle-notch fa-spin" style={{ color: '#10b981', fontSize: '1rem' }}></i>
-                    </div>
-                  </div>
+                  (() => {
+                    const toolTemplate = NATIVE_TOOLS_TEMPLATES.find(t => t.toolName === latestActivity.toolName);
+                    const displayToolName = toolTemplate?.publicName || latestActivity.toolName || 'Reasoning Engine';
+                    
+                    return (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem',
+                        backgroundColor: darkMode ? '#111827' : '#f3f4f6', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+                        borderRadius: '8px', fontSize: '0.75rem', color: darkMode ? '#d1d5db' : '#4b5563', fontFamily: 'Google Sans Code, monospace',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.05)', animation: 'bubbleFadeIn 0.3s ease-out forwards', marginTop: '0.5rem'
+                      }}>
+                        <img src={getModelIcon(latestActivity.toolName || '')} alt="Tool Icon" style={{ width: '24px', height: '24px' }} />
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                          <strong style={{ color: '#800020', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.7rem' }}>
+                              Action: {displayToolName}
+                          </strong>
+                          <span style={{ opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            Metadata: {latestActivity.thoughtLog || 'Processing execution parameters...'}
+                          </span>
+                        </div>
+                        
+                        <div style={{ marginLeft: '1rem', flexShrink: 0 }}>
+                          <i className="fa-solid fa-circle-notch fa-spin" style={{ color: '#10b981', fontSize: '1rem' }}></i>
+                        </div>
+                      </div>
+                    );
+                  })()
                 )}
               </div>
             )}
@@ -777,7 +785,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 }}>
                   <i className="fa-solid fa-file"></i>
                   <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
-                  <button type="button" onClick={() => removeFile(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0 2px' }}>
+                  <button type="button" onClick={() => removeFile(idx)} style={{ background: 'none', border: 'none', color: '#800020', cursor: 'pointer', padding: '0 2px' }}>
                     <i className="fa-solid fa-xmark"></i>
                   </button>
                 </div>
@@ -906,7 +914,9 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 isVerifyingCredits 
                   ? "Verifying compute authorization..."
                   : isOutOfCredits 
-                  ? "Compute credits exhausted. Please top up to continue..." 
+                  ? (userProfile?.subscriptionStatus === 'ACTIVE'
+                      ? "Compute credits exhausted. Please top up to continue..." 
+                      : "Compute credits required. Please subscribe to continue...")
                   : session?.status === 'ARCHIVED' 
                   ? "This session is archived and read-only." 
                   : `Ask ${session?.contextProfile?.name || 'Praimfaya'} a question or attach files...`
@@ -950,15 +960,18 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
               <button
                 type="button"
                 onClick={() => navigate('/user-profile')}
-                title="Subscription Required"
+                title={userProfile?.subscriptionStatus === 'ACTIVE' ? "Top Up Required" : "Subscription Required"}
                 style={{
-                  padding: '0 1.5rem', height: '46px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '0.375rem',
+                  padding: userProfile?.subscriptionStatus === 'ACTIVE' ? '0 1.5rem' : '0 1.5rem', 
+                  width: userProfile?.subscriptionStatus === 'ACTIVE' ? 'auto' : 'auto',
+                  height: '46px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '0.375rem',
                   fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.13em', fontFamily: 'Bodoni Moda Variable',
                   cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center',
                   boxShadow: '0 4px 6px rgba(245, 158, 11, 0.2)'
                 }}
               >
-                <i className="fa-solid fa-credit-card"></i> Top Up
+                <i className="fa-solid fa-credit-card"></i>
+                {userProfile?.subscriptionStatus === 'ACTIVE' ? 'Top Up' : 'Subscribe'}
               </button>
             ) : (
               <button

@@ -24,11 +24,11 @@ export const handler = async (event: any) => {
       throw new Error(`Failed to resolve Stripe Price ID for tier: ${planTier}. Check environment variables.`);
   }
 
-  const frontendUrl = process.env.FRONTEND_URL || 'https://vanguard.yourdomain.com';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://prometheus-fire.dcie4i9xtobfi.amplifyapp.com';
 
   const paymentMethods: Stripe.Checkout.SessionCreateParams.PaymentMethodType[] = ['card'];
   if (mode === 'payment') {
-      paymentMethods.push('crypto' as Stripe.Checkout.SessionCreateParams.PaymentMethodType); // USDC Stablecoin via Stripe
+      paymentMethods.push('crypto' as Stripe.Checkout.SessionCreateParams.PaymentMethodType);
   }
 
   const session = await stripe.checkout.sessions.create({

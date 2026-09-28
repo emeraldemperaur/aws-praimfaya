@@ -14,9 +14,19 @@ By leveraging three core relational templates, the system empowers authenticated
 
 * **Context Profiles (Behavioral Orchestration):** Acts as the configuration layer for distinct AI personas. Users can encapsulate strict system prompts, tune hyperparameters (e.g. temperature), and explicitly link vector collection data sources. This enables the rapid deployment of specialized agents; from precise analytical subject matter experts & solutions architects to creative copywriters.
 
+* **Agentic Workforce (Standard, Supervisor & Collaborator Roles):** Integrates natively with Amazon Bedrock's multi-agent framework to enable flexible, multi-node agentic workflows. <strong>Standard</strong> context profiles operate as standalone agents capable of multi-step reasoning, task execution and deep analysis. For complex workloads, <strong>Supervisor</strong> context profiles act as intelligent controllers that break down tasks and delegate them to specialized <strong>Collaborator</strong> sub-agents.
+
+* **Native Tools Registry:** Leverages an exensive built-in catalog of tool executor functions & custom API connectors which foundation models can invoke to extend the platform capabilities beyond static knowledge retrieval, transforming the RAG pipeline into an active agent capable of fetching real-time data and executing autonomous enterprise actions based on contextual reasoning.
+
 * **Vector Collections & Documents (Knowledge Base):** A streamlined interface for ingesting private documents, generating embeddings via Bedrock, and managing indexed storage. By selectively associating these Vector Collections with specific Context Profiles, users can establish isolated, domain-specific knowledge bases that ground LLM (Large Language Model) responses in factual data, effectively eliminating AI hallucinations.
 
+* **Automation Workflows (Enterprise Orchestration):** Extends the platform's capabilities beyond conversational inference by natively supporting configurable webhook triggers for automation engines like <strong><em>n8n</em></strong>, <strong><em>Make</em></strong>, <strong><em>Zapier</em></strong>, and <strong><em>Pipedream</em></strong> to enable platform agents to securely push data payloads to pre-defined automation endpoints, further bridging the gap between internal LLM reasoning and external enterprise task execution or data synchronization.
+
 * **Foundation Models (Vendor Agnostic Interoperability):** Natively integrates with Amazon Bedrock’s diverse catalog of Embedding and Large Language Models (e.g., Amazon Nova, Anthropic Claude, OpenAI GPT, DeepSeek, Google Gemma, Meta Llama, Cohere, Mistral AI, Stability AI, Twelvelabs, Luma AI). This agnostic approach prevents vendor lock-in, allowing system administrators to seamlessly toggle active models based on required modalities, context window limits, or token cost optimization.
+
+* **Deus Ex Machina (Human-in-the-Loop):** A deterministic execution guardrail that forces the LLM to halt and request explicit human authorization before executing critical designated tools, ensuring safety in automated environments.
+
+* **Secure Ephemeral Credentialing:** Enforces a strict zero-trust security model for agentic tool execution. Instead of storing sensitive API keys or connection strings persistently in a database, the system relies on Just-In-Time (JIT) credential injection. Secrets are passed securely into volatile memory and only exist for the duration of the tool's invocation as they are immediately destroyed upon completion, eliminating the risk of static credential leakage.
 
 Ultimately, Praimfaya couples strict AWS Cognito IAM authentication with a highly modular RAG architecture to proffer a robust, scalable foundation for vanguard users looking to sculpt secure, context-aware AI workspaces on demand. 
 </p>
@@ -68,6 +78,7 @@ Ultimately, Praimfaya couples strict AWS Cognito IAM authentication with a highl
   <li><strong>Progressive Lazy-Loading & DOM Optimization:</strong> Implements slicing mechanics for array chunking to handle massive chat histories efficiently. History hydration utilizes memory-efficient reverse-pagination (loading older messages on demand) to prevent React virtual DOM layout degradation during high-turn interactions.</li>
   <li><strong>Asynchronous Streaming & Multi-Modal Artifacts:</strong> Parses complex, heavily formatted Markdown (GFM) and tabular data natively. Coordinates retrieved RAG asset arrays (text vs. visual chips) into vivid CSS micro-animation sequences for fluid UI entry.</li>
   <li><strong>Pipeline Error Boundary Failovers:</strong> Intercepts network routing drops, socket disconnects and Amazon Bedrock cold-start timeouts using local UI boundary state catchers. This fallback renders contextual infrastructure remediation steps (e.g., AWS cross-region console checks) directly within the chat stream to avoid ungracefully crashing the parent component tree.</li>
+  <li><strong>Live Agent Telemetry & Tool Chips:</strong> Surfaces the LLM's chain-of-thought and tool invocations via real-time WebSocket subscriptions. Uses strict AppSync <code>selectionSet</code> optimization to efficiently stream action logs directly into the chat interface as animated Vanguard Tool Chips without incurring DynamoDB Read Capacity Unit (RCU) cost leaks.</li>
 </ul>
 </p>
 </li>
@@ -98,7 +109,7 @@ aws cognito-idp admin-add-user-to-group \
 <p align="justify">
 <strong>AWS AppSync & Amazon S3 Storage Backend:</strong> Serverless orchestration and Infrastructure as Code (IaC) layer. Securely bridges the frontend user client with convenience methods and functions for interfacing with AWS backend microservices, environment configurations and managing API routing (REST/GraphQL) to provide a seamless integration with cloud-native services.
 
-AppSync Model schema, types & operations defined for <code>ContextProfile</code>, <code>VectorCollection</code>, <code>VectorDocument</code>, <code>ConsoleTerminal</code> and <code>TerminalMessage</code> metadata tables utilize Amazon DynamoDB with Cognito User Pool user group's to seamlessly manage granular user CRUD permissions to respective resources.
+AppSync Model schema, types & operations defined for <code>ContextProfile</code>, <code>VectorCollection</code>, <code>VectorDocument</code>, <code>AutomationWorkflow</code>, <code>ConsoleTerminal</code> and <code>TerminalMessage</code> metadata tables utilize Amazon DynamoDB with Cognito User Pool user group's to seamlessly manage granular user CRUD permissions to respective resources.
 </p>
 </li>
 <li>

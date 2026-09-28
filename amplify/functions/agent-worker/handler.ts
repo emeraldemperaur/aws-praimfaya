@@ -56,8 +56,13 @@ const MULTIMODAL_TOOL_FLAT_COSTS: Record<string, number> = {
 
 const NOCTURNAL_TOOLS = ['schedule_future_task'];
 
-const IMPACTFUL_TOOLS: string[] = [
-    
+const IMPACTFUL_TOOLS: string[] = [ "formstack_agile_agent", "jotform_agile_agent", "airflow_pipeline_agent", "airtable_data_agent",
+  "arduino_iot_agent", "asana_pm_agent", "raspberry_pi_fleet_agent", "bamboohr_agent", "booking_com_agent", "byo_mcp_agent",
+  "butterflymx_access_agent", "confluence_wiki_agent", "contentful_cms_agent", "datadog_monitoring_agent", "dynamics_365_agent",
+  "etrade_financial_agent", "github_developer_agent", "gitlab_developer_agent", "google_workspace_agent", "grafana_observability_agent",
+  "hubspot_crm_agent", "jira_agile_agent", "notion_workspace_agent", "pagerduty_sre_agent", "priceline_partner_agent",
+  "rippling_hr_agent", "sap_erp_agent", "salesforce_crm_agent", "sanity_cms_agent", "execute_vanguard_qa", "servicenow_itsm_agent", "shopify_admin_agent",
+  "slack_collaboration_agent", "snowflake_data_agent", "uipath_orchestrator_agent", "yardi_virtuoso_agent", "zendesk_support_agent"
 ];
 
 const INTERNAL_AWS_TOOLS = [

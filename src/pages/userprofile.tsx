@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import TitleRibbon from "../components/titleribbon";
 import { UserProfileCard, type SubscriptionDetails } from "../components/userprofilecard";
+import BottomRightModal from "../components/bottomrightmodal";
 import { usePraimfaya } from "../contexts";
 import { getPermissions } from "../utils/asimov";
-import { generateClient } from "aws-amplify/data"; // Fixed import
+import { generateClient } from "aws-amplify/data"; 
 import { getCurrentUser } from "aws-amplify/auth";
-import type { Schema } from '../../amplify/data/resource'; // Added schema typing
+import type { Schema } from '../../amplify/data/resource'; 
 
 const client = generateClient<Schema>();
 
@@ -13,6 +14,9 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
   const { logUser, logKey, userGroups } = usePraimfaya();
 
   const [dbProfile, setDbProfile] = useState<Schema['UserProfile']['type'] | null>(null);
+  
+  const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const adminRoles = ['admin', 'superadmin', 'root', 'heda'];
   const highestRole = userGroups.find(group => adminRoles.includes(group));
@@ -76,21 +80,30 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
       console.log(`Initiating checkout session for tier: ${planTier}...`);
       const response = await client.mutations.createCheckoutSession({ planTier });
       if (response.data) {
-        window.location.href = response.data; // Redirect to Stripe Checkout
+        window.location.href = response.data;
       }
     } catch (error) {
       console.error("Failed to launch Stripe checkout session:", error);
+      setErrorMessage("Failed to initiate secure checkout. Please verify your connection.");
+      setIsErrorModalOpen(true);
     }
   };
 
-  const handleStripeCancel = async () => {
-    console.log('Canceling subscription at period end...');
-    await new Promise((resolve) => setTimeout(resolve, 1500)); 
-  };
-
-  const handleStripeRenew = async () => {
-    console.log('Renewing subscription...');
-    await new Promise((resolve) => setTimeout(resolve, 1500)); 
+  const handlePortalRedirect = async () => {
+    try {
+      console.log('Generating secure Stripe Portal link...');
+      const response = await client.mutations.createPortalSession();
+      if (response.data) {
+        window.location.href = response.data;
+      } else {
+        setErrorMessage("Failed to reach the billing portal. Please contact support.");
+        setIsErrorModalOpen(true);
+      }
+    } catch (error) {
+      console.error("Failed to generate Stripe Customer Portal session:", error);
+      setErrorMessage("An unexpected network error occurred while reaching the billing portal.");
+      setIsErrorModalOpen(true);
+    }
   };
 
   return (
@@ -115,13 +128,34 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
             onSubscribeVanguard={() => handleCheckout('VANGUARD')}
             onSubscribeElite={() => handleCheckout('VANGUARD_ELITE')}
             onTopUpCredits={() => handleCheckout('TOP_UP')}
-            onCancelSubscription={handleStripeCancel}
-            onRenewSubscription={handleStripeRenew}
+            onCancelSubscription={handlePortalRedirect}
+            onRenewSubscription={handlePortalRedirect}
+            onUpdatePayment={handlePortalRedirect}
             darkMode={darkMode}
           />
         </div> 
-
       </div>
+
+      <BottomRightModal 
+        isOpen={isErrorModalOpen} 
+        onClose={() => setIsErrorModalOpen(false)} 
+        title="Billing Action Failed" 
+        darkMode={darkMode}
+      >
+        <div style={{ 
+          padding: '1.5rem', 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '1rem',
+          fontFamily: 'Google Sans Code, monospace',
+          color: darkMode ? '#9e0f33' : '#800020'
+        }}>
+          <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '1.5rem' }}></i>
+          <p style={{ margin: 0, fontSize: '0.9rem', lineHeight: '1.4' }}>
+            {errorMessage}
+          </p>
+        </div>
+      </BottomRightModal>
     </>
   );
 };

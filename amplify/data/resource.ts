@@ -6,6 +6,7 @@ import { chatHandler } from '../functions/chat-handler/resource';
 import { syncKnowledgeBase } from '../functions/sync-kyb/resource';
 import { pollBedrock } from '../functions/poll-bedrock/resource';
 import { updateUserGroup } from '../functions/update-user-group/resource';
+import { createPortalSession } from '../functions/stripe-portal/resource';
 
 const headerRBAC = (allow: any) => [
   allow.owner(),
@@ -248,6 +249,8 @@ const schema = a.schema({
       creditsUsed: a.integer().required(),
       inputTokens: a.integer(),
       outputTokens: a.integer(),
+      monetaryValue: a.float(),
+      stripeInvoiceId: a.string(),
       createdAt: a.datetime().required()
     })
     .authorization(iamRBAC)
@@ -279,6 +282,14 @@ const schema = a.schema({
       allow.groups(['superadmin', 'root', 'admin', 'heda'])
     ])
     .handler(a.handler.function(createCheckoutSession)),
+  
+  createPortalSession: a.mutation()
+    .returns(a.string())
+    .authorization((allow) => [
+      allow.authenticated('identityPool'),
+      allow.groups(['superadmin', 'root', 'admin', 'heda'])
+    ])
+    .handler(a.handler.function(createPortalSession)),
 
   grantPromoCredits: a.mutation()
     .arguments({ targetCognitoUserId: a.string().required(), creditAmount: a.integer().required() })
