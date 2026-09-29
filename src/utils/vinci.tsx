@@ -28,3 +28,11 @@ export const MicrochipAIIcon = ({ className = "w-6 h-6", style }: { className?: 
   );
 };
 
+export const btnStyle = (darkMode: boolean, intent: 'neutral' | 'success' | 'danger') => ({
+  background: 'transparent',
+  border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+  color: intent === 'success' ? '#10b981' : intent === 'danger' ? '#ef4444' : (darkMode ? '#d1d5db' : '#4b5563'),
+  width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer', 
+  display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
+});
+

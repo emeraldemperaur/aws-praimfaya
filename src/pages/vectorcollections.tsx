@@ -14,6 +14,7 @@ import type { UIVectorCollection } from "../data/vectorcollection";
 import { getUserEmail } from "../utils/asimov";
 import { fetchAuthSession } from 'aws-amplify/auth';
 import type { Schema } from '../../amplify/data/resource'; 
+import { btnStyle } from "../utils/vinci";
 
 const client = generateClient<Schema>();
 
@@ -168,34 +169,38 @@ const VectorCollectionsUI = ({ darkMode }: { darkMode: boolean }) => {
     {
       header: 'Actions',
       accessor: 'actions',
+      sortable: false,
       render: (row) => (
-        <div className="tbl-action-group">
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button 
-           className="tbl-action-btn view-btn" 
-           onClick={() => {
-                setViewVectorCollection(row);
-                setIsViewModalOpen(true);
-              }}
+            onClick={() => {
+              setViewVectorCollection(row);
+              setIsViewModalOpen(true);
+            }}
+            title="Inspect Collection" 
+            style={btnStyle(darkMode, 'success')}
           >
-            Inspect
+            <i className="bx bx-show"></i>
           </button>
           <button 
-            className="tbl-action-btn edit-btn" 
             onClick={() => {
               setEditVectorCollection(row);
               setIsEditModalOpen(true);
             }}
+            title="Edit Collection" 
+            style={btnStyle(darkMode, 'neutral')}
           >
-            Manage
+            <i className="bx bx-pencil" ></i>
           </button>
           <button 
-            className="tbl-action-btn delete-btn" 
             onClick={() => {
               setDeleteVectorCollection(row);
               setIsDeleteModalOpen(true);
             }}
+            title="Delete Collection" 
+            style={btnStyle(darkMode, 'danger')}
           >
-            Delete
+            <i className="bx bx-trash"></i>
           </button>
         </div>
       )

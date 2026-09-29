@@ -11,6 +11,7 @@ import type { UIAutomationWorkflow } from "../data/automationworkflows";
 import { generateClient } from "aws-amplify/data"; 
 import { getUserEmail } from "../utils/asimov";
 import type { Schema } from '../../amplify/data/resource';
+import { btnStyle } from "../utils/vinci";
 
 const client = generateClient<Schema>();
 
@@ -320,7 +321,6 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
       header: 'Name',
       accessor: 'name',
       sortable: true,
-      width: '45%', 
       render: (row) => (
         <div className="tbl-cell-user" style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: '300px' }}>
           <img src={getModelIcon(row.tool)} alt={row.tool} style={{ flexShrink: 0 }} />
@@ -361,7 +361,6 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
       header: 'I/O Parameters',
       accessor: 'inputParameters' as any,
       sortable: false,
-      width: '25%', 
       render: (row) => {
         const validInputs = row.inputParameters?.filter(p => p.variable && p.variable.trim() !== '') || [];
         const validOutputs = row.outputVariables?.filter(p => p.variable && p.variable.trim() !== '') || [];
@@ -382,7 +381,6 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
       header: 'Vector Factor',
       accessor: 'vectorFactor',
       sortable: true,
-      width: '120px', 
       render: (row) => (
         <div className="tbl-cell-stacked">
           <span style={{fontSize: '1.3rem', fontWeight: 800}} className="primary-text">{row.vectorFactor ?? 0}°</span>
@@ -396,26 +394,28 @@ const AutomationWorkflowsUI = ({ darkMode }: { darkMode: boolean }) => {
       header: 'Actions',
       accessor: 'id',
       sortable: false,
-      width: '200px', 
       render: (row) => (
-        <div className="tbl-action-group" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button 
-            className="tbl-action-btn view-btn" 
             onClick={() => { setViewWorkflow(row); setIsViewModalOpen(true); }}
+            title="Inspect Workflow"
+            style={btnStyle(darkMode, 'success')}
           >
-            View
+            <i className="bx bx-show"></i>
           </button>
           <button 
-            className="tbl-action-btn edit-btn" 
             onClick={() => { setEditWorkflow(row); setEditWorkflowData(row); setIsEditModalOpen(true); }}
+            title="Edit Workflow"
+            style={btnStyle(darkMode, 'neutral')}
           >
-            Edit
+            <i className="bx bx-pencil" ></i>
           </button>
           <button 
-            className="tbl-action-btn delete-btn" 
             onClick={() => { setDeleteWorkflow(row); setIsDeleteModalOpen(true); }}
+            title="Delete Workflow"
+            style={btnStyle(darkMode, 'danger')}
           >
-            Delete
+            <i className="bx bx-trash"></i>
           </button>
         </div>
       )

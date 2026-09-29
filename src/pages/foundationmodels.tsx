@@ -13,6 +13,7 @@ import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
 import { getUserEmail } from "../utils/asimov";
 import type { UIContextProfile } from "../data/contextprofile";
 import type { Schema } from '../../amplify/data/resource'; // Added Schema typing
+import { btnStyle } from "../utils/vinci";
 
 const client = generateClient<Schema>();
 
@@ -276,37 +277,40 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <div className="tbl-action-group">
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button 
-                  className="tbl-action-btn view-btn" 
                   onClick={() => {
                     setViewFoundationModel(row);
                     setIsViewModalOpen(true);
                   }}
+                  title="Inspect Model"
+                  style={btnStyle(darkMode, 'success')}
                 >
-                  Inspect
+                  <i className="bx bx-show"></i>
                 </button>
                 
                 {isAdmin && (
                   <button 
-                    className="tbl-action-btn edit-btn" 
                     onClick={() => {
                       setEditFoundationModel(row);
                       setIsEditModalOpen(true);
                     }}
+                    title="Modify Configuration"
+                    style={btnStyle(darkMode, 'neutral')}
                   >
-                    Modify
+                    <i className="bx bx-pencil" ></i>
                   </button>
                 )}
                 
                 <button 
-                  className="tbl-action-btn delete-btn" 
                   onClick={() => {
-                  setDisableFoundationModel(row);
-                  setIsDeleteModalOpen(true);
-                }}
+                    setDisableFoundationModel(row);
+                    setIsDeleteModalOpen(true);
+                  }}
+                  title={isUserActive ? "Disable Model" : "Enable Model"}
+                  style={btnStyle(darkMode, isUserActive ? 'danger' : 'success')}
                 >
-                  {isUserActive ? <a>Disable</a> : <a>Enable</a>}
+                  <i className="bx bx-power-off"></i>
                 </button>
               </div>
 
@@ -314,7 +318,8 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.25rem', maxWidth: '240px' }}>
                   <p style={{ 
                     margin: 0, fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280', 
-                    lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'break-word', textAlign: 'justify'
+                    lineHeight: 1.3, whiteSpace: 'normal', overflowWrap: 'break-word', textAlign: 'justify',
+                    fontFamily: 'Google Sans Code'
                   }}>
                     {(row as any).description || 'No description available for this model.'}
                   </p>
@@ -366,7 +371,6 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
       });
       if (errors) throw new Error(errors[0].message);
       
-      // Strict null check for updatedModel
       if (!updatedModel) throw new Error("Update returned empty data.");
 
       setFoundationModels(prev => prev.map(item => 
@@ -530,7 +534,7 @@ const FoundationModelsUI = ({ darkMode }: { darkMode: boolean }) => {
                   borderRadius: '4px',
                   fontSize: '0.875rem', 
                   color: darkMode ? '#d1d5db' : '#4b5563', 
-                  fontFamily: 'monospace',
+                  fontFamily: 'Google Sans Code',
                   wordBreak: 'break-all'
                 }}>
                   {viewFoundationModel?.apiIdentifier}

@@ -14,6 +14,7 @@ import { getUserEmail } from "../utils/asimov";
 import { HaikuDropdown } from "../components/haikudropdown";
 import { getCurrentUser } from 'aws-amplify/auth';
 import type { Schema } from '../../amplify/data/resource'; 
+import { btnStyle } from "../utils/vinci";
 
 const client = generateClient<Schema>();
 
@@ -398,17 +399,29 @@ const ContextProfilesUI = ({ darkMode }: { darkMode: boolean }) => {
       header: 'Actions',
       accessor: 'actions',
       sortable: false,
-      width: '200px', 
+      width: '15%', 
       render: (row) => (
-        <div className="tbl-action-group" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button className="tbl-action-btn view-btn" onClick={() => { setViewContextProfile(row); setIsViewModalOpen(true); }}>
-            View
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button 
+            onClick={() => { setViewContextProfile(row); setIsViewModalOpen(true); }} 
+            title="View Profile" 
+            style={btnStyle(darkMode, 'success')}
+          >
+            <i className="bx bx-show"></i>
           </button>
-          <button className="tbl-action-btn edit-btn" onClick={() => { setEditContextProfile(row); setEditWorkflowSearch(''); setIsEditModalOpen(true); }}>
-            Edit
+          <button 
+            onClick={() => { setEditContextProfile(row); setEditWorkflowSearch(''); setIsEditModalOpen(true); }} 
+            title="Edit Profile" 
+            style={btnStyle(darkMode, 'neutral')}
+          >
+            <i className="bx bx-pencil" ></i>
           </button>
-          <button className="tbl-action-btn delete-btn" onClick={() => { setDeleteContextProfile(row); setIsDeleteModalOpen(true); }}>
-            Delete
+          <button 
+            onClick={() => { setDeleteContextProfile(row); setIsDeleteModalOpen(true); }} 
+            title="Delete Profile" 
+            style={btnStyle(darkMode, 'danger')}
+          >
+            <i className="bx bx-trash"></i>
           </button>
         </div>
       )

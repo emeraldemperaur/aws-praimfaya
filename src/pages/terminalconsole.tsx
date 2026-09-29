@@ -14,6 +14,7 @@ import type { UIConsoleTerminal } from "../data/consoleterminal";
 import { getCurrentUser } from 'aws-amplify/auth';
 import { getUserEmail } from "../utils/asimov";
 import type { Schema } from '../../amplify/data/resource';
+import { btnStyle } from "../utils/vinci";
 
 const client = generateClient<Schema>();
 
@@ -64,7 +65,6 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
     fetchUserEmail();
   }, []);
 
-  // Public Resources (Foundation Models)
   useEffect(() => {
     const fmSub = client.models.FoundationModel.observeQuery({
       selectionSet: ['id', 'name', 'apiIdentifier', 'provider', 'modality', 'isActive', 'caliber', 'region']
@@ -75,12 +75,11 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
     return () => fmSub.unsubscribe();
   }, []);
 
-  // 2. CRITICAL COST FIX: SECURE User-Specific Subscriptions
   useEffect(() => {
     if (!currentUserEmail) return;
 
     const terminalsSub = client.models.ConsoleTerminal.observeQuery({
-      filter: { userId: { eq: currentUserEmail } }, // Limit payload to user
+      filter: { userId: { eq: currentUserEmail } },
       selectionSet: [
         'id', 'userId', 'title', 'totalTokensUsed', 'status', 'contextProfileId', 'createdAt', 'updatedAt',
         'contextProfile.*', 'messages.*'
@@ -202,9 +201,8 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
       header: 'Actions',
       accessor: 'actions',
       render: (row) => (
-        <div className="tbl-action-group">
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button 
-            className="tbl-action-btn view-btn" 
             onClick={() => {
               if (row.status === 'ACTIVE') {
                 navigator(`/console-terminals/session/${row.id}`);
@@ -214,16 +212,32 @@ const TerminalConsoleUI = ({ darkMode }: { darkMode: boolean }) => {
                 setIsViewModalOpen(true);
               }
             }}
-            style={{ color: row.status === 'ACTIVE' ? '#10b981' : undefined, fontWeight: row.status === 'ACTIVE' ? 600 : 400 }}
+            title={row.status === 'ACTIVE' ? 'Resume Session' : 'Review Session'}
+            style={btnStyle(darkMode, 'success')}
           >
-            {row.status === 'ACTIVE' ? 'Resume' : 'Review'}
+            <i className={`bx ${row.status === 'ACTIVE' ? 'bx-play-circle' : 'bx-show'}`}></i>
           </button>
-          <button className="tbl-action-btn edit-btn" onClick={() => { 
-            setVisibleTranscriptCount(20);
-            setEditConsoleTerminal(row); 
-            setIsEditModalOpen(true); 
-          }}>Emend</button>
-          <button className="tbl-action-btn delete-btn" onClick={() => { setDeleteConsoleTerminal(row); setIsDeleteModalOpen(true); }}>Delete</button>
+          <button 
+            onClick={() => { 
+              setVisibleTranscriptCount(20);
+              setEditConsoleTerminal(row); 
+              setIsEditModalOpen(true); 
+            }}
+            title="Emend Metadata"
+            style={btnStyle(darkMode, 'neutral')}
+          >
+            <i className="bx bx-pencil"></i>
+          </button>
+          <button 
+            onClick={() => { 
+              setDeleteConsoleTerminal(row); 
+              setIsDeleteModalOpen(true); 
+            }}
+            title="Delete Session"
+            style={btnStyle(darkMode, 'danger')}
+          >
+            <i className="bx bx-trash"></i>
+          </button>
         </div>
       )
     }
