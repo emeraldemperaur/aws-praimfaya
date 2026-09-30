@@ -31,28 +31,22 @@ export const handler = async (event: any) => {
 
       if (stripeEvent.type === 'checkout.session.completed') {
         const session = stripeEvent.data.object as Stripe.Checkout.Session;
+        
+        if (session.mode === 'subscription') {
+            return { statusCode: 200, body: JSON.stringify({ received: true, note: 'Delegated to invoice.paid' }) };
+        }
+
         cognitoUserId = session.client_reference_id!;
         customerId = session.customer as string;
         mode = session.mode;
-        
         monetaryValue = (session.amount_total || 0) / 100;
         invoiceId = (session.invoice as string) || `cs_${session.id}`;
+        priceId = process.env.TOP_UP_PRICE_ID!;
 
-        if (mode === 'subscription') {
-          const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
-          priceId = subscription.items.data[0].price.id;
-          periodEnd = new Date(subscription.items.data[0].current_period_end * 1000).toISOString();
-        } else {
-          priceId = process.env.TOP_UP_PRICE_ID!;
-        }
       } else if (stripeEvent.type === 'invoice.paid') {
         const invoice = stripeEvent.data.object as Stripe.Invoice;
-        if (invoice.billing_reason === 'subscription_create') {
-            return { statusCode: 200, body: JSON.stringify({ received: true }) };
-        }
         customerId = invoice.customer as string;
         mode = 'subscription';
-        
         monetaryValue = (invoice.amount_paid || 0) / 100;
         invoiceId = invoice.id;
         
@@ -62,6 +56,8 @@ export const handler = async (event: any) => {
         cognitoUserId = invoice.parent?.type === 'subscription_details' 
             ? invoice.parent.subscription_details?.metadata?.cognitoUserId as string
             : invoice.customer_email || 'UNKNOWN';
+
+        periodEnd = new Date((invoice.lines.data[0].period.end) * 1000).toISOString();
       }
 
       let planName = "VANGUARD";
@@ -80,8 +76,8 @@ export const handler = async (event: any) => {
         return { statusCode: 200, body: "Ignored unrecognized price." };
       }
 
-      const recordId = `usg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const now = new Date().toISOString();
+      const uniqueEventId = stripeEvent.id; 
 
       if (mode === 'subscription') {
         await dynamodb.send(new TransactWriteCommand({
@@ -104,15 +100,16 @@ export const handler = async (event: any) => {
                 {
                     Put: {
                         TableName: USAGE_RECORDS_TABLE,
+                        ConditionExpression: "attribute_not_exists(id)", 
                         Item: { 
-                          id: recordId, 
+                          id: uniqueEventId, 
                           userId: cognitoUserId, 
                           sessionId: 'system-billing', 
                           sessionTitle: 'Subscription Purchase/Renewal', 
                           actionType: 'TOP_UP', 
                           creditsUsed: -allocatedCredits, 
-                          monetaryValue: monetaryValue,
-                          stripeInvoiceId: invoiceId,       
+                          monetaryValue: monetaryValue,     
+                          stripeInvoiceId: invoiceId,
                           createdAt: now 
                         }
                     }
@@ -133,15 +130,16 @@ export const handler = async (event: any) => {
                 {
                     Put: {
                         TableName: USAGE_RECORDS_TABLE,
+                        ConditionExpression: "attribute_not_exists(id)", 
                         Item: { 
-                          id: recordId, 
+                          id: uniqueEventId, 
                           userId: cognitoUserId, 
                           sessionId: 'system-billing', 
                           sessionTitle: 'One-Time Credit Top-Up', 
                           actionType: 'TOP_UP', 
                           creditsUsed: -allocatedCredits, 
                           monetaryValue: monetaryValue,     
-                          stripeInvoiceId: invoiceId,     
+                          stripeInvoiceId: invoiceId,       
                           createdAt: now 
                         }
                     }
@@ -167,6 +165,47 @@ export const handler = async (event: any) => {
           }));
       }
     } 
+ 
+    else if (stripeEvent.type === 'customer.subscription.updated') {
+      const subscription = stripeEvent.data.object as Stripe.Subscription;
+      const cognitoUserId = subscription.metadata?.cognitoUserId;
+      
+      if (cognitoUserId) {
+        const priceId = subscription.items.data[0].price.id;
+        const periodEnd = new Date((subscription as any).current_period_end * 1000).toISOString();
+        const status = subscription.status === 'active' ? 'ACTIVE' : 'PAST_DUE';
+
+        let planName = "VANGUARD";
+        let newMaxCredits = 16400000;
+
+        if (priceId === process.env.VANGUARD_ELITE_PRICE_ID) {
+          planName = "VANGUARD_ELITE";
+          newMaxCredits = 40000000;
+        }
+
+        try {
+          await dynamodb.send(new UpdateCommand({
+            TableName: USER_PROFILES_TABLE,
+            Key: { cognitoUserId },
+            UpdateExpression: "SET planName = :plan, subscriptionStatus = :status, currentPeriodEnd = :periodEnd, maxCredits = :max",
+            ConditionExpression: "attribute_not_exists(maxCredits) OR :max > maxCredits",
+            ExpressionAttributeValues: {
+              ":plan": planName,
+              ":status": status,
+              ":periodEnd": periodEnd,
+              ":max": newMaxCredits
+            }
+          }));
+        } catch (error: any) {
+          if (error.name === 'ConditionalCheckFailedException') {
+            console.log(`Mid-cycle downgrade detected for ${cognitoUserId}. Preserving current higher tier until period ends.`);
+          } else {
+            throw error; 
+          }
+        }
+      }
+    }
+
     else if (stripeEvent.type === 'customer.subscription.deleted') {
       const subscription = stripeEvent.data.object as Stripe.Subscription;
       const cognitoUserId = subscription.metadata?.cognitoUserId;
@@ -186,6 +225,10 @@ export const handler = async (event: any) => {
 
     return { statusCode: 200, body: JSON.stringify({ received: true }) };
   } catch (error: any) {
+    if (error.name === 'ConditionalCheckFailedException') {
+        console.warn(`Idempotent retry detected for event ${stripeEvent.id}. Ignored.`);
+        return { statusCode: 200, body: JSON.stringify({ received: true, note: 'Idempotent retry ignored' }) };
+    }
     console.error("Webhook processing error:", error);
     return { statusCode: 500, body: error.message };
   }

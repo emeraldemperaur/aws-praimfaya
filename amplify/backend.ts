@@ -9,7 +9,6 @@ import { webhookRouter } from './functions/webhook-router/resource';
 import { agentReaper } from './functions/agent-smith/resource';
 import { chatHandler } from './functions/chat-handler/resource';
 import { agentWorker } from './functions/agent-worker/resource'; 
-
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
@@ -342,7 +341,7 @@ workerLambda.addEnvironment('AIRFLOW_DAGS_BUCKET', airflowDagsBucket.bucketName)
 checkoutLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || 'price_1UB4nDI2Coxc9y6EopiOCY2v');
 checkoutLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS');
 checkoutLambda.addEnvironment('TOP_UP_PRICE_ID', process.env.TOP_UP_PRICE_ID || 'price_1UB56mI2Coxc9y6Ejo4sGyve');
-checkoutLambda.addEnvironment('FRONTEND_URL', process.env.FRONTEND_URL || 'http://localhost:5173');
+checkoutLambda.addEnvironment('FRONTEND_URL', process.env.FRONTEND_URL || 'https://prometheus-fire.dcie4i9xtobfi.amplifyapp.com');
 
 stripePortalLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 stripePortalLambda.addEnvironment('FRONTEND_URL', process.env.FRONTEND_URL || 'https://prometheus-fire.dcie4i9xtobfi.amplifyapp.com');

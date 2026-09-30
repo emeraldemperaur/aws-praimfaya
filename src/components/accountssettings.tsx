@@ -400,9 +400,9 @@ const AccountsSettings: React.FC<AccountsSettingsProps> = ({ searchQuery, darkMo
         )},
         { header: 'Actions', accessor: 'actions', sortable: false, width: '15%', render: (row) => (
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => setModal({ isOpen: true, type: 'MANAGE', user: row })} title="Manage Settings" style={btnStyle(darkMode, 'neutral')}><i className="bx bx-slider-alt"></i></button>
-                <button onClick={() => setModal({ isOpen: true, type: 'CREDIT', user: row })} title="Manage Credits" style={btnStyle(darkMode, 'success')}><i className="bx bx-dollar"></i></button>
-                <button onClick={() => setModal({ isOpen: true, type: 'STATUS', user: row })} title={row.subscriptionStatus === 'ACTIVE' ? 'Deactivate' : 'Activate'} style={btnStyle(darkMode, row.subscriptionStatus === 'ACTIVE' ? 'danger' : 'success')}><i className="bx bx-power-off"></i></button>
+                <button onClick={() => setModal({ isOpen: true, type: 'MANAGE', user: row })} title="Manage User Profile" style={btnStyle(darkMode, 'neutral')}><i className="bx bx-slider-alt"></i></button>
+                <button onClick={() => setModal({ isOpen: true, type: 'CREDIT', user: row })} title="Manage Compute Credits" style={btnStyle(darkMode, 'success')}><i className="bx bx-dollar"></i></button>
+                <button onClick={() => setModal({ isOpen: true, type: 'STATUS', user: row })} title={row.subscriptionStatus === 'ACTIVE' ? 'Deactivate Subscription' : 'Activate Subscription'} style={btnStyle(darkMode, row.subscriptionStatus === 'ACTIVE' ? 'danger' : 'success')}><i className="bx bx-power-off"></i></button>
             </div>
         )}
     ];
