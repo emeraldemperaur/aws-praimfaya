@@ -131,7 +131,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
               <div style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
                 <dt className="profile-detail-label mb-small">Subscription Plan</dt>
                 {subscription.status === 'none' ? (
-                  <dd className="profile-detail-value font-medium" style={{ whiteSpace: 'nowrap' }}>Free Tier (Read-Only)</dd>
+                  <dd className="profile-detail-value font-medium" style={{ whiteSpace: 'nowrap' }}>No Subscription</dd>
                 ) : (
                   <dd className="profile-detail-value font-medium" style={{ fontFamily: 'Bodoni Moda Variable', fontSize: '1.2rem', whiteSpace: 'nowrap' }}>
                     {subscription.planName}
@@ -153,10 +153,10 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
                 {subscription.status === 'none' && (
                   <>
                     <button onClick={() => handleAction(onSubscribeVanguard)} disabled={isProcessing} className="btn btn-primary" style={{ backgroundColor: '#800020', border: 'none', width: '100%', textAlign: 'left', whiteSpace: 'nowrap' }}>
-                      {isProcessing ? 'Processing...' : 'Vanguard Pro | $69 USD / month'}
+                      {isProcessing ? 'Processing...' : 'Buy Vanguard Pro | $69 USD / month'}
                     </button>
                     <button onClick={() => handleAction(onSubscribeElite)} disabled={isProcessing} className="btn btn-primary" style={{ backgroundColor: '#2563eb', border: 'none', width: '100%', textAlign: 'left', whiteSpace: 'nowrap' }}>
-                      {isProcessing ? 'Processing...' : 'Vanguard Elite | $169 USD / month'}
+                      {isProcessing ? 'Processing...' : 'Buy Vanguard Elite | $169 USD / month'}
                     </button>
                     <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280', textAlign: 'left', marginTop: '-0.25rem' }}>
                     Pricing is localized to region at checkout.

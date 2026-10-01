@@ -7,6 +7,7 @@ import { syncKnowledgeBase } from '../functions/sync-kyb/resource';
 import { pollBedrock } from '../functions/poll-bedrock/resource';
 import { updateUserGroup } from '../functions/update-user-group/resource';
 import { createPortalSession } from '../functions/stripe-portal/resource';
+import { getAgentTelemetry } from '../functions/get-agent-telemetry/resource';
 
 const headerRBAC = (allow: any) => [
   allow.owner(),
@@ -315,6 +316,12 @@ const schema = a.schema({
     .arguments({ invocationArn: a.string().required() })
     .returns(a.string())
     .handler(a.handler.function(pollBedrock))
+    .authorization((allow) => [allow.authenticated()]),
+
+  getAgentTelemetry: a.query()
+    .arguments({ agentId: a.string().required(), aliasId: a.string().required() })
+    .returns(a.json())
+    .handler(a.handler.function(getAgentTelemetry))
     .authorization((allow) => [allow.authenticated()]),
 
   updateUserGroup: a.mutation()

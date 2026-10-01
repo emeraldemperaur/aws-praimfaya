@@ -21,7 +21,7 @@ const client = generateClient<Schema>();
 const DEFAULT_COLLECTION_STATE = {
   name: '',
   description: '',
-  embeddingModel: 'FEDERATED :: TITAN - NOVA',
+  embeddingModel: 'PROMETHEUS ∑',
   vectorDimension: 3072,
 };
 

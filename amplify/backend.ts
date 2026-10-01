@@ -36,6 +36,7 @@ import { syncKnowledgeBase } from './functions/sync-kyb/resource';
 import { pollBedrock } from './functions/poll-bedrock/resource';
 import { updateUserGroup } from './functions/update-user-group/resource';
 import { createPortalSession } from './functions/stripe-portal/resource';
+import { getAgentTelemetry } from './functions/get-agent-telemetry/resource';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -45,7 +46,7 @@ const backend = defineBackend({
   agentProvisioner, webhookRouter, agentReaper, chatHandler, agentWorker,
   createCheckoutSession, grantPromoCredits, stripeWebhook, multimediaExecutor,
   lexFulfillment, postCallAnalysis, foundationModelSeeder, syncKnowledgeBase, pollBedrock, 
-  updateUserGroup , createPortalSession
+  updateUserGroup , createPortalSession, getAgentTelemetry
 });
 
 const customStack = cdk.Stack.of(backend.chatHandler.resources.lambda);
@@ -86,6 +87,7 @@ const seederLambda = backend.foundationModelSeeder.resources.lambda as lambda.Fu
 const syncKbLambda = backend.syncKnowledgeBase.resources.lambda as lambda.Function;
 const pollBedrockLambda = backend.pollBedrock.resources.lambda as lambda.Function;
 const updateUserGroupLambda = backend.updateUserGroup.resources.lambda as lambda.Function;
+const telemetryLambda = backend.getAgentTelemetry.resources.lambda as lambda.Function;
 
 
 const getGlobalDecoupledPolicy = () => new iam.PolicyStatement({
@@ -118,6 +120,16 @@ lexFulfillmentLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 postCallAnalysisLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 syncKbLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 pollBedrockLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['bedrock:GetAsyncInvoke'], resources: ['*'] }));
+
+// NEW: Grant the telemetry Lambda read-only access to the Bedrock Agent Control Plane
+telemetryLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: [
+    "bedrock:GetAgentKnowledgeBase",
+    "bedrock:ListAgentActionGroups",
+    "bedrock:ListAgentVersions"
+  ],
+  resources: ["*"], 
+}));
 
 updateUserGroupLambda.addEnvironment('USER_POOL_ID', backend.auth.resources.userPool.userPoolId);
 updateUserGroupLambda.addToRolePolicy(new iam.PolicyStatement({
@@ -231,7 +243,7 @@ const s3UploadRule = new events.Rule(customStack, 'VectorS3UploadRule', {
 s3UploadRule.addTarget(new targets.LambdaFunction(processVectorLambda));
 processVectorLambda.addPermission('AllowEventBridgeInvoke', { principal: new iam.ServicePrincipal('events.amazonaws.com'), action: 'lambda:InvokeFunction', sourceArn: s3UploadRule.ruleArn });
 
-// Other Event Bindings
+// Event Bindings
 const bedrockEventRule = new events.Rule(customStack, 'BedrockIngestionStatusRule', { eventPattern: { source: ['aws.bedrock'], detailType: ['Bedrock Knowledge Base Ingestion Job State Change'] } });
 bedrockEventRule.addTarget(new targets.LambdaFunction(statusLambda));
 
@@ -301,7 +313,7 @@ Object.entries(sharedContextVars).forEach(([key, value]) => {
 
 chatLambda.addEnvironment('AGENT_WORKER_FUNCTION_NAME', workerLambda.functionName);
 
-// Media Executor Specific Variables
+// Media Executor ENV Variables
 mediaLambda.addEnvironment('MEDIA_OUTPUT_BUCKET_NAME', multimodalBucket.bucketName);
 mediaLambda.addEnvironment('RAG_ARTIFACTS_TABLE_NAME', ragArtifactsTable.tableName);
 mediaLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
@@ -312,7 +324,7 @@ mediaLambda.addEnvironment('CONNECT_CONTACT_FLOW_ID', connectContactFlowId);
 mediaLambda.addEnvironment('CONNECT_SOURCE_PHONE_NUMBER', connectSourcePhone);
 mediaLambda.addEnvironment('AGENT_WORKER_FUNCTION_ARN', workerLambda.functionArn);
 
-// EventBridge Scheduler Role (Needs PassRole for scheduling)
+// EventBridge Scheduler Role Provisioning
 const schedulerRole = new iam.Role(customStack, 'AgentSchedulerRole', {
   assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
   inlinePolicies: { InvokeLambdaPolicy: new iam.PolicyDocument({ statements: [ new iam.PolicyStatement({ actions: ['lambda:InvokeFunction'], resources: ['*'] }) ] }) }

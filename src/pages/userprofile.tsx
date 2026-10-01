@@ -80,7 +80,16 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
       console.log(`Initiating checkout session for tier: ${planTier}...`);
       const response = await client.mutations.createCheckoutSession({ planTier });
       if (response.data) {
-        window.location.href = response.data;
+        let targetUrl = response.data;
+        try {
+          const parsed = JSON.parse(response.data);
+          if (parsed.url) {
+            targetUrl = parsed.url;
+          }
+        } catch (e) {
+        }
+        console.log("Redirecting to Stripe:", targetUrl);
+        window.location.href = targetUrl;
       }
     } catch (error) {
       console.error("Failed to launch Stripe checkout session:", error);
