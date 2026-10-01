@@ -50,18 +50,30 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
   onTopUpCredits,
   onUpdatePayment
 }) => {
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessingVanguard, setIsProcessingVanguard] = useState(false);
+  const [isProcessingElite, setIsProcessingElite] = useState(false);
+  const [isProcessingCancel, setIsProcessingCancel] = useState(false);
+  const [isProcessingRenew, setIsProcessingRenew] = useState(false);
+  const [isProcessingUpdate, setIsProcessingUpdate] = useState(false);
+  const [isProcessingTopUp, setIsProcessingTopUp] = useState(false);
+
   const initials = getInitials(username);
 
-  const handleAction = async (action?: () => Promise<void>) => {
+  const handleIsolatedAction = async (
+    action: (() => Promise<void>) | undefined, 
+    setLoadingState: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
     if (!action) return;
-    setIsProcessing(true);
+    
+    setLoadingState(true);
     try {
       await action();
     } catch (error) {
       console.error('Stripe API error:', error);
     } finally {
-      setIsProcessing(false);
+      setTimeout(() => {
+        setLoadingState(false);
+      }, 2000); 
     }
   };
 
@@ -81,6 +93,8 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
   const isLowCredits = safeComputeCredits < (safeMaxCredits * 0.15);
   const isActivePeriod = subscription.status === 'active' || 
     (subscription.status === 'canceled' && !!subscription.currentPeriodEnd && new Date(subscription.currentPeriodEnd) > new Date());
+
+  const isAnyProcessing = isProcessingVanguard || isProcessingElite || isProcessingCancel || isProcessingRenew || isProcessingUpdate || isProcessingTopUp;
 
   return (
     <div className={`profile-card ${darkMode ? 'dark' : ''}`}>
@@ -152,30 +166,75 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
               <div className="subscription-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: '0 0 auto', minWidth: '240px' }}>
                 {subscription.status === 'none' && (
                   <>
-                    <button onClick={() => handleAction(onSubscribeVanguard)} disabled={isProcessing} className="btn btn-primary" style={{ backgroundColor: '#800020', border: 'none', width: '100%', textAlign: 'left', whiteSpace: 'nowrap' }}>
-                      {isProcessing ? 'Processing...' : 'Buy Vanguard Pro | $69 USD / month'}
+                    <button 
+                      onClick={() => handleIsolatedAction(onSubscribeVanguard, setIsProcessingVanguard)} 
+                      disabled={isAnyProcessing} 
+                      className="btn btn-primary" 
+                      style={{ 
+                        backgroundColor: '#800020', border: 'none', width: '100%', textAlign: 'left', whiteSpace: 'nowrap',
+                        opacity: isAnyProcessing && !isProcessingVanguard ? 0.5 : 1
+                      }}
+                    >
+                      {isProcessingVanguard ? 'Processing...' : 'Buy Vanguard Pro | $69 USD / month'}
                     </button>
-                    <button onClick={() => handleAction(onSubscribeElite)} disabled={isProcessing} className="btn btn-primary" style={{ backgroundColor: '#2563eb', border: 'none', width: '100%', textAlign: 'left', whiteSpace: 'nowrap' }}>
-                      {isProcessing ? 'Processing...' : 'Buy Vanguard Elite | $169 USD / month'}
+                    
+                    <button 
+                      onClick={() => handleIsolatedAction(onSubscribeElite, setIsProcessingElite)} 
+                      disabled={isAnyProcessing} 
+                      className="btn btn-primary" 
+                      style={{ 
+                        backgroundColor: '#2563eb', border: 'none', width: '100%', textAlign: 'left', whiteSpace: 'nowrap',
+                        opacity: isAnyProcessing && !isProcessingElite ? 0.5 : 1
+                      }}
+                    >
+                      {isProcessingElite ? 'Processing...' : 'Buy Vanguard Elite | $169 USD / month'}
                     </button>
+                    
                     <span style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280', textAlign: 'left', marginTop: '-0.25rem' }}>
-                    Pricing is localized to region at checkout.
+                      Pricing is localized to region at checkout.
                     </span>
                   </>
                 )}
+                
                 {subscription.status === 'active' && (
-                  <button onClick={() => handleAction(onCancelSubscription)} disabled={isProcessing} className="btn btn-danger" style={{ backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', width: '100%', textAlign: 'center' }}>
-                    {isProcessing ? 'Processing...' : 'Manage / Cancel Plan'}
+                  <button 
+                    onClick={() => handleIsolatedAction(onCancelSubscription, setIsProcessingCancel)} 
+                    disabled={isAnyProcessing} 
+                    className="btn btn-danger" 
+                    style={{ 
+                      backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', width: '100%', textAlign: 'center',
+                      opacity: isAnyProcessing && !isProcessingCancel ? 0.5 : 1
+                    }}
+                  >
+                    {isProcessingCancel ? 'Processing...' : 'Manage / Cancel Plan'}
                   </button>
                 )}
+                
                 {subscription.status === 'canceled' && (
-                  <button onClick={() => handleAction(onRenewSubscription)} disabled={isProcessing} className="btn btn-secondary" style={{ width: '100%', textAlign: 'center' }}>
-                    {isProcessing ? 'Processing...' : 'Renew Plan'}
+                  <button 
+                    onClick={() => handleIsolatedAction(onRenewSubscription, setIsProcessingRenew)} 
+                    disabled={isAnyProcessing} 
+                    className="btn btn-secondary" 
+                    style={{ 
+                      width: '100%', textAlign: 'center',
+                      opacity: isAnyProcessing && !isProcessingRenew ? 0.5 : 1
+                    }}
+                  >
+                    {isProcessingRenew ? 'Processing...' : 'Renew Plan'}
                   </button>
                 )}
+                
                 {subscription.status === 'past_due' && (
-                  <button onClick={() => handleAction(onUpdatePayment)} disabled={isProcessing} className="btn btn-danger-solid" style={{ width: '100%', textAlign: 'center' }}>
-                    {isProcessing ? 'Processing...' : 'Update Payment Method'}
+                  <button 
+                    onClick={() => handleIsolatedAction(onUpdatePayment, setIsProcessingUpdate)} 
+                    disabled={isAnyProcessing} 
+                    className="btn btn-danger-solid" 
+                    style={{ 
+                      width: '100%', textAlign: 'center',
+                      opacity: isAnyProcessing && !isProcessingUpdate ? 0.5 : 1
+                    }}
+                  >
+                    {isProcessingUpdate ? 'Processing...' : 'Update Payment Method'}
                   </button>
                 )}
               </div>
@@ -203,15 +262,16 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
                     {isLowCredits ? '⚠️ Running low on synthesis credits.' : 'Credits reset at the end of your billing cycle.'}
                   </span>
                   <button 
-                    onClick={() => handleAction(onTopUpCredits)} 
-                    disabled={isProcessing}
+                    onClick={() => handleIsolatedAction(onTopUpCredits, setIsProcessingTopUp)} 
+                    disabled={isAnyProcessing}
                     style={{ 
                       padding: '0.5rem 1rem', backgroundColor: '#2563eb', color: 'white', border: 'none', 
                       borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'Bodoni Moda Variable',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap', 
+                      opacity: isAnyProcessing && !isProcessingTopUp ? 0.5 : 1
                     }}
                   >
-                    Top Up Credits
+                    {isProcessingTopUp ? 'Processing...' : 'Top Up Credits'}
                   </button>
                 </div>
               </div>

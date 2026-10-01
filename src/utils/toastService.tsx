@@ -19,9 +19,10 @@ export const showToast = {
   success: (message: string, options?: ToastOptions) => {
     toast(
       ({ closeToast }) => (
-        <div className="praimfaya-toast-content toast-success">
+        <div className="praimfaya-toast-content toast-success" style={{ display: 'flex', alignItems: 'center' }}>
           <SuccessIcon />
-          <span className="toast-message">{message}</span>
+          &nbsp;
+          <span className="toast-message" style={{ paddingLeft: '8px', flex: 1 }}>{message}</span>
           <button className="toast-close-btn" onClick={closeToast} aria-label="Close">
             <CloseSVG />
           </button>
@@ -34,9 +35,10 @@ export const showToast = {
   error: (message: string, options?: ToastOptions) => {
     toast(
       ({ closeToast }) => (
-        <div className="praimfaya-toast-content toast-error">
+        <div className="praimfaya-toast-content toast-error" style={{ display: 'flex', alignItems: 'center' }}>
           <ErrorIcon />
-          <span className="toast-message">{message}</span>
+          &nbsp;
+          <span className="toast-message" style={{ paddingLeft: '8px', flex: 1 }}>{message}</span>
           <button className="toast-close-btn" onClick={closeToast} aria-label="Close">
             <CloseSVG />
           </button>
@@ -49,9 +51,10 @@ export const showToast = {
   info: (message: string, options?: ToastOptions) => {
     toast(
       ({ closeToast }) => (
-        <div className="praimfaya-toast-content toast-info">
+        <div className="praimfaya-toast-content toast-info" style={{ display: 'flex', alignItems: 'center' }}>
           <InfoIcon />
-          <span className="toast-message">{message}</span>
+          &nbsp;
+          <span className="toast-message" style={{ paddingLeft: '8px', flex: 1 }}>{message}</span>
           <button className="toast-close-btn" onClick={closeToast} aria-label="Close">
             <CloseSVG />
           </button>
@@ -64,9 +67,10 @@ export const showToast = {
   warning: (message: string, options?: ToastOptions) => {
     toast(
       ({ closeToast }) => (
-        <div className="praimfaya-toast-content toast-warning">
+        <div className="praimfaya-toast-content toast-warning" style={{ display: 'flex', alignItems: 'center' }}>
           <WarningIcon />
-          <span className="toast-message">{message}</span>
+          &nbsp;
+          <span className="toast-message" style={{ paddingLeft: '8px', flex: 1 }}>{message}</span>
           <button className="toast-close-btn" onClick={closeToast} aria-label="Close">
             <CloseSVG />
           </button>
