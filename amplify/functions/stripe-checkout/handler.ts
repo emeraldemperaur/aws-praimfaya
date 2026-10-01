@@ -32,7 +32,6 @@ export const handler = async (event: any) => {
   }
 
   const session = await stripe.checkout.sessions.create({
-    payment_method_types: paymentMethods,
     line_items: [{ price: priceId, quantity: 1 }],
     mode: mode,
     client_reference_id: cognitoUserId,
