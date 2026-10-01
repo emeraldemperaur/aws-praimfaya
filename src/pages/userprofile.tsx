@@ -78,10 +78,7 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
   const handleCheckout = async (planTier: 'VANGUARD' | 'VANGUARD_ELITE' | 'TOP_UP') => {
     try {
       console.log(`Initiating checkout session for tier: ${planTier}...`);
-      const response = await client.mutations.createCheckoutSession(
-        { planTier },
-        { authMode: 'identityPool' }
-      );
+      const response = await client.mutations.createCheckoutSession({ planTier });
       
       if (response.errors && response.errors.length > 0) {
         console.error("AppSync returned errors:", response.errors);
@@ -113,9 +110,7 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
   const handlePortalRedirect = async () => {
     try {
       console.log('Generating secure Stripe Portal link...');
-      const response = await client.mutations.createPortalSession({ 
-        authMode: 'identityPool' 
-      });
+      const response = await client.mutations.createPortalSession();
       if (response.errors && response.errors.length > 0) {
         console.error("AppSync returned errors:", response.errors);
         setErrorMessage(response.errors[0].message || "Server rejected the portal request.");

@@ -279,7 +279,7 @@ const schema = a.schema({
     .arguments({ planTier: a.enum(['VANGUARD', 'VANGUARD_ELITE', 'TOP_UP']) })
     .returns(a.string())
     .authorization((allow) => [
-      allow.authenticated('identityPool'),
+      allow.authenticated(),
       allow.groups(['superadmin', 'root', 'admin', 'heda'])
     ])
     .handler(a.handler.function(createCheckoutSession)),
@@ -287,7 +287,7 @@ const schema = a.schema({
   createPortalSession: a.mutation()
     .returns(a.string())
     .authorization((allow) => [
-      allow.authenticated('identityPool'),
+      allow.authenticated(),
       allow.groups(['superadmin', 'root', 'admin', 'heda'])
     ])
     .handler(a.handler.function(createPortalSession)),
