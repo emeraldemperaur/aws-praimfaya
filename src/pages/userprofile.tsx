@@ -4,6 +4,7 @@ import { UserProfileCard, type SubscriptionDetails } from "../components/userpro
 import BottomRightModal from "../components/bottomrightmodal";
 import { usePraimfaya } from "../contexts";
 import { getPermissions } from "../utils/asimov";
+import { showToast } from "../utils/toastService"; // <-- ADDED: Import toast service
 import { generateClient } from "aws-amplify/data"; 
 import { getCurrentUser } from "aws-amplify/auth";
 import type { Schema } from '../../amplify/data/resource'; 
@@ -96,7 +97,12 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
         }
 
         console.log("Redirecting to Stripe:", targetUrl);
-        window.location.href = targetUrl;
+        
+        showToast.success("Redirecting to secure Stripe Checkout...");
+        setTimeout(() => {
+          window.location.href = targetUrl;
+        }, 800);
+
       } else {
         console.warn("Mutation succeeded but returned no data.");
       }
@@ -111,12 +117,14 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
     try {
       console.log('Generating secure Stripe Portal link...');
       const response = await client.mutations.createPortalSession();
+      
       if (response.errors && response.errors.length > 0) {
         console.error("AppSync returned errors:", response.errors);
         setErrorMessage(response.errors[0].message || "Server rejected the portal request.");
         setIsErrorModalOpen(true);
         return;
       }
+      
       if (response.data) {
         let targetUrl = response.data;
         try {
@@ -124,7 +132,12 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
           if (parsed.url) targetUrl = parsed.url;
         } catch (e) { 
         }
-        window.location.href = targetUrl;
+        
+        showToast.success("Redirecting to Stripe Billing Portal...");
+        setTimeout(() => {
+          window.location.href = targetUrl;
+        }, 800);
+
       } else {
         setErrorMessage("Failed to reach the billing portal. Please contact support.");
         setIsErrorModalOpen(true);
