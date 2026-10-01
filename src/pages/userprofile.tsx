@@ -78,18 +78,30 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
   const handleCheckout = async (planTier: 'VANGUARD' | 'VANGUARD_ELITE' | 'TOP_UP') => {
     try {
       console.log(`Initiating checkout session for tier: ${planTier}...`);
-      const response = await client.mutations.createCheckoutSession({ planTier });
+      const response = await client.mutations.createCheckoutSession(
+        { planTier },
+        { authMode: 'identityPool' }
+      );
+      
+      if (response.errors && response.errors.length > 0) {
+        console.error("AppSync returned errors:", response.errors);
+        setErrorMessage(response.errors[0].message || "Server rejected the checkout request.");
+        setIsErrorModalOpen(true);
+        return;
+      }
+
       if (response.data) {
         let targetUrl = response.data;
         try {
           const parsed = JSON.parse(response.data);
-          if (parsed.url) {
-            targetUrl = parsed.url;
-          }
-        } catch (e) {
+          if (parsed.url) targetUrl = parsed.url;
+        } catch (e) { 
         }
+
         console.log("Redirecting to Stripe:", targetUrl);
         window.location.href = targetUrl;
+      } else {
+        console.warn("Mutation succeeded but returned no data.");
       }
     } catch (error) {
       console.error("Failed to launch Stripe checkout session:", error);
@@ -101,9 +113,23 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
   const handlePortalRedirect = async () => {
     try {
       console.log('Generating secure Stripe Portal link...');
-      const response = await client.mutations.createPortalSession();
+      const response = await client.mutations.createPortalSession({ 
+        authMode: 'identityPool' 
+      });
+      if (response.errors && response.errors.length > 0) {
+        console.error("AppSync returned errors:", response.errors);
+        setErrorMessage(response.errors[0].message || "Server rejected the portal request.");
+        setIsErrorModalOpen(true);
+        return;
+      }
       if (response.data) {
-        window.location.href = response.data;
+        let targetUrl = response.data;
+        try {
+          const parsed = JSON.parse(response.data);
+          if (parsed.url) targetUrl = parsed.url;
+        } catch (e) { 
+        }
+        window.location.href = targetUrl;
       } else {
         setErrorMessage("Failed to reach the billing portal. Please contact support.");
         setIsErrorModalOpen(true);
