@@ -348,3 +348,11 @@ export const getPriorityText = (factor?: number | null) => {
     if (factor <= 6) return 'Medium Priority';
     return 'High Priority';
   };
+
+
+export const formatPlanName = (plan?: string) => {
+  if (plan === 'VANGUARD') return 'Vanguard Pro';
+  if (plan === 'VANGUARD_ELITE') return 'Vanguard Elite';
+  if (plan === 'TOP_UP') return 'Top Up';
+  return plan || 'Free Tier';
+};

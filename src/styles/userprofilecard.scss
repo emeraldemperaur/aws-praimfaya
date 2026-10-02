@@ -220,11 +220,11 @@
   font-weight: 500;
   padding: 0.125rem 0.5rem;
   border-radius: 9999px;
-  text-transform: capitalize;
+  text-transform: capitalize !important;
 }
-.subscription-status.active { background-color: var(--status-success-bg); color: var(--status-success-text); }
-.subscription-status.past_due { background-color: var(--status-error-bg); color: var(--status-error-text); }
-.subscription-status.canceled { background-color: var(--status-neutral-bg); color: var(--status-neutral-text); }
+.subscription-status.active { background-color: var(--status-success-bg); color: var(--status-success-text); text-transform: capitalize !important;}
+.subscription-status.past_due { background-color: var(--status-error-bg); color: var(--status-error-text); text-transform: capitalize !important;}
+.subscription-status.canceled { background-color: var(--status-neutral-bg); color: var(--status-neutral-text); text-transform: capitalize !important;}
 
 .subscription-date {
   font-size: 0.75rem;

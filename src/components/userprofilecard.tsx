@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import '../styles/userprofilecard.scss';
+import { formatPlanName } from '../utils/voltaire';
 
 export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'none';
 
@@ -19,6 +20,7 @@ export interface UserProfileCardProps {
   permissions: string[];
   subscription: SubscriptionDetails;
   darkMode?: boolean; 
+  isLoading?: boolean;
   onSubscribeVanguard?: () => Promise<void>;
   onSubscribeElite?: () => Promise<void>;
   onCancelSubscription?: () => Promise<void>;
@@ -43,6 +45,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
   permissions,
   subscription,
   darkMode = false,
+  isLoading = false,
   onSubscribeVanguard,
   onSubscribeElite,
   onCancelSubscription,
@@ -144,18 +147,24 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
               
               <div style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
                 <dt className="profile-detail-label mb-small">Subscription Plan</dt>
-                {subscription.status === 'none' ? (
+                {isLoading ? (
+                  <div style={{ height: '24px', width: '120px', backgroundColor: darkMode ? '#374151' : '#e5e7eb', borderRadius: '4px', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
+                ) : subscription.status === 'none' ? (
                   <dd className="profile-detail-value font-medium" style={{ whiteSpace: 'nowrap' }}>No Subscription</dd>
                 ) : (
-                  <dd className="profile-detail-value font-medium" style={{ fontFamily: 'Bodoni Moda Variable', fontSize: '1.2rem', whiteSpace: 'nowrap' }}>
-                    {subscription.planName}
+                  <dd className="profile-detail-value font-medium" style={{ fontFamily: 'Bodoni Moda Variable', fontSize: '1.2rem', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>
+                    {formatPlanName(subscription.planName)}
                     <span className={`subscription-status ${subscription.status}`} style={{ marginLeft: '0.5rem' }}>
-                      {subscription.status.replace('_', ' ')}
-                    </span>
+                      {subscription.status
+                        .replace('_', ' ')
+                        .split(' ')
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ')}
+                  </span>
                   </dd>
                 )}
                 
-                {subscription.currentPeriodEnd && (
+                {!isLoading && subscription.currentPeriodEnd && (
                   <p className="subscription-date" style={{ fontFamily: 'Google Sans Code, monospace', whiteSpace: 'nowrap', marginTop: '0.25rem' }}>
                     {subscription.status === 'canceled' ? 'Ends on: ' : 'Renews on: '}
                     {formatDate(subscription.currentPeriodEnd)}
@@ -164,7 +173,14 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
               </div>
 
               <div className="subscription-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: '0 0 auto', minWidth: '240px' }}>
-                {subscription.status === 'none' && (
+                {isLoading && (
+                   <>
+                     <div style={{ height: '38px', width: '100%', backgroundColor: darkMode ? '#374151' : '#e5e7eb', borderRadius: '4px', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
+                     <div style={{ height: '38px', width: '100%', backgroundColor: darkMode ? '#374151' : '#e5e7eb', borderRadius: '4px', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
+                   </>
+                )}
+                
+                {!isLoading && subscription.status === 'none' && (
                   <>
                     <button 
                       onClick={() => handleIsolatedAction(onSubscribeVanguard, setIsProcessingVanguard)} 
@@ -196,7 +212,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
                   </>
                 )}
                 
-                {subscription.status === 'active' && (
+                {!isLoading && subscription.status === 'active' && (
                   <button 
                     onClick={() => handleIsolatedAction(onCancelSubscription, setIsProcessingCancel)} 
                     disabled={isAnyProcessing} 
@@ -210,7 +226,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
                   </button>
                 )}
                 
-                {subscription.status === 'canceled' && (
+                {!isLoading && subscription.status === 'canceled' && (
                   <button 
                     onClick={() => handleIsolatedAction(onRenewSubscription, setIsProcessingRenew)} 
                     disabled={isAnyProcessing} 
@@ -224,7 +240,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
                   </button>
                 )}
                 
-                {subscription.status === 'past_due' && (
+                {!isLoading && subscription.status === 'past_due' && (
                   <button 
                     onClick={() => handleIsolatedAction(onUpdatePayment, setIsProcessingUpdate)} 
                     disabled={isAnyProcessing} 
@@ -240,7 +256,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({
               </div>
             </div>
 
-            {isActivePeriod && (
+            {!isLoading && isActivePeriod && (
               <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '0.5rem' }}>
                   <dt className="profile-detail-label">Compute Credits</dt>

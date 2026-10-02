@@ -4,7 +4,7 @@ import { UserProfileCard, type SubscriptionDetails } from "../components/userpro
 import BottomRightModal from "../components/bottomrightmodal";
 import { usePraimfaya } from "../contexts";
 import { getPermissions } from "../utils/asimov";
-import { showToast } from "../utils/toastService"; // <-- ADDED: Import toast service
+import { showToast } from "../utils/toastService"; 
 import { generateClient } from "aws-amplify/data"; 
 import { getCurrentUser } from "aws-amplify/auth";
 import type { Schema } from '../../amplify/data/resource'; 
@@ -13,12 +13,10 @@ const client = generateClient<Schema>();
 
 const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
   const { logUser, logKey, userGroups } = usePraimfaya();
-
   const [dbProfile, setDbProfile] = useState<Schema['UserProfile']['type'] | null>(null);
-  
+  const [isLoading, setIsLoading] = useState(true); 
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-
   const adminRoles = ['admin', 'superadmin', 'root', 'heda'];
   const highestRole = userGroups.find(group => adminRoles.includes(group));
   const isAdmin = !!highestRole;
@@ -45,12 +43,17 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
             } else {
               console.log("No backend UserProfile found for this user yet.");
             }
+            setIsLoading(false);
           },
-          error: (err) => console.error("Error observing live user profile:", err)
+          error: (err) => {
+            console.error("Error observing live user profile:", err);
+            setIsLoading(false);
+          }
         });
 
       } catch (err) {
         console.error("Error fetching live user profile:", err);
+        setIsLoading(false);
       }
     };
     fetchProfile();
@@ -168,6 +171,7 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
             role={initUser.role}
             permissions={initUser.permissions}
             subscription={subscriptionDetails}
+            isLoading={isLoading} // FIX: Pass isLoading prop to the card
             onSubscribeVanguard={() => handleCheckout('VANGUARD')}
             onSubscribeElite={() => handleCheckout('VANGUARD_ELITE')}
             onTopUpCredits={() => handleCheckout('TOP_UP')}

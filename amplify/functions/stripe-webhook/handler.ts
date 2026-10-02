@@ -36,21 +36,14 @@ export const handler = async (event: any) => {
   }
 
   try {
-    // 1. Process Subscription Invoices
     if (stripeEvent.type === 'invoice.paid') {
       const invoice = stripeEvent.data.object as any;
       const customerId = invoice.customer;
       const monetaryValue = (invoice.amount_paid || 0) / 100;
       const invoiceId = invoice.id;
       const periodEnd = new Date((invoice.lines.data[0].period.end) * 1000).toISOString();
-      
-      // Extract exactly as it appears in the JSON payload you provided
       const priceId = invoice.lines.data[0].pricing?.price_details?.price || '';
-      
-      // Look for cognitoUserId in the subscription details metadata
       let cognitoUserId = invoice.parent?.subscription_details?.metadata?.cognitoUserId;
-      
-      // Fallback to line item metadata if parent is missing
       if (!cognitoUserId) {
         cognitoUserId = invoice.lines.data[0].metadata?.cognitoUserId;
       }
@@ -117,11 +110,9 @@ export const handler = async (event: any) => {
       console.log(`[TRACE] SUCCESS: DynamoDB transaction completed for subscription.`);
     }
 
-    // 2. Process One-Time Top-Up Payments (which use checkout.session.completed)
     else if (stripeEvent.type === 'checkout.session.completed') {
       const session = stripeEvent.data.object as any;
       
-      // Subscriptions are handled by invoice.paid, so we skip them here
       if (session.mode === 'subscription') {
           console.log(`[TRACE] EXIT: Delegating subscription session to invoice.paid.`);
           return { statusCode: 200, body: JSON.stringify({ received: true, note: 'Delegated to invoice.paid' }) };
@@ -133,7 +124,6 @@ export const handler = async (event: any) => {
         return { statusCode: 200, body: "Ignored unrecognized user." };
       }
 
-      // We explicitly check for TOP_UP mode
       if (session.mode === 'payment') {
         const monetaryValue = (session.amount_total || 0) / 100;
         const invoiceId = session.invoice || `cs_${session.id}`;
@@ -176,7 +166,6 @@ export const handler = async (event: any) => {
       }
     } 
     
-    // 3. Process Failed Payments
     else if (stripeEvent.type === 'invoice.payment_failed') {
       const invoice = stripeEvent.data.object as any;
       let cognitoUserId = invoice.parent?.subscription_details?.metadata?.cognitoUserId || invoice.lines?.data[0]?.metadata?.cognitoUserId;
@@ -193,7 +182,6 @@ export const handler = async (event: any) => {
       }
     } 
  
-    // 4. Process Subscription Updates (Downgrades / Resumes)
     else if (stripeEvent.type === 'customer.subscription.updated') {
       const subscription = stripeEvent.data.object as any;
       const cognitoUserId = subscription.metadata?.cognitoUserId;
@@ -236,7 +224,6 @@ export const handler = async (event: any) => {
       }
     }
 
-    // 5. Process Cancellations
     else if (stripeEvent.type === 'customer.subscription.deleted') {
       const subscription = stripeEvent.data.object as any;
       const cognitoUserId = subscription.metadata?.cognitoUserId;
