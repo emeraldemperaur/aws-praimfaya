@@ -7,7 +7,8 @@ export const stripeWebhook = defineFunction({
   environment: {
     STRIPE_SECRET_KEY: secret('STRIPE_SECRET_KEY'),
     STRIPE_WEBHOOK_SECRET: secret('STRIPE_WEBHOOK_SECRET'),
-    STRIPE_PRICE_VANGUARD: process.env.STRIPE_PRICE_VANGUARD || 'price_1UB4nDI2Coxc9y6EopiOCY2v',
-    STRIPE_PRICE_VANGUARD_ELITE: process.env.STRIPE_PRICE_VANGUARD_ELITE || 'price_1UB4nDI2Coxc9y6EopiOCY2v',
+    VANGUARD_PRICE_ID: process.env.VANGUARD_PRICE_ID || 'price_1UB4nDI2Coxc9y6EopiOCY2v',
+    VANGUARD_ELITE_PRICE_ID: process.env.VANGUARD_ELITE_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS',
+    TOP_UP_PRICE_ID: process.env.TOP_UP_PRICE_ID || 'price_1UB56mI2Coxc9y6Ejo4sGyve',
   }
 });

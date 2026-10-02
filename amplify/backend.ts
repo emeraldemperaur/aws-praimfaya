@@ -120,8 +120,6 @@ lexFulfillmentLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 postCallAnalysisLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 syncKbLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 pollBedrockLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['bedrock:GetAsyncInvoke'], resources: ['*'] }));
-
-// NEW: Grant the telemetry Lambda read-only access to the Bedrock Agent Control Plane
 telemetryLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: [
     "bedrock:GetAgentKnowledgeBase",
@@ -364,6 +362,11 @@ webhookLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELI
 webhookLambda.addEnvironment('TOP_UP_PRICE_ID', process.env.TOP_UP_PRICE_ID || 'price_1UB56mI2Coxc9y6Ejo4sGyve');
 webhookLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 webhookLambda.addEnvironment('USAGE_RECORDS_TABLE_NAME', usageRecordsTable.tableName);
+webhookLambda.addEnvironment('STRIPE_SECRET_KEY', process.env.STRIPE_SECRET_KEY!);
+webhookLambda.addEnvironment('STRIPE_WEBHOOK_SECRET', process.env.STRIPE_WEBHOOK_SECRET!);
+userProfilesTable.grantReadData(webhookLambda);
+userProfilesTable.grantWriteData(webhookLambda);
+usageRecordsTable.grantWriteData(webhookLambda);
 
 seederLambda.addEnvironment('FOUNDATION_MODELS_TABLE_NAME', foundationModelsTable.tableName);
 promoLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
