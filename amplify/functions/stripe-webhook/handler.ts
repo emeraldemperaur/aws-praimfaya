@@ -9,6 +9,7 @@ const USER_PROFILES_TABLE = process.env.USER_PROFILES_TABLE_NAME!;
 const USAGE_RECORDS_TABLE = process.env.USAGE_RECORDS_TABLE_NAME!;
 
 const getProfileId = async (cognitoUserId: string): Promise<string> => {
+  console.log(`[TRACE] Lookup UserProfile for cognitoUserId: ${cognitoUserId}`);
   const query = await dynamodb.send(new QueryCommand({
       TableName: USER_PROFILES_TABLE,
       IndexName: "byCognitoId",
@@ -28,86 +29,35 @@ export const handler = async (event: any) => {
 
   try {
     stripeEvent = stripe.webhooks.constructEvent(event.body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
+    console.log(`[TRACE] Received Event: ${stripeEvent.type}`);
   } catch (err: any) {
-    console.error(`Webhook signature verification failed: ${err.message}`);
+    console.error(`[TRACE] Webhook signature verification failed: ${err.message}`);
     return { statusCode: 400, body: `Webhook Error: ${err.message}` };
   }
 
   try {
-    if (stripeEvent.type === 'checkout.session.completed' || stripeEvent.type === 'invoice.paid') {
-      let cognitoUserId = '';
-      let mode = '';
-      let priceId = '';
-      let customerId = '';
-      let periodEnd = new Date().toISOString(); 
-      let monetaryValue = 0;
-      let invoiceId = '';
+    // 1. Process Subscription Invoices
+    if (stripeEvent.type === 'invoice.paid') {
+      const invoice = stripeEvent.data.object as any;
+      const customerId = invoice.customer;
+      const monetaryValue = (invoice.amount_paid || 0) / 100;
+      const invoiceId = invoice.id;
+      const periodEnd = new Date((invoice.lines.data[0].period.end) * 1000).toISOString();
+      
+      // Extract exactly as it appears in the JSON payload you provided
+      const priceId = invoice.lines.data[0].pricing?.price_details?.price || '';
+      
+      // Look for cognitoUserId in the subscription details metadata
+      let cognitoUserId = invoice.parent?.subscription_details?.metadata?.cognitoUserId;
+      
+      // Fallback to line item metadata if parent is missing
+      if (!cognitoUserId) {
+        cognitoUserId = invoice.lines.data[0].metadata?.cognitoUserId;
+      }
 
-      if (stripeEvent.type === 'checkout.session.completed') {
-        const session = stripeEvent.data.object as Stripe.Checkout.Session;
-        
-        if (session.mode === 'subscription') {
-            return { statusCode: 200, body: JSON.stringify({ received: true, note: 'Delegated to invoice.paid' }) };
-        }
-
-        cognitoUserId = session.client_reference_id!;
-        customerId = session.customer as string;
-        mode = session.mode;
-        monetaryValue = (session.amount_total || 0) / 100;
-        invoiceId = (session.invoice as string) || `cs_${session.id}`;
-        priceId = process.env.TOP_UP_PRICE_ID!;
-
-      } else if (stripeEvent.type === 'invoice.paid') {
-        const invoice = stripeEvent.data.object as Stripe.Invoice;
-        customerId = invoice.customer as string;
-        mode = 'subscription';
-        monetaryValue = (invoice.amount_paid || 0) / 100;
-        invoiceId = invoice.id;
-        
-        const lineItem = invoice.lines.data[0] as any;
-        priceId = lineItem.price?.id || lineItem.plan?.id || (typeof lineItem.price === 'string' ? lineItem.price : '');
-        
-        let subscriptionObj = (invoice as any).subscription;
-        let subscriptionId = '';
-
-        if (subscriptionObj) {
-          if (typeof subscriptionObj === 'string') {
-            subscriptionId = subscriptionObj;
-            try {
-              const fetchedSub = await stripe.subscriptions.retrieve(subscriptionId);
-              cognitoUserId = fetchedSub.metadata?.cognitoUserId as string;
-            } catch (e) {
-              console.error(`Failed to retrieve subscription ${subscriptionId}`);
-            }
-          } else if (typeof subscriptionObj === 'object' && subscriptionObj.id) {
-            subscriptionId = subscriptionObj.id;
-            cognitoUserId = subscriptionObj.metadata?.cognitoUserId as string;
-          }
-        }
-
-        if (!subscriptionId) {
-          return { statusCode: 200, body: JSON.stringify({ note: "Ignored non-subscription invoice." }) };
-        }
-
-        if (!cognitoUserId && subscriptionId) {
-          try {
-            const sessions = await stripe.checkout.sessions.list({ subscription: subscriptionId, limit: 1 });
-            if (sessions.data.length > 0 && sessions.data[0].client_reference_id) {
-              cognitoUserId = sessions.data[0].client_reference_id;
-              await stripe.subscriptions.update(subscriptionId, { metadata: { cognitoUserId } });
-              console.log(`Auto-healed subscription ${subscriptionId} with recovered cognitoUserId`);
-            }
-          } catch (e) {
-            console.warn(`Failed to recover cognitoUserId from checkout sessions for sub ${subscriptionId}`);
-          }
-        }
-
-        if (!cognitoUserId) {
-          console.error(`Missing cognitoUserId metadata for invoice: ${invoiceId}`);
-          return { statusCode: 200, body: "Ignored unrecognized user." };
-        }
-
-        periodEnd = new Date((invoice.lines.data[0].period.end) * 1000).toISOString();
+      if (!cognitoUserId) {
+        console.error(`[TRACE] EXIT: Missing cognitoUserId metadata for invoice: ${invoiceId}`);
+        return { statusCode: 200, body: "Ignored unrecognized user." };
       }
 
       let planName = "VANGUARD";
@@ -119,57 +69,80 @@ export const handler = async (event: any) => {
       } else if (priceId === process.env.VANGUARD_PRICE_ID) {
         planName = "VANGUARD";
         allocatedCredits = 16400000;
-      } else if (mode === 'payment') {
-        planName = "TOP_UP";
-        allocatedCredits = 5000000;
       } else {
-        console.warn(`Ignored unrecognized Stripe Price ID: ${priceId}`);
+        console.warn(`[TRACE] EXIT: Ignored unrecognized Stripe Price ID: ${priceId}`);
         return { statusCode: 200, body: "Ignored unrecognized price." };
       }
 
-      const now = new Date().toISOString();
-      const uniqueEventId = stripeEvent.id; 
-
       const userProfileId = await getProfileId(cognitoUserId);
+      const uniqueEventId = stripeEvent.id; 
+      const now = new Date().toISOString();
 
-      if (mode === 'subscription') {
-        await dynamodb.send(new TransactWriteCommand({
-            TransactItems: [
-                {
-                    Update: {
-                        TableName: USER_PROFILES_TABLE,
-                        Key: { id: userProfileId },
-                        UpdateExpression: "SET stripeCustomerId = :sid, subscriptionStatus = :status, planName = :plan, computeCredits = if_not_exists(computeCredits, :zero) + :credits, maxCredits = if_not_exists(maxCredits, :zero) + :credits, currentPeriodEnd = :periodEnd",
-                        ExpressionAttributeValues: {
-                            ":sid": customerId,
-                            ":status": "ACTIVE",
-                            ":plan": planName,
-                            ":credits": allocatedCredits,
-                            ":periodEnd": periodEnd,
-                            ":zero": 0
-                        }
-                    }
-                },
-                {
-                    Put: {
-                        TableName: USAGE_RECORDS_TABLE,
-                        ConditionExpression: "attribute_not_exists(id)", 
-                        Item: { 
-                          id: uniqueEventId, 
-                          userId: cognitoUserId, 
-                          sessionId: 'system-billing', 
-                          sessionTitle: 'Subscription Purchase/Renewal', 
-                          actionType: 'TOP_UP', 
-                          creditsUsed: -allocatedCredits, 
-                          monetaryValue: monetaryValue,     
-                          stripeInvoiceId: invoiceId,
-                          createdAt: now 
-                        }
-                    }
-                }
-            ]
-        }));
-      } else if (mode === 'payment') {
+      await dynamodb.send(new TransactWriteCommand({
+          TransactItems: [
+              {
+                  Update: {
+                      TableName: USER_PROFILES_TABLE,
+                      Key: { id: userProfileId },
+                      UpdateExpression: "SET stripeCustomerId = :sid, subscriptionStatus = :status, planName = :plan, computeCredits = if_not_exists(computeCredits, :zero) + :credits, maxCredits = if_not_exists(maxCredits, :zero) + :credits, currentPeriodEnd = :periodEnd",
+                      ExpressionAttributeValues: {
+                          ":sid": customerId,
+                          ":status": "ACTIVE",
+                          ":plan": planName,
+                          ":credits": allocatedCredits,
+                          ":periodEnd": periodEnd,
+                          ":zero": 0
+                      }
+                  }
+              },
+              {
+                  Put: {
+                      TableName: USAGE_RECORDS_TABLE,
+                      ConditionExpression: "attribute_not_exists(id)", 
+                      Item: { 
+                        id: uniqueEventId, 
+                        userId: cognitoUserId, 
+                        sessionId: 'system-billing', 
+                        sessionTitle: 'Subscription Purchase/Renewal', 
+                        actionType: 'TOP_UP', 
+                        creditsUsed: -allocatedCredits, 
+                        monetaryValue: monetaryValue,     
+                        stripeInvoiceId: invoiceId,
+                        createdAt: now 
+                      }
+                  }
+              }
+          ]
+      }));
+      console.log(`[TRACE] SUCCESS: DynamoDB transaction completed for subscription.`);
+    }
+
+    // 2. Process One-Time Top-Up Payments (which use checkout.session.completed)
+    else if (stripeEvent.type === 'checkout.session.completed') {
+      const session = stripeEvent.data.object as any;
+      
+      // Subscriptions are handled by invoice.paid, so we skip them here
+      if (session.mode === 'subscription') {
+          console.log(`[TRACE] EXIT: Delegating subscription session to invoice.paid.`);
+          return { statusCode: 200, body: JSON.stringify({ received: true, note: 'Delegated to invoice.paid' }) };
+      }
+
+      const cognitoUserId = session.client_reference_id;
+      if (!cognitoUserId) {
+        console.error(`[TRACE] EXIT: Missing client_reference_id for session: ${session.id}`);
+        return { statusCode: 200, body: "Ignored unrecognized user." };
+      }
+
+      // We explicitly check for TOP_UP mode
+      if (session.mode === 'payment') {
+        const monetaryValue = (session.amount_total || 0) / 100;
+        const invoiceId = session.invoice || `cs_${session.id}`;
+        const allocatedCredits = 5000000;
+        
+        const userProfileId = await getProfileId(cognitoUserId);
+        const uniqueEventId = stripeEvent.id; 
+        const now = new Date().toISOString();
+
         await dynamodb.send(new TransactWriteCommand({
             TransactItems: [
                 {
@@ -199,37 +172,14 @@ export const handler = async (event: any) => {
                 }
             ]
         }));
+        console.log(`[TRACE] SUCCESS: DynamoDB transaction completed for TOP_UP payment.`);
       }
     } 
     
+    // 3. Process Failed Payments
     else if (stripeEvent.type === 'invoice.payment_failed') {
-      const invoice = stripeEvent.data.object as Stripe.Invoice;
-      let cognitoUserId: string | undefined;
-
-      let subscriptionObj = (invoice as any).subscription;
-      let subscriptionId = '';
-      
-      if (subscriptionObj) {
-          if (typeof subscriptionObj === 'string') {
-              subscriptionId = subscriptionObj;
-              try {
-                  const fetchedSub = await stripe.subscriptions.retrieve(subscriptionId);
-                  cognitoUserId = fetchedSub.metadata?.cognitoUserId as string;
-              } catch (e) { }
-          } else if (typeof subscriptionObj === 'object' && subscriptionObj.id) {
-              subscriptionId = subscriptionObj.id;
-              cognitoUserId = subscriptionObj.metadata?.cognitoUserId as string;
-          }
-      }
-
-      if (!cognitoUserId && subscriptionId) {
-          try {
-              const sessions = await stripe.checkout.sessions.list({ subscription: subscriptionId, limit: 1 });
-              if (sessions.data.length > 0 && sessions.data[0].client_reference_id) {
-                  cognitoUserId = sessions.data[0].client_reference_id;
-              }
-          } catch (e) { }
-      }
+      const invoice = stripeEvent.data.object as any;
+      let cognitoUserId = invoice.parent?.subscription_details?.metadata?.cognitoUserId || invoice.lines?.data[0]?.metadata?.cognitoUserId;
 
       if (cognitoUserId) {
           const userProfileId = await getProfileId(cognitoUserId);
@@ -239,25 +189,18 @@ export const handler = async (event: any) => {
               UpdateExpression: "SET subscriptionStatus = :status",
               ExpressionAttributeValues: { ":status": "PAST_DUE" }
           }));
+          console.log(`[TRACE] SUCCESS: Updated user profile to PAST_DUE.`);
       }
     } 
  
+    // 4. Process Subscription Updates (Downgrades / Resumes)
     else if (stripeEvent.type === 'customer.subscription.updated') {
-      const subscription = stripeEvent.data.object as Stripe.Subscription;
-      let cognitoUserId = subscription.metadata?.cognitoUserId;
+      const subscription = stripeEvent.data.object as any;
+      const cognitoUserId = subscription.metadata?.cognitoUserId;
       
-      if (!cognitoUserId) {
-          try {
-              const sessions = await stripe.checkout.sessions.list({ subscription: subscription.id, limit: 1 });
-              if (sessions.data.length > 0 && sessions.data[0].client_reference_id) {
-                  cognitoUserId = sessions.data[0].client_reference_id;
-              }
-          } catch (e) {}
-      }
-
       if (cognitoUserId) {
         const priceId = subscription.items.data[0].price.id;
-        const periodEnd = new Date((subscription as any).current_period_end * 1000).toISOString();
+        const periodEnd = new Date(subscription.current_period_end * 1000).toISOString();
         const status = subscription.status === 'active' ? 'ACTIVE' : 'PAST_DUE';
 
         let planName = "VANGUARD";
@@ -282,9 +225,10 @@ export const handler = async (event: any) => {
               ":max": newMaxCredits
             }
           }));
+          console.log(`[TRACE] SUCCESS: Updated user profile subscription status.`);
         } catch (error: any) {
           if (error.name === 'ConditionalCheckFailedException') {
-            console.log(`Mid-cycle downgrade detected for ${cognitoUserId}. Preserving current higher tier until period ends.`);
+            console.log(`[TRACE] Mid-cycle downgrade detected for ${cognitoUserId}. Preserving current higher tier until period ends.`);
           } else {
             throw error; 
           }
@@ -292,18 +236,10 @@ export const handler = async (event: any) => {
       }
     }
 
+    // 5. Process Cancellations
     else if (stripeEvent.type === 'customer.subscription.deleted') {
-      const subscription = stripeEvent.data.object as Stripe.Subscription;
-      let cognitoUserId = subscription.metadata?.cognitoUserId;
-
-      if (!cognitoUserId) {
-          try {
-              const sessions = await stripe.checkout.sessions.list({ subscription: subscription.id, limit: 1 });
-              if (sessions.data.length > 0 && sessions.data[0].client_reference_id) {
-                  cognitoUserId = sessions.data[0].client_reference_id;
-              }
-          } catch (e) {}
-      }
+      const subscription = stripeEvent.data.object as any;
+      const cognitoUserId = subscription.metadata?.cognitoUserId;
 
       if (cognitoUserId) {
           const userProfileId = await getProfileId(cognitoUserId);
@@ -316,16 +252,17 @@ export const handler = async (event: any) => {
                   ":plan": "NONE" 
               }
           }));
+          console.log(`[TRACE] SUCCESS: Processed subscription cancellation.`);
       }
     }
 
     return { statusCode: 200, body: JSON.stringify({ received: true }) };
   } catch (error: any) {
     if (error.name === 'ConditionalCheckFailedException') {
-        console.warn(`Idempotent retry detected for event ${stripeEvent.id}. Ignored.`);
+        console.warn(`[TRACE] Idempotent retry detected for event ${stripeEvent.id}. Ignored.`);
         return { statusCode: 200, body: JSON.stringify({ received: true, note: 'Idempotent retry ignored' }) };
     }
-    console.error("Webhook processing error:", error);
+    console.error("[TRACE] FATAL Webhook processing error:", error);
     return { statusCode: 500, body: error.message };
   }
 };
