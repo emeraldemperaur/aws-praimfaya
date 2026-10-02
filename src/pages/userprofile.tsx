@@ -82,6 +82,11 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
   const handleCheckout = async (planTier: 'VANGUARD' | 'VANGUARD_ELITE' | 'TOP_UP') => {
     try {
       console.log(`Initiating checkout session for tier: ${planTier}...`);
+      
+      if (typeof client.mutations.createCheckoutSession !== 'function') {
+        throw new Error("Schema Out of Sync: Please run 'npx ampx generate outputs' to update your local client.");
+      }
+
       const response = await client.mutations.createCheckoutSession({ planTier });
       
       if (response.errors && response.errors.length > 0) {
@@ -109,9 +114,11 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
       } else {
         console.warn("Mutation succeeded but returned no data.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to launch Stripe checkout session:", error);
-      setErrorMessage("Failed to initiate secure checkout. Please verify your connection.");
+      
+      const trueError = error.errors?.[0]?.message || error.message || "Unknown Network Error";
+      setErrorMessage(`Checkout Error: ${trueError}`);
       setIsErrorModalOpen(true);
     }
   };
@@ -119,6 +126,11 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
   const handlePortalRedirect = async () => {
     try {
       console.log('Generating secure Stripe Portal link...');
+
+      if (typeof client.mutations.createPortalSession !== 'function') {
+        throw new Error("Schema Out of Sync: Please run 'npx ampx generate outputs' to update your local client.");
+      }
+
       const response = await client.mutations.createPortalSession();
       
       if (response.errors && response.errors.length > 0) {
@@ -145,9 +157,11 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
         setErrorMessage("Failed to reach the billing portal. Please contact support.");
         setIsErrorModalOpen(true);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to generate Stripe Customer Portal session:", error);
-      setErrorMessage("An unexpected network error occurred while reaching the billing portal.");
+      
+      const trueError = error.errors?.[0]?.message || error.message || "Unknown Network Error";
+      setErrorMessage(`Portal Error: ${trueError}`);
       setIsErrorModalOpen(true);
     }
   };
@@ -171,7 +185,7 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
             role={initUser.role}
             permissions={initUser.permissions}
             subscription={subscriptionDetails}
-            isLoading={isLoading} // FIX: Pass isLoading prop to the card
+            isLoading={isLoading} 
             onSubscribeVanguard={() => handleCheckout('VANGUARD')}
             onSubscribeElite={() => handleCheckout('VANGUARD_ELITE')}
             onTopUpCredits={() => handleCheckout('TOP_UP')}
