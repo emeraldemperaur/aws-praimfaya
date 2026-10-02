@@ -67,10 +67,39 @@ export const handler = async (event: any) => {
         const lineItem = invoice.lines.data[0] as any;
         priceId = lineItem.price?.id || lineItem.plan?.id || (typeof lineItem.price === 'string' ? lineItem.price : '');
         
-        const subscriptionId = (invoice as any).subscription;
-        if (typeof subscriptionId === 'string') {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          cognitoUserId = subscription.metadata?.cognitoUserId as string;
+        let subscriptionObj = (invoice as any).subscription;
+        let subscriptionId = '';
+
+        if (subscriptionObj) {
+          if (typeof subscriptionObj === 'string') {
+            subscriptionId = subscriptionObj;
+            try {
+              const fetchedSub = await stripe.subscriptions.retrieve(subscriptionId);
+              cognitoUserId = fetchedSub.metadata?.cognitoUserId as string;
+            } catch (e) {
+              console.error(`Failed to retrieve subscription ${subscriptionId}`);
+            }
+          } else if (typeof subscriptionObj === 'object' && subscriptionObj.id) {
+            subscriptionId = subscriptionObj.id;
+            cognitoUserId = subscriptionObj.metadata?.cognitoUserId as string;
+          }
+        }
+
+        if (!subscriptionId) {
+          return { statusCode: 200, body: JSON.stringify({ note: "Ignored non-subscription invoice." }) };
+        }
+
+        if (!cognitoUserId && subscriptionId) {
+          try {
+            const sessions = await stripe.checkout.sessions.list({ subscription: subscriptionId, limit: 1 });
+            if (sessions.data.length > 0 && sessions.data[0].client_reference_id) {
+              cognitoUserId = sessions.data[0].client_reference_id;
+              await stripe.subscriptions.update(subscriptionId, { metadata: { cognitoUserId } });
+              console.log(`Auto-healed subscription ${subscriptionId} with recovered cognitoUserId`);
+            }
+          } catch (e) {
+            console.warn(`Failed to recover cognitoUserId from checkout sessions for sub ${subscriptionId}`);
+          }
         }
 
         if (!cognitoUserId) {
@@ -94,6 +123,7 @@ export const handler = async (event: any) => {
         planName = "TOP_UP";
         allocatedCredits = 5000000;
       } else {
+        console.warn(`Ignored unrecognized Stripe Price ID: ${priceId}`);
         return { statusCode: 200, body: "Ignored unrecognized price." };
       }
 
@@ -145,7 +175,7 @@ export const handler = async (event: any) => {
                 {
                     Update: {
                         TableName: USER_PROFILES_TABLE,
-                        Key: { id: userProfileId }, 
+                        Key: { id: userProfileId },
                         UpdateExpression: "SET computeCredits = if_not_exists(computeCredits, :zero) + :topup, maxCredits = if_not_exists(maxCredits, :zero) + :topup",
                         ExpressionAttributeValues: { ":topup": allocatedCredits, ":zero": 0 }
                     }
@@ -176,11 +206,29 @@ export const handler = async (event: any) => {
       const invoice = stripeEvent.data.object as Stripe.Invoice;
       let cognitoUserId: string | undefined;
 
-      const subscriptionId = (invoice as any).subscription;
+      let subscriptionObj = (invoice as any).subscription;
+      let subscriptionId = '';
+      
+      if (subscriptionObj) {
+          if (typeof subscriptionObj === 'string') {
+              subscriptionId = subscriptionObj;
+              try {
+                  const fetchedSub = await stripe.subscriptions.retrieve(subscriptionId);
+                  cognitoUserId = fetchedSub.metadata?.cognitoUserId as string;
+              } catch (e) { }
+          } else if (typeof subscriptionObj === 'object' && subscriptionObj.id) {
+              subscriptionId = subscriptionObj.id;
+              cognitoUserId = subscriptionObj.metadata?.cognitoUserId as string;
+          }
+      }
 
-      if (typeof subscriptionId === 'string') {
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        cognitoUserId = subscription.metadata?.cognitoUserId as string;
+      if (!cognitoUserId && subscriptionId) {
+          try {
+              const sessions = await stripe.checkout.sessions.list({ subscription: subscriptionId, limit: 1 });
+              if (sessions.data.length > 0 && sessions.data[0].client_reference_id) {
+                  cognitoUserId = sessions.data[0].client_reference_id;
+              }
+          } catch (e) { }
       }
 
       if (cognitoUserId) {
@@ -196,8 +244,17 @@ export const handler = async (event: any) => {
  
     else if (stripeEvent.type === 'customer.subscription.updated') {
       const subscription = stripeEvent.data.object as Stripe.Subscription;
-      const cognitoUserId = subscription.metadata?.cognitoUserId;
+      let cognitoUserId = subscription.metadata?.cognitoUserId;
       
+      if (!cognitoUserId) {
+          try {
+              const sessions = await stripe.checkout.sessions.list({ subscription: subscription.id, limit: 1 });
+              if (sessions.data.length > 0 && sessions.data[0].client_reference_id) {
+                  cognitoUserId = sessions.data[0].client_reference_id;
+              }
+          } catch (e) {}
+      }
+
       if (cognitoUserId) {
         const priceId = subscription.items.data[0].price.id;
         const periodEnd = new Date((subscription as any).current_period_end * 1000).toISOString();
@@ -237,7 +294,16 @@ export const handler = async (event: any) => {
 
     else if (stripeEvent.type === 'customer.subscription.deleted') {
       const subscription = stripeEvent.data.object as Stripe.Subscription;
-      const cognitoUserId = subscription.metadata?.cognitoUserId;
+      let cognitoUserId = subscription.metadata?.cognitoUserId;
+
+      if (!cognitoUserId) {
+          try {
+              const sessions = await stripe.checkout.sessions.list({ subscription: subscription.id, limit: 1 });
+              if (sessions.data.length > 0 && sessions.data[0].client_reference_id) {
+                  cognitoUserId = sessions.data[0].client_reference_id;
+              }
+          } catch (e) {}
+      }
 
       if (cognitoUserId) {
           const userProfileId = await getProfileId(cognitoUserId);
