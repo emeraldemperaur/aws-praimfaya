@@ -1,12 +1,26 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, TransactWriteCommand, UpdateCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import Stripe from 'stripe';
 
 const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION }));
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-06-24.dahlia' as any });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' as any });
 
 const USER_PROFILES_TABLE = process.env.USER_PROFILES_TABLE_NAME!;
 const USAGE_RECORDS_TABLE = process.env.USAGE_RECORDS_TABLE_NAME!;
+
+const getProfileId = async (cognitoUserId: string): Promise<string> => {
+  const query = await dynamodb.send(new QueryCommand({
+      TableName: USER_PROFILES_TABLE,
+      IndexName: "byCognitoId",
+      KeyConditionExpression: "cognitoUserId = :uid",
+      ExpressionAttributeValues: { ":uid": cognitoUserId }
+  }));
+  
+  if (!query.Items || query.Items.length === 0) {
+      throw new Error(`No UserProfile found in database for cognitoUserId: ${cognitoUserId}`);
+  }
+  return query.Items[0].id;
+};
 
 export const handler = async (event: any) => {
   const sig = event.headers['stripe-signature'];
@@ -50,12 +64,19 @@ export const handler = async (event: any) => {
         monetaryValue = (invoice.amount_paid || 0) / 100;
         invoiceId = invoice.id;
         
-        const rawPrice = invoice.lines.data[0].pricing?.price_details?.price;
-        priceId = typeof rawPrice === 'string' ? rawPrice : (rawPrice as Stripe.Price)?.id || '';
+        const lineItem = invoice.lines.data[0] as any;
+        priceId = lineItem.price?.id || lineItem.plan?.id || (typeof lineItem.price === 'string' ? lineItem.price : '');
         
-        cognitoUserId = invoice.parent?.type === 'subscription_details' 
-            ? invoice.parent.subscription_details?.metadata?.cognitoUserId as string
-            : invoice.customer_email || 'UNKNOWN';
+        const subscriptionId = (invoice as any).subscription;
+        if (typeof subscriptionId === 'string') {
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          cognitoUserId = subscription.metadata?.cognitoUserId as string;
+        }
+
+        if (!cognitoUserId) {
+          console.error(`Missing cognitoUserId metadata for invoice: ${invoiceId}`);
+          return { statusCode: 200, body: "Ignored unrecognized user." };
+        }
 
         periodEnd = new Date((invoice.lines.data[0].period.end) * 1000).toISOString();
       }
@@ -79,13 +100,15 @@ export const handler = async (event: any) => {
       const now = new Date().toISOString();
       const uniqueEventId = stripeEvent.id; 
 
+      const userProfileId = await getProfileId(cognitoUserId);
+
       if (mode === 'subscription') {
         await dynamodb.send(new TransactWriteCommand({
             TransactItems: [
                 {
                     Update: {
                         TableName: USER_PROFILES_TABLE,
-                        Key: { cognitoUserId },
+                        Key: { id: userProfileId },
                         UpdateExpression: "SET stripeCustomerId = :sid, subscriptionStatus = :status, planName = :plan, computeCredits = if_not_exists(computeCredits, :zero) + :credits, maxCredits = if_not_exists(maxCredits, :zero) + :credits, currentPeriodEnd = :periodEnd",
                         ExpressionAttributeValues: {
                             ":sid": customerId,
@@ -122,7 +145,7 @@ export const handler = async (event: any) => {
                 {
                     Update: {
                         TableName: USER_PROFILES_TABLE,
-                        Key: { cognitoUserId },
+                        Key: { id: userProfileId }, 
                         UpdateExpression: "SET computeCredits = if_not_exists(computeCredits, :zero) + :topup, maxCredits = if_not_exists(maxCredits, :zero) + :topup",
                         ExpressionAttributeValues: { ":topup": allocatedCredits, ":zero": 0 }
                     }
@@ -151,15 +174,20 @@ export const handler = async (event: any) => {
     
     else if (stripeEvent.type === 'invoice.payment_failed') {
       const invoice = stripeEvent.data.object as Stripe.Invoice;
-      
-      const cognitoUserId = invoice.parent?.type === 'subscription_details' 
-          ? invoice.parent.subscription_details?.metadata?.cognitoUserId as string
-          : undefined;
+      let cognitoUserId: string | undefined;
+
+      const subscriptionId = (invoice as any).subscription;
+
+      if (typeof subscriptionId === 'string') {
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        cognitoUserId = subscription.metadata?.cognitoUserId as string;
+      }
 
       if (cognitoUserId) {
+          const userProfileId = await getProfileId(cognitoUserId);
           await dynamodb.send(new UpdateCommand({
               TableName: USER_PROFILES_TABLE,
-              Key: { cognitoUserId },
+              Key: { id: userProfileId },
               UpdateExpression: "SET subscriptionStatus = :status",
               ExpressionAttributeValues: { ":status": "PAST_DUE" }
           }));
@@ -184,9 +212,10 @@ export const handler = async (event: any) => {
         }
 
         try {
+          const userProfileId = await getProfileId(cognitoUserId);
           await dynamodb.send(new UpdateCommand({
             TableName: USER_PROFILES_TABLE,
-            Key: { cognitoUserId },
+            Key: { id: userProfileId },
             UpdateExpression: "SET planName = :plan, subscriptionStatus = :status, currentPeriodEnd = :periodEnd, maxCredits = :max",
             ConditionExpression: "attribute_not_exists(maxCredits) OR :max > maxCredits",
             ExpressionAttributeValues: {
@@ -211,9 +240,10 @@ export const handler = async (event: any) => {
       const cognitoUserId = subscription.metadata?.cognitoUserId;
 
       if (cognitoUserId) {
+          const userProfileId = await getProfileId(cognitoUserId);
           await dynamodb.send(new UpdateCommand({
               TableName: USER_PROFILES_TABLE,
-              Key: { cognitoUserId },
+              Key: { id: userProfileId },
               UpdateExpression: "SET subscriptionStatus = :status, planName = :plan",
               ExpressionAttributeValues: { 
                   ":status": "CANCELED",

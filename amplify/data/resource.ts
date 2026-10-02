@@ -237,7 +237,8 @@ const schema = a.schema({
       nocturnalAgents: a.boolean().default(false),
       integrations: a.json(),
     })
-    .authorization(iamRBAC),
+    .authorization(iamRBAC)
+    .secondaryIndexes(index => [index("cognitoUserId").name("byCognitoId")]),
 
   UsageRecord: a.model({
       id: a.id(),

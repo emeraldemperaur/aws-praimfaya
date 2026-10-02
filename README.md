@@ -142,7 +142,12 @@ The high-performance computational search engine underpinning the RAG architectu
 </li>
 <li>
 <p align="justify">
-<strong>Amazon Bedrock LLM Integration:</strong> Core AI engine providing secure, serverless API access to top-tier foundation models (e.g., Anthropic Claude, Amazon Titan, Meta Llama). Facilitates RAG pipeline by ingesting vectorized, domain-specific data and assembling highly contextualized prompts to proffer accurate, hallucination-resistant chatbot outputs.
+<strong>Amazon Bedrock LLM Integration:</strong> Core AI engine providing secure, serverless API access to top-tier foundation models from AI21, Amazon, Anthropic, Cohere, DeepSeek, Google, Meta, MiniMax, Mistral, Moonshot, NVIDIA, Qwen, TwelveLabs, Writer, SpaceXAI and ZAI. Facilitates RAG pipeline by ingesting vectorized, domain-specific data and assembling highly contextualized prompts to proffer accurate, hallucination-resistant chatbot outputs.
+</p>
+</li>
+<li>
+<p align="justify">
+<strong>Multi-Region Bedrock Inference Models:</strong>.
 </p>
 </li>
 </ol>
