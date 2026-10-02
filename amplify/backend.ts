@@ -355,7 +355,13 @@ checkoutLambda.addEnvironment('FRONTEND_URL', process.env.FRONTEND_URL || 'https
 
 stripePortalLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
 stripePortalLambda.addEnvironment('FRONTEND_URL', process.env.FRONTEND_URL || 'https://prometheus-fire.dcie4i9xtobfi.amplifyapp.com');
-userProfilesTable.grantReadData(stripePortalLambda);
+stripePortalLambda.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['dynamodb:Query', 'dynamodb:GetItem'],
+  resources: [
+    userProfilesTable.tableArn,
+    `${userProfilesTable.tableArn}/index/*`
+  ]
+}));
 
 webhookLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || 'price_1UB4nDI2Coxc9y6EopiOCY2v');
 webhookLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS');
