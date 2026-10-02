@@ -357,7 +357,7 @@ stripePortalLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.
 stripePortalLambda.addEnvironment('FRONTEND_URL', process.env.FRONTEND_URL || 'https://prometheus-fire.dcie4i9xtobfi.amplifyapp.com');
 userProfilesTable.grantReadData(stripePortalLambda);
 
-webhookLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS');
+webhookLambda.addEnvironment('VANGUARD_PRICE_ID', process.env.VANGUARD_PRICE_ID || 'price_1UB4nDI2Coxc9y6EopiOCY2v');
 webhookLambda.addEnvironment('VANGUARD_ELITE_PRICE_ID', process.env.VANGUARD_ELITE_PRICE_ID || 'price_1UB4ppI2Coxc9y6ESB2H7uIS');
 webhookLambda.addEnvironment('TOP_UP_PRICE_ID', process.env.TOP_UP_PRICE_ID || 'price_1UB56mI2Coxc9y6Ejo4sGyve');
 webhookLambda.addEnvironment('USER_PROFILES_TABLE_NAME', userProfilesTable.tableName);
