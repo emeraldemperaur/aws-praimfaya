@@ -38,6 +38,13 @@ export const handler = async (event: any) => {
   try {
     if (stripeEvent.type === 'invoice.paid') {
       const invoice = stripeEvent.data.object as any;
+      const billingReason = invoice.billing_reason;
+      
+      if (billingReason === 'subscription_update' || invoice.lines?.data?.[0]?.proration === true) {
+          console.log(`[TRACE] EXIT: Ignoring prorated subscription update invoice ${invoice.id}.`);
+          return { statusCode: 200, body: "Ignored prorated invoice." };
+      }
+
       const customerId = invoice.customer;
       const monetaryValue = (invoice.amount_paid || 0) / 100;
       const invoiceId = invoice.id;

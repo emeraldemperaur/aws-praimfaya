@@ -224,13 +224,13 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         <div style={{ padding: '1.5rem', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px' }}>
           <div style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-            Credits Burned (Visible)
+            Credits Burned
           </div>
           <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{totalCreditsBurned.toLocaleString()}</div>
         </div>
         <div style={{ padding: '1.5rem', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px' }}>
           <div style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-            Total Tokens Processed (Visible)
+            Total Tokens Processed
           </div>
           <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{totalTokens.toLocaleString()}</div>
         </div>

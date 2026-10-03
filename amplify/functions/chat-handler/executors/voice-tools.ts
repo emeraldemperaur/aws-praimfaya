@@ -34,7 +34,13 @@ const preserveBalancedSummary = (rawSummary?: string): string => {
     return `${head}\n\n--- [Middle Discussion Omitted (${rawSummary.length - 2500} chars)] ---\n\n${tail}`;
 };
 
-export const executeEnterpriseVoiceAgent = async ({ toolInput, env, cognitoUserId, clients }: ToolExecutionContext) => {
+export const executeEnterpriseVoiceAgent = async ({ 
+    toolInput, 
+    env, 
+    cognitoUserId, 
+    clients, 
+    sessionId 
+}: ToolExecutionContext) => {
     const { 
         action, 
         destinationPhoneNumber, 
@@ -76,6 +82,7 @@ export const executeEnterpriseVoiceAgent = async ({ toolInput, env, cognitoUserI
                 Item: {
                     id: internalCallId,
                     userId: cognitoUserId,
+                    parentSessionId: sessionId,
                     destinationPhoneNumber: formattedPhone,
                     objective,
                     dataToCapture: parsedDataToCapture,
