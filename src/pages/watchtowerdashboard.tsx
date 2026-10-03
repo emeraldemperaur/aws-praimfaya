@@ -15,6 +15,9 @@ interface WatchtowerProps {
 const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = '' }: WatchtowerProps) => {
   const [usageRecords, setUsageRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextToken, setNextToken] = useState<string | null | undefined>(null);
+  
   const [sessionFilter, setSessionFilter] = useState('');
   const [actionFilter, setActionFilter] = useState('ALL');
   const [resolvedUserId, setResolvedUserId] = useState<string>(currentUserId);
@@ -49,52 +52,44 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
     const fetchMetrics = async () => {
       setLoading(true);
       try {
-        let allRecords: any[] = [];
-        let currentNextToken: string | null | undefined = null;
-
-        do {
-          const response: any = await client.graphql({
-            query: `
-              query ListUsageRecords($filter: ModelUsageRecordFilterInput, $limit: Int, $nextToken: String) {
-                listUsageRecords(filter: $filter, limit: $limit, nextToken: $nextToken) {
-                  items {
-                    id
-                    userId
-                    sessionId
-                    sessionTitle
-                    actionType
-                    toolName
-                    modelId
-                    creditsUsed
-                    inputTokens
-                    outputTokens
-                    monetaryValue
-                    createdAt
-                  }
-                  nextToken
+        const response: any = await client.graphql({
+          query: `
+            query ListUsageRecords($filter: ModelUsageRecordFilterInput, $limit: Int) {
+              listUsageRecords(filter: $filter, limit: $limit) {
+                items {
+                  id
+                  userId
+                  sessionId
+                  sessionTitle
+                  actionType
+                  toolName
+                  modelId
+                  creditsUsed
+                  inputTokens
+                  outputTokens
+                  monetaryValue
+                  createdAt
                 }
+                nextToken
               }
-            `,
-            variables: {
-              filter: isAdmin ? null : { userId: { eq: resolvedUserId } },
-              limit: 500,
-              nextToken: currentNextToken
             }
-          });
-          
-          const rawItems = response.data.listUsageRecords.items || [];
-          allRecords = [...allRecords, ...rawItems];
-          currentNextToken = response.data.listUsageRecords.nextToken;
-          
-        } while (currentNextToken);
-
+          `,
+          variables: {
+            filter: isAdmin ? null : { userId: { eq: resolvedUserId } },
+            limit: 500
+          }
+        });
+        
         if (isMounted) {
-          const validRecords = allRecords.filter(rec => rec !== null && rec !== undefined);
+          const rawItems = response.data?.listUsageRecords?.items || [];
+          const validRecords = rawItems.filter((rec: any) => rec !== null && rec !== undefined);
           
           const sortedRecords = validRecords.sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           );
+          
           setUsageRecords(sortedRecords);
+          setNextToken(response.data?.listUsageRecords?.nextToken);
         }
       } catch (err) {
         console.error("Failed to fetch usage metrics:", err);
@@ -109,6 +104,57 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
       isMounted = false;
     };
   }, [isAdmin, resolvedUserId]);
+
+  const handleLoadMore = async () => {
+    if (!nextToken || loadingMore) return;
+    
+    setLoadingMore(true);
+    try {
+      const response: any = await client.graphql({
+        query: `
+          query ListUsageRecords($filter: ModelUsageRecordFilterInput, $limit: Int, $nextToken: String) {
+            listUsageRecords(filter: $filter, limit: $limit, nextToken: $nextToken) {
+              items {
+                id
+                userId
+                sessionId
+                sessionTitle
+                actionType
+                toolName
+                modelId
+                creditsUsed
+                inputTokens
+                outputTokens
+                monetaryValue
+                createdAt
+              }
+              nextToken
+            }
+          }
+        `,
+        variables: {
+          filter: isAdmin ? null : { userId: { eq: resolvedUserId } },
+          limit: 500,
+          nextToken: nextToken
+        }
+      });
+
+      const rawItems = response.data?.listUsageRecords?.items || [];
+      const validRecords = rawItems.filter((rec: any) => rec !== null && rec !== undefined);
+      
+      const combinedRecords = [...usageRecords, ...validRecords];
+      const sortedRecords = combinedRecords.sort(
+        (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      
+      setUsageRecords(sortedRecords);
+      setNextToken(response.data?.listUsageRecords?.nextToken);
+    } catch (err) {
+      console.error("Failed to load older usage metrics:", err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const filteredRecords = usageRecords.filter((rec) => {
     if (!rec) return false; 
@@ -134,7 +180,6 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
     { label: 'Top-Up Transactions', value: 'TOP_UP' }
   ];
 
-  // Helper styles for standardizing the DataTable headers
   const thStyle: React.CSSProperties = {
     padding: '1rem',
     textTransform: 'uppercase',
@@ -168,7 +213,7 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
       >
         <div>
           <h1 style={{ margin: '0 0 0.5rem 0', fontFamily: 'Bodoni Moda Variable', fontSize: '2rem' }}>
-            Watchtower Metrics
+            Usage Watchtower
           </h1>
           <p style={{ margin: 0, fontSize: '0.85rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>
             {isAdmin ? 'System-wide compute usage telemetry and unit economics.' : 'Compute credit usage and session telemetry.'}
@@ -179,13 +224,13 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         <div style={{ padding: '1.5rem', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px' }}>
           <div style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-            Credits Burned
+            Credits Burned (Visible)
           </div>
           <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{totalCreditsBurned.toLocaleString()}</div>
         </div>
         <div style={{ padding: '1.5rem', backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px' }}>
           <div style={{ fontSize: '0.75rem', color: darkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-            Total Tokens Processed
+            Total Tokens Processed (Visible)
           </div>
           <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{totalTokens.toLocaleString()}</div>
         </div>
@@ -205,7 +250,6 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
       </div>
 
       <div style={{ backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px', overflow: 'hidden' }}>
-        {/* FIX 1: Dropped Bodoni Serif font from table to match default DataTable look */}
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
           <thead>
             <tr style={{ backgroundColor: darkMode ? '#111827' : '#f3f4f6', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, textAlign: 'left', fontFamily: 'Bodoni Moda Variable' }}>
@@ -288,6 +332,28 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
             )}
           </tbody>
         </table>
+        
+        {nextToken && (
+          <div style={{ padding: '1rem', textAlign: 'center', backgroundColor: darkMode ? '#111827' : '#f9fafb' }}>
+            <button 
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              style={{
+                padding: '0.5rem 1.5rem',
+                backgroundColor: darkMode ? '#374151' : '#e5e7eb',
+                color: darkMode ? '#f9fafb' : '#111827',
+                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                borderRadius: '4px',
+                cursor: loadingMore ? 'not-allowed' : 'pointer',
+                fontFamily: 'Bodoni Moda Variable',
+                fontWeight: 600,
+                opacity: loadingMore ? 0.7 : 1
+              }}
+            >
+              {loadingMore ? 'Fetching...' : 'Load Older Records'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

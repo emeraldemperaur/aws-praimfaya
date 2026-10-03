@@ -31,11 +31,20 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
     const fetchProfile = async () => {
       try {
         const { userId } = await getCurrentUser();
-        const response = await client.models.UserProfile.list({
-          filter: {
-            cognitoUserId: { eq: userId }
-          }
-        });
+        let response: { data: Schema['UserProfile']['type'][] };
+
+        if (typeof (client.models.UserProfile as any).byCognitoId === 'function') {
+          response = await (client.models.UserProfile as any).byCognitoId({ 
+            cognitoUserId: userId 
+          });
+        } else {
+          console.warn("Using fallback Scan. Run 'npx ampx generate outputs' to enable Index queries.");
+          response = await client.models.UserProfile.list({
+            filter: {
+              cognitoUserId: { eq: userId }
+            }
+          });
+        }
 
         if (isMounted) {
           if (response.data && response.data.length > 0) {
