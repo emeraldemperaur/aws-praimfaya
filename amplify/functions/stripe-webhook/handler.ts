@@ -48,11 +48,13 @@ export const handler = async (event: any) => {
       const customerId = invoice.customer;
       const monetaryValue = (invoice.amount_paid || 0) / 100;
       const invoiceId = invoice.id;
-      const periodEnd = new Date((invoice.lines.data[0].period.end) * 1000).toISOString();
-      const priceId = invoice.lines.data[0].pricing?.price_details?.price || '';
+      const rawPeriodEnd = invoice.lines?.data?.[0]?.period?.end;
+      const periodEnd = rawPeriodEnd ? new Date(rawPeriodEnd * 1000).toISOString() : new Date().toISOString();
+      const priceId = invoice.lines?.data?.[0]?.price?.id || invoice.lines?.data?.[0]?.plan?.id || '';
+      
       let cognitoUserId = invoice.parent?.subscription_details?.metadata?.cognitoUserId;
       if (!cognitoUserId) {
-        cognitoUserId = invoice.lines.data[0].metadata?.cognitoUserId;
+        cognitoUserId = invoice.lines?.data?.[0]?.metadata?.cognitoUserId;
       }
 
       if (!cognitoUserId) {
@@ -177,7 +179,7 @@ export const handler = async (event: any) => {
     
     else if (stripeEvent.type === 'invoice.payment_failed') {
       const invoice = stripeEvent.data.object as any;
-      let cognitoUserId = invoice.parent?.subscription_details?.metadata?.cognitoUserId || invoice.lines?.data[0]?.metadata?.cognitoUserId;
+      let cognitoUserId = invoice.parent?.subscription_details?.metadata?.cognitoUserId || invoice.lines?.data?.[0]?.metadata?.cognitoUserId;
 
       if (cognitoUserId) {
           const userProfileId = await getProfileId(cognitoUserId);
@@ -196,8 +198,10 @@ export const handler = async (event: any) => {
       const cognitoUserId = subscription.metadata?.cognitoUserId;
       
       if (cognitoUserId) {
-        const priceId = subscription.items.data[0].price.id;
-        const periodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+        const priceId = subscription.items?.data?.[0]?.price?.id;
+        const rawPeriodEnd = subscription.current_period_end || subscription.items?.data?.[0]?.current_period_end;
+        const periodEnd = rawPeriodEnd ? new Date(rawPeriodEnd * 1000).toISOString() : new Date().toISOString();
+        
         const status = subscription.status === 'active' ? 'ACTIVE' : 'PAST_DUE';
 
         let planName = "VANGUARD";
