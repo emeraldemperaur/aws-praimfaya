@@ -20,12 +20,6 @@ const authReadRBAC = (allow: any) => [
       allow.groups(['superadmin', 'root', 'admin', 'heda']),
 ];
 
-const iamRBAC = (allow: any) => [
-  allow.owner(),
-  allow.groups(['superadmin', 'root', 'admin', 'heda']),
-  allow.authenticated('identityPool')
-];
-
 const usageOwnerRBAC = (allow: any) => [
   allow.owner(), 
   allow.ownerDefinedIn('userId'), 
