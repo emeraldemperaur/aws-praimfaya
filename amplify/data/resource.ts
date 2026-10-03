@@ -26,6 +26,20 @@ const iamRBAC = (allow: any) => [
   allow.authenticated('identityPool')
 ];
 
+const usageOwnerRBAC = (allow: any) => [
+  allow.owner(), 
+  allow.ownerDefinedIn('userId'), 
+  allow.groups(['superadmin', 'root', 'admin', 'heda']),
+  allow.authenticated('identityPool')
+];
+
+const profileOwnerRBAC = (allow: any) => [
+  allow.owner(), 
+  allow.ownerDefinedIn('cognitoUserId'),
+  allow.groups(['superadmin', 'root', 'admin', 'heda']),
+  allow.authenticated('identityPool')
+];
+
 const ModelProviders = [
   'AMAZON', 'ANTHROPIC', 'META', 'GOOGLE', 'OPENAI', 
   'COHERE', 'MISTRAL', 'STABILITY', 'DEEPSEEK', 'LUMA', 
@@ -237,7 +251,7 @@ const schema = a.schema({
       nocturnalAgents: a.boolean().default(false),
       integrations: a.json(),
     })
-    .authorization(iamRBAC)
+    .authorization(profileOwnerRBAC)
     .secondaryIndexes(index => [index("cognitoUserId").name("byCognitoId")]),
 
   UsageRecord: a.model({
@@ -255,7 +269,7 @@ const schema = a.schema({
       stripeInvoiceId: a.string(),
       createdAt: a.datetime().required()
     })
-    .authorization(iamRBAC)
+    .authorization(usageOwnerRBAC)
     .secondaryIndexes(index => [
       index("userId").sortKeys(["createdAt"]),
       index("sessionId").sortKeys(["createdAt"])

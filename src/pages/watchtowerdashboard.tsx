@@ -3,7 +3,6 @@ import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../amplify/data/resource';
 import SearchRibbon from '../components/searchribbon';
 import { getCurrentUser } from 'aws-amplify/auth';
-import { getUserEmail } from '../utils/asimov';
 
 const client = generateClient<Schema>();
 
@@ -21,48 +20,68 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
   const [resolvedUserId, setResolvedUserId] = useState<string>(currentUserId);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const resolveUser = async () => {
       if (!currentUserId) {
         try {
-          const email = await getUserEmail();
-          if (email) {
-            setResolvedUserId(email);
-          } else {
-            const { userId } = await getCurrentUser();
-            setResolvedUserId(userId);
-          }
+          const { userId } = await getCurrentUser();
+          if (isMounted) setResolvedUserId(userId);
         } catch (err) {
           console.error("Failed to resolve current user for watchtower:", err);
         }
       } else {
-        setResolvedUserId(currentUserId);
+        if (isMounted) setResolvedUserId(currentUserId);
       }
     };
+    
     resolveUser();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [currentUserId]);
 
   useEffect(() => {
+    let isMounted = true;
     if (!isAdmin && !resolvedUserId) return;
 
-    const filter = isAdmin ? undefined : { userId: { eq: resolvedUserId } };
+    const fetchMetrics = async () => {
+      setLoading(true);
+      try {
+        let allRecords: any[] = [];
+        let currentNextToken: string | null | undefined = null;
 
-    const sub = client.models.UsageRecord.observeQuery({
-      filter
-    }).subscribe({
-      next: (data) => {
-        const sortedRecords = [...data.items].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        setUsageRecords(sortedRecords);
-        setLoading(false);
-      },
-      error: (err) => {
+        // FIX: Renamed 'response' to 'pageData' and inlined the filter for strict typing
+        do {
+          const pageData: any = await client.models.UsageRecord.list({
+            filter: isAdmin ? undefined : { userId: { eq: resolvedUserId } },
+            limit: 500,
+            nextToken: currentNextToken
+          });
+          
+          allRecords = [...allRecords, ...pageData.data];
+          currentNextToken = pageData.nextToken;
+        } while (currentNextToken);
+
+        if (isMounted) {
+          const sortedRecords = allRecords.sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          setUsageRecords(sortedRecords);
+        }
+      } catch (err) {
         console.error("Failed to fetch usage metrics:", err);
-        setLoading(false);
+      } finally {
+        if (isMounted) setLoading(false);
       }
-    });
+    };
 
-    return () => sub.unsubscribe();
+    fetchMetrics();
+
+    return () => {
+      isMounted = false;
+    };
   }, [isAdmin, resolvedUserId]);
 
   const filteredRecords = usageRecords.filter((rec) => {
