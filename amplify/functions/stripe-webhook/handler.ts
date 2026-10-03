@@ -93,12 +93,13 @@ export const handler = async (event: any) => {
                       TableName: USAGE_RECORDS_TABLE,
                       ConditionExpression: "attribute_not_exists(id)", 
                       Item: { 
+                        __typename: 'UsageRecord', 
                         id: uniqueEventId, 
                         userId: cognitoUserId, 
                         sessionId: 'system-billing', 
                         sessionTitle: 'Subscription Purchase/Renewal', 
                         actionType: 'TOP_UP', 
-                        creditsUsed: -allocatedCredits, 
+                        creditsUsed: allocatedCredits, 
                         monetaryValue: monetaryValue,     
                         stripeInvoiceId: invoiceId,
                         createdAt: now 
@@ -148,12 +149,13 @@ export const handler = async (event: any) => {
                         TableName: USAGE_RECORDS_TABLE,
                         ConditionExpression: "attribute_not_exists(id)", 
                         Item: { 
+                          __typename: 'UsageRecord', 
                           id: uniqueEventId, 
                           userId: cognitoUserId, 
                           sessionId: 'system-billing', 
                           sessionTitle: 'One-Time Credit Top-Up', 
                           actionType: 'TOP_UP', 
-                          creditsUsed: -allocatedCredits, 
+                          creditsUsed: allocatedCredits, 
                           monetaryValue: monetaryValue,     
                           stripeInvoiceId: invoiceId,       
                           createdAt: now 

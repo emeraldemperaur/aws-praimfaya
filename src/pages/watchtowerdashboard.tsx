@@ -52,20 +52,46 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
         let allRecords: any[] = [];
         let currentNextToken: string | null | undefined = null;
 
-        // FIX: Renamed 'response' to 'pageData' and inlined the filter for strict typing
         do {
-          const pageData: any = await client.models.UsageRecord.list({
-            filter: isAdmin ? undefined : { userId: { eq: resolvedUserId } },
-            limit: 500,
-            nextToken: currentNextToken
+          const response: any = await client.graphql({
+            query: `
+              query ListUsageRecords($filter: ModelUsageRecordFilterInput, $limit: Int, $nextToken: String) {
+                listUsageRecords(filter: $filter, limit: $limit, nextToken: $nextToken) {
+                  items {
+                    id
+                    userId
+                    sessionId
+                    sessionTitle
+                    actionType
+                    toolName
+                    modelId
+                    creditsUsed
+                    inputTokens
+                    outputTokens
+                    monetaryValue
+                    createdAt
+                  }
+                  nextToken
+                }
+              }
+            `,
+            variables: {
+              filter: isAdmin ? null : { userId: { eq: resolvedUserId } },
+              limit: 500,
+              nextToken: currentNextToken
+            }
           });
           
-          allRecords = [...allRecords, ...pageData.data];
-          currentNextToken = pageData.nextToken;
+          const rawItems = response.data.listUsageRecords.items || [];
+          allRecords = [...allRecords, ...rawItems];
+          currentNextToken = response.data.listUsageRecords.nextToken;
+          
         } while (currentNextToken);
 
         if (isMounted) {
-          const sortedRecords = allRecords.sort(
+          const validRecords = allRecords.filter(rec => rec !== null && rec !== undefined);
+          
+          const sortedRecords = validRecords.sort(
             (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           );
           setUsageRecords(sortedRecords);
@@ -85,6 +111,8 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
   }, [isAdmin, resolvedUserId]);
 
   const filteredRecords = usageRecords.filter((rec) => {
+    if (!rec) return false; 
+
     const matchesAction = actionFilter === 'ALL' || rec.actionType === actionFilter;
     const matchesSession =
       (rec.sessionId?.toLowerCase() || '').includes(sessionFilter.toLowerCase()) ||
@@ -92,7 +120,11 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
     return matchesAction && matchesSession;
   });
 
-  const totalCreditsBurned = filteredRecords.reduce((sum, rec) => sum + (rec.creditsUsed || 0), 0);
+  const totalCreditsBurned = filteredRecords.reduce((sum, rec) => {
+    if (rec.actionType === 'TOP_UP') return sum;
+    return sum + Math.abs(rec.creditsUsed || 0);
+  }, 0);
+
   const totalTokens = filteredRecords.reduce((sum, rec) => sum + (rec.inputTokens || 0) + (rec.outputTokens || 0), 0);
 
   const filterOptions = [
@@ -101,6 +133,16 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
     { label: 'Agentic Tools / Media', value: 'TOOL_EXECUTION' },
     { label: 'Top-Up Transactions', value: 'TOP_UP' }
   ];
+
+  // Helper styles for standardizing the DataTable headers
+  const thStyle: React.CSSProperties = {
+    padding: '1rem',
+    textTransform: 'uppercase',
+    fontSize: '0.75rem',
+    letterSpacing: '0.05em',
+    color: darkMode ? '#9ca3af' : '#6b7280',
+    fontWeight: 600
+  };
 
   return (
     <div
@@ -163,15 +205,16 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
       </div>
 
       <div style={{ backgroundColor: darkMode ? '#1f2937' : '#ffffff', border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, borderRadius: '8px', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', fontFamily: 'Bodoni Moda Variable' }}>
+        {/* FIX 1: Dropped Bodoni Serif font from table to match default DataTable look */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
           <thead>
-            <tr style={{ backgroundColor: darkMode ? '#111827' : '#f3f4f6', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, textAlign: 'left' }}>
-              <th style={{ padding: '1rem' }}>Date</th>
-              {isAdmin && <th style={{ padding: '1rem' }}>User ID</th>}
-              <th style={{ padding: '1rem' }}>Session</th>
-              <th style={{ padding: '1rem' }}>Action / Origin</th>
-              <th style={{ padding: '1rem' }}>Target (Model / Tool)</th>
-              <th style={{ padding: '1rem', textAlign: 'right' }}>Credits</th>
+            <tr style={{ backgroundColor: darkMode ? '#111827' : '#f3f4f6', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, textAlign: 'left', fontFamily: 'Bodoni Moda Variable' }}>
+              <th style={thStyle}>Date</th>
+              {isAdmin && <th style={thStyle}>User ID</th>}
+              <th style={thStyle}>Session</th>
+              <th style={thStyle}>Action / Origin</th>
+              <th style={thStyle}>Target (Model / Tool)</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>Credits</th>
             </tr>
           </thead>
           <tbody>
@@ -196,8 +239,8 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
                   </td>
                   {isAdmin && <td style={{ padding: '1rem' }}>{(rec.userId || '').substring(0, 8)}...</td>}
                   <td style={{ padding: '1rem' }}>
-                    <div style={{ fontWeight: 'bold' }}>{rec.sessionTitle || 'Terminal Session'}</div>
-                    <div style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>{rec.sessionId}</div>
+                    <div style={{ fontWeight: 'bold', fontFamily: 'Bodoni Moda Variable' }}>{rec.sessionTitle || 'Terminal Session'}</div>
+                    <div style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280' }}>{rec.sessionId || 'N/A'}</div>
                   </td>
                   <td style={{ padding: '1rem' }}>
                     <span
@@ -220,11 +263,15 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
                             : darkMode ? '#6ee7b7' : '#047857'
                       }}
                     >
-                      {rec.actionType}
+                      {(rec.actionType || 'UNKNOWN').replace(/_/g, ' ')}
                     </span>
                   </td>
                   <td style={{ padding: '1rem' }}>
-                    {rec.actionType === 'TOOL_EXECUTION' ? rec.toolName : rec.modelId}
+                    {rec.actionType === 'TOP_UP' ? (
+                      <span style={{ color: darkMode ? '#6b7280' : '#9ca3af', fontStyle: 'italic' }}>N/A</span>
+                    ) : (
+                      rec.actionType === 'TOOL_EXECUTION' ? rec.toolName : rec.modelId
+                    )}
                   </td>
                   <td
                     style={{
@@ -234,7 +281,7 @@ const UsageWatchtower = ({ darkMode = false, isAdmin = false, currentUserId = ''
                       color: rec.actionType === 'TOP_UP' ? '#34d399' : '#fca5a5'
                     }}
                   >
-                    {rec.actionType === 'TOP_UP' ? '+' : '-'}{(rec.creditsUsed || 0).toLocaleString()}
+                    {rec.actionType === 'TOP_UP' ? '+' : '-'}{Math.abs(rec.creditsUsed || 0).toLocaleString()}
                   </td>
                 </tr>
               ))

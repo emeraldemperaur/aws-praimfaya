@@ -26,40 +26,35 @@ const UserProfile = ({ darkMode }: { darkMode: boolean }) => {
   }, [darkMode]);
 
   useEffect(() => {
-    let sub: any;
+    let isMounted = true;
 
     const fetchProfile = async () => {
       try {
         const { userId } = await getCurrentUser();
-
-        sub = client.models.UserProfile.observeQuery({
+        const response = await client.models.UserProfile.list({
           filter: {
             cognitoUserId: { eq: userId }
           }
-        }).subscribe({
-          next: (data) => {
-            if (data.items && data.items.length > 0) {
-              setDbProfile(data.items[0]);
-            } else {
-              console.log("No backend UserProfile found for this user yet.");
-            }
-            setIsLoading(false);
-          },
-          error: (err) => {
-            console.error("Error observing live user profile:", err);
-            setIsLoading(false);
-          }
         });
 
+        if (isMounted) {
+          if (response.data && response.data.length > 0) {
+            setDbProfile(response.data[0]);
+          } else {
+            console.log("No backend UserProfile found for this user yet.");
+          }
+        }
       } catch (err) {
-        console.error("Error fetching live user profile:", err);
-        setIsLoading(false);
+        console.error("Error fetching user profile:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     };
+    
     fetchProfile();
 
     return () => {
-      if (sub) sub.unsubscribe();
+      isMounted = false;
     }
   }, []);
 
