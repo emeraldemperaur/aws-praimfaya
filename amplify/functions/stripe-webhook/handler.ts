@@ -50,7 +50,10 @@ export const handler = async (event: any) => {
       const invoiceId = invoice.id;
       const rawPeriodEnd = invoice.lines?.data?.[0]?.period?.end;
       const periodEnd = rawPeriodEnd ? new Date(rawPeriodEnd * 1000).toISOString() : new Date().toISOString();
-      const priceId = invoice.lines?.data?.[0]?.price?.id || invoice.lines?.data?.[0]?.plan?.id || '';
+      const priceId = invoice.lines?.data?.[0]?.pricing?.price_details?.price 
+                   || invoice.lines?.data?.[0]?.price?.id 
+                   || invoice.lines?.data?.[0]?.plan?.id 
+                   || '';
       
       let cognitoUserId = invoice.parent?.subscription_details?.metadata?.cognitoUserId;
       if (!cognitoUserId) {
@@ -198,7 +201,11 @@ export const handler = async (event: any) => {
       const cognitoUserId = subscription.metadata?.cognitoUserId;
       
       if (cognitoUserId) {
-        const priceId = subscription.items?.data?.[0]?.price?.id;
+        const priceId = subscription.items?.data?.[0]?.price?.id 
+                     || subscription.items?.data?.[0]?.plan?.id
+                     || subscription.items?.data?.[0]?.pricing?.price_details?.price
+                     || '';
+                     
         const rawPeriodEnd = subscription.current_period_end || subscription.items?.data?.[0]?.current_period_end;
         const periodEnd = rawPeriodEnd ? new Date(rawPeriodEnd * 1000).toISOString() : new Date().toISOString();
         
