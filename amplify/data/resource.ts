@@ -154,6 +154,7 @@ const schema = a.schema({
       messages: a.hasMany('TerminalMessage', 'terminalId'),
       deusExMachina: a.boolean().default(false),
       haltRequested: a.boolean().default(false),
+      hyperlinks: a.string().array(),
       activities: a.hasMany('AgentActivity', 'terminalId')
     })
     .authorization(headerRBAC),

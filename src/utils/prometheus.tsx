@@ -87,30 +87,34 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         costImpact: "MEDIUM_COMPUTE"
     },
     {
-        toolName: "enterprise_voice_agent",
-        publicName: "Enterprise AI Voice Agent",
-        systemPrompt: "You are the commander of an autonomous Voice AI. You do NOT make the call directly—you dispatch a sub-agent. Provide the sub-agent with a meticulous 'objective' detailing behavior, tone, and objection handling. Define exact JSON keys in 'dataToCapture'. Instruct the user to wait, then execute CHECK_CALL_RESULTS to retrieve the outcome.",
-        userPrompts: [
-            {
-                promptName: "Lead Qualifier",
-                userPrompt: "Dispatch a Voice Agent to call {{target_phone_number}}. Objective: 'Act as a premium SDR. Qualify the prospect for our {{product_name}}, handle budget objections politely, and book a follow-up meeting.' Capture these data points: {{data_points_e.g._[BANT criteria, Decision Maker, Timeline]}}."
-            },
-            {
-                promptName: "Reconnoitre",
-                userPrompt: "Dispatch a Voice Agent to call {{target_phone_number}}. Objective: 'Act as a {{persona_e.g._prospective_client_or_researcher}} and subtly gather information regarding {{context_objectives_e.g._competitor_pricing_and_availability}}.' Capture these specific data points: {{data_points_e.g._[Pricing_Tiers,_Stock_Levels,_Feature_Gaps]}}. Once the call concludes, execute a check to retrieve the outcome and generate a comprehensive reconnaissance summary."
-            },
-            {
-                promptName: "Notification",
-                userPrompt: "Dispatch a Voice Agent to call {{target_phone_number}} to deliver an important notification. Objective: 'Deliver the following message clearly: \"{{message_content}}\". You MUST stay on the line until the recipient explicitly acknowledges receipt by saying the word \"{{acknowledgment_word_e.g._Confirmed_or_Understood}}\".' Capture: {{data_points_e.g._[Acknowledgment_Status,_Recipient_Remarks]}}. Monitor the call status and verify successful delivery."
-            },
-            {
-                promptName: "NPS Survey",
-                userPrompt: "Call {{target_phone_number}} with a {{voice_style_e.g._PROFESSIONAL_FEMALE}} voice. Objective: 'Conduct a post-implementation Net Promoter Score survey for {{service_name}}. Ask for a 1-10 rating, then kindly ask for one piece of critical feedback.' Capture: {{data_points_e.g._[NPS Score, Primary Feedback]}}."
-            },
-            {
-                promptName: "Reservation",
-                userPrompt: "Dispatch an urgent Voice Agent to call {{target_business_phone}}. Objective: 'Reserve a table for {{party_size}} people at {{time}} tonight under the name {{reservation_name}}, and confirm if they accommodate {{special_requests}}.' Capture: {{data_points_e.g._[Reservation Confirmed, Dietary Notes]}}."
-            }
+    toolName: "enterprise_voice_agent",
+    publicName: "Enterprise AI Voice Agent",
+    systemPrompt: "You are the commander of an autonomous Voice AI. You do NOT make the call directly—you dispatch a sub-agent. Provide the sub-agent with a meticulous 'objective' detailing behavior, tone, language, and objection handling. If calling a non-English recipient, set 'languageCode' explicitly (e.g., 'fr-FR', 'de-DE', 'it-IT', 'cmn-CN'). Define exact JSON keys in 'dataToCapture'. Instruct the user to wait, then execute CHECK_CALL_RESULTS to retrieve the outcome.",
+    userPrompts: [
+        {
+            promptName: "Lead Qualifier",
+            userPrompt: "Dispatch a Voice Agent to call {{target_phone_number}}. Objective: 'Act as a premium SDR. Qualify the prospect for our {{product_name}}, handle budget objections politely, and book a follow-up meeting.' Capture these data points: {{data_points_e.g._[BANT criteria, Decision Maker, Timeline]}}."
+        },
+        {
+            promptName: "Multilingual SDR",
+            userPrompt: "Dispatch a French-speaking Voice Agent (languageCode: 'fr-FR') to call {{target_phone_number}}. Objective: 'Act as a senior consultant in Paris introducing {{solution_name}}. Conduct the entire conversation in fluent French.' Capture: {{data_points_e.g._[Interest_Level, Preferred_Contact_Time]}}."
+        },
+        {
+            promptName: "Reconnoitre",
+            userPrompt: "Dispatch a Voice Agent to call {{target_phone_number}}. Objective: 'Act as a {{persona_e.g._prospective_client_or_researcher}} and subtly gather information regarding {{context_objectives_e.g._competitor_pricing_and_availability}}.' Capture these specific data points: {{data_points_e.g._[Pricing_Tiers,_Stock_Levels,_Feature_Gaps]}}. Once the call concludes, execute a check to retrieve the outcome and generate a comprehensive reconnaissance summary."
+        },
+        {
+            promptName: "Notification",
+            userPrompt: "Dispatch a Voice Agent to call {{target_phone_number}} to deliver an important notification. Objective: 'Deliver the following message clearly: \"{{message_content}}\". You MUST stay on the line until the recipient explicitly acknowledges receipt by saying the word \"{{acknowledgment_word_e.g._Confirmed_or_Understood}}\".' Capture: {{data_points_e.g._[Acknowledgment_Status,_Recipient_Remarks]}}. Monitor the call status and verify successful delivery."
+        },
+        {
+            promptName: "NPS Survey",
+            userPrompt: "Call {{target_phone_number}} with a {{voice_style_e.g._PROFESSIONAL_FEMALE}} voice. Objective: 'Conduct a post-implementation Net Promoter Score survey for {{service_name}}. Ask for a 1-10 rating, then kindly ask for one piece of critical feedback.' Capture: {{data_points_e.g._[NPS Score, Primary Feedback]}}."
+        },
+        {
+            promptName: "Reservation",
+            userPrompt: "Dispatch an urgent Voice Agent to call {{target_business_phone}}. Objective: 'Reserve a table for {{party_size}} people at {{time}} tonight under the name {{reservation_name}}, and confirm if they accommodate {{special_requests}}.' Capture: {{data_points_e.g._[Reservation Confirmed, Dietary Notes]}}."
+        }
         ],
         modelAvailability: "ALL_AGENTS",
         costImpact: "ULTRA_COMPUTE"

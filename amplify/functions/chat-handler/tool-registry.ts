@@ -1260,6 +1260,10 @@ export const NATIVE_TOOLS_REGISTRY = [
                     dataToCapture: { type: "array", items: { type: "string" }, description: "Keys to extract during the call." },
                     voiceTone: { type: "string", enum: ["professional", "casual", "urgent"] },
                     voiceGender: { type: "string", enum: ["MALE", "FEMALE"] },
+                    languageCode: { 
+                        type: "string", 
+                        description: "Target locale for the call (e.g., 'en-US', 'fr-FR', 'de-DE', 'it-IT', 'cmn-CN'). Defaults to 'en-US'." 
+                    },
                     searchQuery: { type: "string", description: "Optional keyword or phrase to filter the transcript." },
                     page: { type: "number", description: "Page number for long transcripts (default: 1)." }
                 },

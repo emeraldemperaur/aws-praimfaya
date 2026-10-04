@@ -53,8 +53,8 @@ const customStack = cdk.Stack.of(backend.chatHandler.resources.lambda);
 
 const isProd = cdk.Stage.of(customStack)?.stageName === 'prod';
 const envName = cdk.Stage.of(customStack)?.stageName || 'sandbox';
-const connectInstanceId = process.env.CONNECT_INSTANCE_ID || '';
-const connectContactFlowId = process.env.CONNECT_CONTACT_FLOW_ID || '';
+const connectInstanceId = process.env.CONNECT_INSTANCE_ID || 'arn:aws:connect:us-east-1:680439401460:instance/9440a82f-2ccb-404f-97a8-47c04d49569f';
+const connectContactFlowId = process.env.CONNECT_CONTACT_FLOW_ID || '8bf3b64d-b885-4c2c-91d7-647c25e3e87b';
 const connectSourcePhone = process.env.CONNECT_SOURCE_PHONE_NUMBER || '';
 
 // DynamoDB Tables

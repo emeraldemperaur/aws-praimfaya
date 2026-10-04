@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { generateClient } from 'aws-amplify/data';
 import { uploadData } from 'aws-amplify/storage';
@@ -20,7 +20,7 @@ import { WorkflowsDrawerModal } from '../components/workflowsdrawermodal';
 import { AgentActivityDrawerModal } from '../components/agentactivitydrawermodal'; 
 
 export const terminalSelectionSet = [
-  'id', 'title', 'totalTokensUsed', 'status', 'contextProfileId', 'userId', 'deusExMachina',
+  'id', 'title', 'totalTokensUsed', 'status', 'contextProfileId', 'userId', 'deusExMachina', 'hyperlinks',
   'contextProfile.*', 'contextProfile.foundationModel.*', 'contextProfile.supervisor.*',
   'contextProfile.collaborators.*', 'contextProfile.vectorCollection.*', 'contextProfile.vectorCollection.documents.*', 'contextProfile.workflows.*', 'contextProfile.workflows.contextWorkflow.*'
 ] as const;
@@ -28,6 +28,298 @@ export const terminalSelectionSet = [
 export type DeepTerminalSession = SelectionSet<Schema['ConsoleTerminal']['type'], typeof terminalSelectionSet>;
 
 const client = generateClient<Schema>();
+
+const MAX_URL_COUNT = 20;
+const MAX_FILE_SIZE_MB = 25;
+const MAX_CHAT_HISTORY_CONTEXT = 33; 
+
+const WebLinksDropdown = ({
+  darkMode,
+  sessionId,
+  hyperlinks = [],
+  onUpdateHyperlinks
+}: {
+  darkMode: boolean;
+  sessionId: string;
+  hyperlinks: string[];
+  onUpdateHyperlinks: (updated: string[]) => void;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const isValidUrl = useCallback((urlString: string) => {
+    try {
+      const url = new URL(urlString.trim());
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const persistHyperlinks = async (updated: string[]) => {
+    setIsSaving(true);
+    onUpdateHyperlinks(updated);
+    try {
+      await client.models.ConsoleTerminal.update({ id: sessionId, hyperlinks: updated });
+    } catch (err) {
+      console.error('Failed to update hyperlinks in ConsoleTerminal:', err);
+      setErrorMsg('Failed to sync links with server.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAddLink = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setErrorMsg('');
+    const trimmed = urlInput.trim();
+    if (!trimmed) return;
+
+    if (!isValidUrl(trimmed)) {
+      setErrorMsg('Please enter a valid URL (http/https).');
+      return;
+    }
+
+    if (hyperlinks.length >= MAX_URL_COUNT) {
+      setErrorMsg(`Maximum ${MAX_URL_COUNT} URLs limit reached.`);
+      return;
+    }
+
+    if (hyperlinks.includes(trimmed)) {
+      setErrorMsg('URL is already added.');
+      return;
+    }
+
+    const updated = [...hyperlinks, trimmed];
+    setUrlInput('');
+    await persistHyperlinks(updated);
+  };
+
+  const handleRemoveLink = async (indexToRemove: number) => {
+    const updated = hyperlinks.filter((_, idx) => idx !== indexToRemove);
+    await persistHyperlinks(updated);
+  };
+
+  const handleClearAll = async () => {
+    setErrorMsg('');
+    await persistHyperlinks([]);
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          setIsOpen(!isOpen);
+          setErrorMsg('');
+        }}
+        title="Add Web Links"
+        style={{
+          background: darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          border: `1px solid ${hyperlinks.length > 0 ? '#3b82f6' : (darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)')}`,
+          borderRadius: '8px',
+          color: hyperlinks.length > 0 ? '#3b82f6' : (darkMode ? '#f9fafb' : '#111827'),
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '0.85rem',
+          width: '32px',
+          height: '32px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+          transition: 'all 0.2s ease',
+          position: 'relative'
+        }}
+      >
+        <i className={`fa-solid ${isSaving ? 'fa-spinner fa-spin' : 'fa-link'}`}></i>
+        {hyperlinks.length > 0 && !isSaving && (
+          <span style={{
+            position: 'absolute',
+            top: '-4px',
+            right: '-4px',
+            backgroundColor: '#2563eb',
+            color: '#ffffff',
+            borderRadius: '999px',
+            width: '14px',
+            height: '14px',
+            fontSize: '0.6rem',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            {hyperlinks.length}
+          </span>
+        )}
+      </button>
+
+      {isOpen && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setIsOpen(false)} />
+          <div style={{
+            position: 'absolute',
+            bottom: '120%',
+            left: 0,
+            width: '280px',
+            maxHeight: '320px',
+            background: darkMode ? 'rgba(31, 41, 55, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)'}`,
+            borderRadius: '12px',
+            boxShadow: darkMode ? '0 10px 30px rgba(0,0,0,0.5)' : '0 10px 30px rgba(0,0,0,0.1)',
+            zIndex: 100,
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '0.75rem',
+            gap: '0.5rem',
+            fontFamily: 'Google Sans Code, monospace'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: darkMode ? '#f9fafb' : '#111827', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <i className="fa-solid fa-globe" style={{ color: '#3b82f6' }}></i> Web Links ({hyperlinks.length}/{MAX_URL_COUNT})
+              </span>
+              {hyperlinks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  disabled={isSaving}
+                  title="Clear All Links"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#ef4444',
+                    cursor: isSaving ? 'not-allowed' : 'pointer',
+                    fontSize: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    padding: '0.1rem 0.3rem',
+                    borderRadius: '4px'
+                  }}
+                >
+                  <i className="fa-solid fa-broom"></i> Clear
+                </button>
+              )}
+            </div>
+
+            <form onSubmit={handleAddLink} style={{ display: 'flex', gap: '0.35rem' }}>
+              <input
+                type="text"
+                placeholder="https://example.com"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                disabled={hyperlinks.length >= MAX_URL_COUNT || isSaving}
+                style={{
+                  flex: 1,
+                  padding: '0.35rem 0.5rem',
+                  borderRadius: '6px',
+                  border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)'}`,
+                  background: darkMode ? 'rgba(0, 0, 0, 0.3)' : 'rgba(255, 255, 255, 0.8)',
+                  color: darkMode ? '#f9fafb' : '#111827',
+                  fontSize: '0.75rem',
+                  outline: 'none'
+                }}
+              />
+              <button
+                type="submit"
+                disabled={hyperlinks.length >= MAX_URL_COUNT || !urlInput.trim() || isSaving}
+                title="Add URL"
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: '#2563eb',
+                  color: '#ffffff',
+                  cursor: (hyperlinks.length >= MAX_URL_COUNT || !urlInput.trim() || isSaving) ? 'not-allowed' : 'pointer',
+                  opacity: (hyperlinks.length >= MAX_URL_COUNT || !urlInput.trim() || isSaving) ? 0.5 : 1,
+                  fontSize: '0.75rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <i className="fa-solid fa-plus"></i>
+              </button>
+            </form>
+
+            {errorMsg && (
+              <div style={{ color: '#ef4444', fontSize: '0.68rem', lineHeight: 1.2 }}>
+                {errorMsg}
+              </div>
+            )}
+
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.35rem',
+              maxHeight: '160px',
+              overflowY: 'auto',
+              marginTop: '0.25rem'
+            }}>
+              {hyperlinks.length === 0 ? (
+                <div style={{ fontSize: '0.7rem', color: darkMode ? '#9ca3af' : '#6b7280', textAlign: 'center', padding: '0.5rem 0' }}>
+                  No web links added yet.
+                </div>
+              ) : (
+                hyperlinks.map((link, idx) => (
+                  <div
+                    key={`${link}-${idx}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.3rem 0.5rem',
+                      borderRadius: '6px',
+                      backgroundColor: darkMode ? 'rgba(0, 0, 0, 0.25)' : 'rgba(0, 0, 0, 0.04)',
+                      border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'}`,
+                      fontSize: '0.7rem',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    <span
+                      title={link}
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: darkMode ? '#93c5fd' : '#1d4ed8',
+                        flex: 1
+                      }}
+                    >
+                      {link}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveLink(idx)}
+                      disabled={isSaving}
+                      title="Remove link"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: darkMode ? '#ef4444' : '#dc2626',
+                        cursor: isSaving ? 'not-allowed' : 'pointer',
+                        padding: '0 2px',
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      <i className="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -45,6 +337,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const [userProfile, setUserProfile] = useState<Schema['UserProfile']['type'] | null>(null);
   const [isVerifyingCredits, setIsVerifyingCredits] = useState(true);
   const [latestActivity, setLatestActivity] = useState<Schema['AgentActivity']['type'] | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,11 +350,14 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
   const [isVectorModalOpen, setIsVectorModalOpen] = useState(false);
   const [isWorkflowsModalOpen, setIsWorkflowsModalOpen] = useState(false);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
-  const isOutOfCredits = userProfile ? ((userProfile.computeCredits || 0) <= 0 || userProfile.subscriptionStatus !== 'ACTIVE') : false;
+  
+  const isOutOfCredits = useMemo(() => {
+    return userProfile ? ((userProfile.computeCredits || 0) <= 0 || userProfile.subscriptionStatus !== 'ACTIVE') : false;
+  }, [userProfile]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isAiTyping, latestActivity]);
+  }, [messages.length, isAiTyping, latestActivity?.id]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -94,16 +390,18 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     return () => { isMounted = false; };
   }, []);
 
+  // Safe Subscription Lifecycle Management
   useEffect(() => {
     if (!sessionId) {
       navigate('/console-terminal');
       return;
     }
 
-    let messagesSub: any;
-    let artifactsSub: any;
-    let sessionSub: any;
-    let activitySub: any;
+    let isSubscribed = true;
+    let messagesSub: { unsubscribe: () => void } | null = null;
+    let artifactsSub: { unsubscribe: () => void } | null = null;
+    let sessionSub: { unsubscribe: () => void } | null = null;
+    let activitySub: { unsubscribe: () => void } | null = null;
 
     const hydrateTerminalSession = async () => {
       try {
@@ -112,18 +410,21 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           { selectionSet: terminalSelectionSet }
         );
 
+        if (!isSubscribed) return;
+
         if (!currentTerminal) {
           console.error("Session target signature not found in infrastructure database.");
           navigate('/console-terminal');
           return;
         }
 
-        setSession(currentTerminal);
+        setSession(currentTerminal as DeepTerminalSession);
 
         sessionSub = client.models.ConsoleTerminal.onUpdate({
           filter: { id: { eq: sessionId } }
         }).subscribe({
           next: (updatedTerminal: any) => {
+            if (!isSubscribed) return;
             setSession((prevSession: any) => {
               if (!prevSession) return prevSession;
               return {
@@ -132,6 +433,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 deusExMachina: updatedTerminal.deusExMachina !== undefined ? updatedTerminal.deusExMachina : prevSession.deusExMachina,
                 totalTokensUsed: updatedTerminal.totalTokensUsed ?? prevSession.totalTokensUsed,
                 title: updatedTerminal.title ?? prevSession.title,
+                hyperlinks: updatedTerminal.hyperlinks ?? prevSession.hyperlinks,
                 contextProfile: prevSession.contextProfile
               };
             });
@@ -144,6 +446,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           selectionSet: ['id', 'role', 'content', 'createdAt', 'contextSources'] as any
         }).subscribe({
           next: (data: any) => {
+            if (!isSubscribed) return;
             const chronologyLog = [...data.items].sort(
               (a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
             );
@@ -175,13 +478,14 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
            selectionSet: ['id', 'createdAt', 'fileName', 'fileUrl', 'fileType'] as any
         }).subscribe({
           next: (data: any) => {
+            if (!isSubscribed) return;
             const sortedArtifacts = [...data.items].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             setArtifacts(sortedArtifacts);
             setIsLoading(false);
           },
           error: (err: any) => {
             console.error("Error observing artifacts:", err);
-            setIsLoading(false);
+            if (isSubscribed) setIsLoading(false);
           }
         });
 
@@ -190,6 +494,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           selectionSet: ['id', 'createdAt', 'lifecycleState', 'toolName', 'thoughtLog', 'modelId'] as any
         }).subscribe({
           next: (data: any) => {
+            if (!isSubscribed) return;
             const sorted = [...data.items].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             if (sorted.length > 0) {
               setLatestActivity(sorted[0]);
@@ -199,24 +504,34 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
 
       } catch (err) {
         console.error("Failed to safely hydrate live terminal environment layer:", err);
-        setIsLoading(false);
+        if (isSubscribed) setIsLoading(false);
       }
     };
 
     hydrateTerminalSession();
 
     return () => {
-      if (messagesSub) messagesSub.unsubscribe();
-      if (artifactsSub) artifactsSub.unsubscribe();
-      if (sessionSub) sessionSub.unsubscribe();
-      if (activitySub) activitySub.unsubscribe();
+      isSubscribed = false;
+      messagesSub?.unsubscribe();
+      artifactsSub?.unsubscribe();
+      sessionSub?.unsubscribe();
+      activitySub?.unsubscribe();
     };
   }, [sessionId, navigate]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setErrorMessage(null);
     if (e.target.files) {
       const filesArray = Array.from(e.target.files);
-      setSelectedFiles(prev => [...prev, ...filesArray]);
+      const validFiles: File[] = [];
+      for (const file of filesArray) {
+        if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+          setErrorMessage(`File "${file.name}" exceeds the max limit of ${MAX_FILE_SIZE_MB}MB.`);
+          continue;
+        }
+        validFiles.push(file);
+      }
+      setSelectedFiles(prev => [...prev, ...validFiles]);
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -244,6 +559,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
     
     setIsAiTyping(true);
     setIsUploading(true);
+    setErrorMessage(null);
 
     try {
       const uploadedFilePaths: string[] = [];
@@ -266,19 +582,33 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
       setIsUploading(false);
 
       let bedrockPrompt = queryText;
-      if (uploadedFilePaths.length > 0) {
-        const hiddenContext = `<vanguard_system_context>\nUser has attached the following files for analysis:\n${uploadedFilePaths.map(path => `- ${path}`).join('\n')}\n</vanguard_system_context>\n\n`;
+      const activeHyperlinks = (session.hyperlinks as string[])?.filter(Boolean) || [];
+
+      if (uploadedFilePaths.length > 0 || activeHyperlinks.length > 0) {
+        const contextParts: string[] = [];
+        if (uploadedFilePaths.length > 0) {
+          contextParts.push(`User has attached the following files for analysis:\n${uploadedFilePaths.map(path => `- ${path}`).join('\n')}`);
+        }
+        if (activeHyperlinks.length > 0) {
+          contextParts.push(`User has provided the following web hyperlinks for context and search:\n${activeHyperlinks.map(link => `- ${link}`).join('\n')}`);
+        }
+
+        const hiddenContext = `<vanguard_system_context>\n${contextParts.join('\n\n')}\n</vanguard_system_context>\n\n`;
         bedrockPrompt = hiddenContext + queryText;
         if (!queryText) {
-            queryText = `Attached ${uploadedFilePaths.length} file(s) for analysis.`;
-            bedrockPrompt += "Please analyze the attached files and provide a summary or address any obvious data points.";
+          queryText = uploadedFilePaths.length > 0
+            ? `Attached ${uploadedFilePaths.length} file(s) for analysis.`
+            : `Provided ${activeHyperlinks.length} web link(s) for context.`;
+          bedrockPrompt += " Please analyze the provided attachments or web references and address any obvious data points.";
         }
       }
 
       const activeProfile = session.contextProfile;
       const targetModelIdentifier = activeProfile?.foundationModel?.apiIdentifier || "us.amazon.nova-pro-v1:0";
 
-      const bedrockHistory = messages.map((m) => ({
+      // Cap chat history to reduce AppSync query payload overhead
+      const recentMessages = messages.slice(-MAX_CHAT_HISTORY_CONTEXT);
+      const bedrockHistory = recentMessages.map((m) => ({
         role: m.role === 'USER' ? 'user' : 'assistant',
         content: [{ text: m.content || '' }]
       }));
@@ -293,22 +623,32 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
         ephemeralSecretsJson: JSON.stringify(ephemeralSecrets)
       });
 
-      const transactionPayload = JSON.parse(response.data as string);
+      if (response.errors && response.errors.length > 0) {
+        throw new Error(response.errors[0].message);
+      }
 
-      if (transactionPayload.error) {
+      let transactionPayload: any = {};
+      try {
+        transactionPayload = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+      } catch {
+        console.warn("askAssistant returned non-JSON payload string.");
+      }
+
+      if (transactionPayload?.error) {
         console.error("Fast-ACK Ingestion returned error:", transactionPayload.error);
         setIsAiTyping(false);
       }
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("Relay framework dropped socket connection during model invocation:", err);
       setIsUploading(false);
       setIsAiTyping(false);
+      setErrorMessage(err.message || "Execution failed. Please retry.");
       
       setMessages((prev) => [...prev, {
         id: 'runtime-err-' + Date.now(),
         role: 'ASSISTANT',
-        content: "RAG Pipeline Routing Interface Timeout or Configuration Error.",
+        content: `RAG Pipeline Routing Error: ${err.message || "Interface Timeout"}`,
         terminalId: session?.id || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -409,7 +749,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
             height: calc(100vh - 7.3rem - 9px);
           }
 
-          /* Global scrollbar adjustments for the textarea */
           textarea::-webkit-scrollbar { width: 6px; }
           textarea::-webkit-scrollbar-track { background: transparent; }
           textarea::-webkit-scrollbar-thumb { background-color: ${darkMode ? '#4b5563' : '#d1d5db'}; border-radius: 10px; }
@@ -454,8 +793,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                   display: 'flex', alignItems: 'center', gap: '0.35rem', transition: 'all 0.2s ease', fontFamily: 'Bodoni Moda Variable',
                   opacity: messages.length === 0 ? 0.5 : 1
                 }}
-                onMouseOver={(e) => { if (messages.length > 0) e.currentTarget.style.backgroundColor = darkMode ? '#374151' : '#f3f4f6'; }}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 title="Download transcript as Markdown"
               >
                 <i className="fa-solid fa-download"></i> Export
@@ -499,8 +836,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                     color: darkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s ease'
                   }}
-                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = darkMode ? '#374151' : '#f3f4f6'}
-                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
                   <i className="fa-solid fa-arrow-up"></i> Load Previous Messages
                 </button>
@@ -775,10 +1110,16 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
           boxShadow: '0 -10px 40px rgba(0,0,0,0.05)', zIndex: 10
         }}>
           
+          {errorMessage && (
+            <div style={{ padding: '0.4rem 0.8rem', backgroundColor: '#ef444420', border: '1px solid #ef4444', borderRadius: '4px', color: '#ef4444', fontSize: '0.75rem', fontFamily: 'Google Sans Code, monospace' }}>
+              <i className="fa-solid fa-triangle-exclamation"></i> {errorMessage}
+            </div>
+          )}
+
           {selectedFiles.length > 0 && (
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
               {selectedFiles.map((file, idx) => (
-                <div key={idx} style={{ 
+                <div key={`${file.name}-${idx}`} style={{ 
                   display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0.5rem', 
                   backgroundColor: darkMode ? '#374151' : '#e5e7eb', borderRadius: '4px', fontSize: '0.75rem', 
                   color: darkMode ? '#d1d5db' : '#4b5563', fontFamily: 'Google Sans Code, monospace'
@@ -811,8 +1152,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               title="Attach Document or Media"
-              onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
               style={{
                 background: darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
                 backdropFilter: 'blur(10px)',
@@ -826,12 +1165,21 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
               <i className="fa-solid fa-paperclip"></i>
             </button>
 
+            {session?.contextProfile?.enableWebSearch && session?.id && (
+              <WebLinksDropdown
+                darkMode={darkMode}
+                sessionId={session.id}
+                hyperlinks={(session.hyperlinks as string[]) || []}
+                onUpdateHyperlinks={(updatedLinks) => {
+                  setSession((prev: any) => prev ? { ...prev, hyperlinks: updatedLinks } : prev);
+                }}
+              />
+            )}
+
             <button
               type="button"
               onClick={() => setIsArtifactsModalOpen(true)}
               title="Open Artifacts Drawer"
-              onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
               style={{
                 background: darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
                 backdropFilter: 'blur(10px)',
@@ -849,8 +1197,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
               type="button"
               onClick={() => setIsVectorModalOpen(true)}
               title="Inspect Vector Collection"
-              onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
               style={{
                 background: darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
                 backdropFilter: 'blur(10px)',
@@ -861,17 +1207,14 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 boxShadow: '0 4px 6px rgba(0,0,0,0.05)', transition: 'all 0.2s ease',
               }}
             >
-              <svg  xmlns="http://www.w3.org/2000/svg" width="24" height="24"  
-                    fill="currentColor" viewBox="0 0 24 24" >
-                    <path d="m21.45 6.11-6-3c-.26-.13-.56-.14-.83-.03l-12 5C2.25 8.24 2 8.6 2 9v8c0 .38.21.73.55.89l6 3c.14.07.29.11.45.11.13 0 .26-.03.38-.08l12-5c.37-.16.62-.52.62-.92V7c0-.38-.21-.73-.55-.89M14.96 5.1l3.64 1.82-9.56 3.98L5.4 9.08zM10 12.67l2-.83v5.83l-2 .83zM14 11l2-.83V16l-2 .83zm-10-.38 4 2v5.76l-4-2zm14 4.55V9.34l2-.83v5.83z"></path>
-                    </svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                <path d="m21.45 6.11-6-3c-.26-.13-.56-.14-.83-.03l-12 5C2.25 8.24 2 8.6 2 9v8c0 .38.21.73.55.89l6 3c.14.07.29.11.45.11.13 0 .26-.03.38-.08l12-5c.37-.16.62-.52.62-.92V7c0-.38-.21-.73-.55-.89M14.96 5.1l3.64 1.82-9.56 3.98L5.4 9.08zM10 12.67l2-.83v5.83l-2 .83zM14 11l2-.83V16l-2 .83zm-10-.38 4 2v5.76l-4-2zm14 4.55V9.34l2-.83v5.83z"></path>
+              </svg>
             </button>
             <button
               type="button"
               onClick={() => setIsWorkflowsModalOpen(true)}
               title="View Automation Workflows"
-              onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
               style={{
                 background: darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
                 backdropFilter: 'blur(10px)',
@@ -888,8 +1231,6 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
               type="button"
               onClick={() => setIsActivityModalOpen(true)}
               title="Review Agent Activity"
-              onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
               style={{
                 background: darkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
                 backdropFilter: 'blur(10px)',
@@ -962,8 +1303,7 @@ const TerminalSessionUI = ({ darkMode = false }: { darkMode?: boolean }) => {
                 onClick={() => navigate('/user-profile')}
                 title={userProfile?.subscriptionStatus === 'ACTIVE' ? "Top Up Required" : "Subscription Required"}
                 style={{
-                  padding: userProfile?.subscriptionStatus === 'ACTIVE' ? '0 1.5rem' : '0 1.5rem', 
-                  width: userProfile?.subscriptionStatus === 'ACTIVE' ? 'auto' : 'auto',
+                  padding: '0 1.5rem',
                   height: '46px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '0.375rem',
                   fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.13em', fontFamily: 'Bodoni Moda Variable',
                   cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center',

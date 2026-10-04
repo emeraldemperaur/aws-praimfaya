@@ -24,18 +24,14 @@ const sanitizeSpeechForTTS = (text: string): string => {
  * and converts the output to an SSML payload with remote audio injection.
  */
 const processSSMLandDTMF = (cleanText: string): { content: string, contentType: 'PlainText' | 'SSML' } => {
-    const dtmfRegex = /\[DTMF([0-9]|STAR|POUND)\]/gi;
+    const dtmfRegex = /\[DTMF([0-9]\vert{}STAR\vert{}POUND)\]/gi;
     
     if (!dtmfRegex.test(cleanText)) {
         return { content: cleanText, contentType: 'PlainText' };
     }
-
-    // Replace the tokens with SSML audio tags
     let ssmlContent = cleanText.replace(dtmfRegex, (match, digit) => {
         const tone = digit.toUpperCase();
-        // TODO: Host 12 short .wav audio files (dtmf-0 through dtmf-9, dtmf-STAR, dtmf-POUND)
-        // in a public S3 bucket.
-        return `<audio src="https://your-public-s3-bucket.s3.amazonaws.com/dtmf/dtmf-${tone}.wav"/>`;
+        return `<audio src="https://praimfaya-public-assets-680439401460-us-east-1-an.s3.us-east-1.amazonaws.com/dtmf/dtmf-${tone}.wav"/>`;
     });
 
     return { 
@@ -45,19 +41,22 @@ const processSSMLandDTMF = (cleanText: string): { content: string, contentType: 
 };
 
 export const handler = async (event: any) => {
+    const localeId = event.bot?.localeId || 'en-US';
     const sessionAttributes = event.sessionState?.sessionAttributes || {};
     const callId = sessionAttributes.internalCallId;
     const userUtterance = event.inputTranscript || '';
-
+    const isEnglishVariant = localeId.toLowerCase().startsWith('en');
+    const strictLanguageGuardrail = isEnglishVariant 
+        ? `Ensure you use the appropriate regional dialect and spelling for ${localeId}.` 
+        : `Never speak English unless the user explicitly requests it.`;
     if (!callId) return buildLexResponse({ content: "I am missing active call session attributes.", contentType: 'PlainText' }, event, 'Close');
-
     try {
         const callRecord = await dynamodb.send(new GetCommand({ TableName: TABLE_NAME, Key: { id: callId } }));
         const item = callRecord.Item || {};
         const currentTranscript: Array<{ role: string; content: string }> = item.transcript || [];
-        
-        if (userUtterance) currentTranscript.push({ role: 'user', content: userUtterance });
-
+        if (userUtterance && userUtterance !== 'START_OUTBOUND_CALL') {
+            currentTranscript.push({ role: 'user', content: userUtterance });
+        }
         if (currentTranscript.length >= MAX_CALL_TURNS) {
             const wrapUpMessage = "Thank you. We have reached the maximum time limit for this call. Goodbye!";
             currentTranscript.push({ role: 'assistant', content: wrapUpMessage });
@@ -77,6 +76,7 @@ export const handler = async (event: any) => {
 OBJECTIVE: ${item.objective}
 VOICE TONE: ${item.voiceTone || 'professional'}
 DATA TO CAPTURE: ${JSON.stringify(item.dataToCapture || [])}
+CRITICAL LANGUAGE INSTRUCTION: You MUST conduct this entire conversation natively in the language corresponding to this locale code: ${localeId}. ${strictLanguageGuardrail}
 DIRECTIVE: Keep spoken responses concise (1-2 sentences). Speak naturally without markdown formatting. If the objective is complete or recipient wishes to end, say a polite goodbye.
 IVR NAVIGATION: If you reach an automated menu that requires keypad input, you can emit tones by outputting the exact bracketed tags: [DTMF0] through [DTMF9], [DTMFSTAR], or [DTMFPOUND]. For example, if asked to press 1, respond with: "[DTMF1]".`;
 
@@ -126,10 +126,12 @@ function buildLexResponse(
     event: any, 
     dialogType: 'ElicitIntent' | 'Close' = 'ElicitIntent'
 ) {
+    const activeIntent = event.sessionState?.intent || { name: 'FallbackIntent' };
+    activeIntent.state = dialogType === 'Close' ? 'Fulfilled' : 'InProgress';
     return {
         sessionState: {
             dialogAction: { type: dialogType },
-            intent: event.sessionState?.intent || { name: 'FallbackIntent', state: dialogType === 'Close' ? 'Fulfilled' : 'InProgress' },
+            intent: activeIntent,
             sessionAttributes: event.sessionState?.sessionAttributes || {},
         },
         messages: [{ contentType: messageConfig.contentType, content: messageConfig.content }],

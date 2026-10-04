@@ -34,6 +34,49 @@ const preserveBalancedSummary = (rawSummary?: string): string => {
     return `${head}\n\n--- [Middle Discussion Omitted (${rawSummary.length - 2500} chars)] ---\n\n${tail}`;
 };
 
+interface VoiceConfig {
+    voiceActor: string;
+    languageCode: string;
+}
+
+const resolveVoiceConfig = (languageCode?: string, voiceGender?: string): VoiceConfig => {
+    const rawLocale = (languageCode || 'en-US').toLowerCase();
+    const primaryLang = rawLocale.split('-')[0];
+    const isMale = voiceGender?.toUpperCase() === 'MALE';
+
+    const voiceMap: Record<string, { male: string; female: string; defaultLocale: string }> = {
+        'en': { male: 'Matthew', female: 'Danielle', defaultLocale: 'en-US' },
+        'en-us': { male: 'Matthew', female: 'Danielle', defaultLocale: 'en-US' },
+        'en-gb': { male: 'Brian', female: 'Amy', defaultLocale: 'en-GB' },
+        'en-au': { male: 'Russell', female: 'Nicole', defaultLocale: 'en-AU' },
+        'fr': { male: 'Remi', female: 'Lea', defaultLocale: 'fr-FR' },
+        'fr-fr': { male: 'Remi', female: 'Lea', defaultLocale: 'fr-FR' },
+        'fr-ca': { male: 'Liam', female: 'Gabrielle', defaultLocale: 'fr-CA' },
+        'es': { male: 'Lucia', female: 'Lucia', defaultLocale: 'es-ES' },
+        'es-es': { male: 'Enrique', female: 'Lucia', defaultLocale: 'es-ES' },
+        'es-us': { male: 'Pedro', female: 'Lupe', defaultLocale: 'es-US' },
+        'de': { male: 'Daniel', female: 'Vicki', defaultLocale: 'de-DE' },
+        'it': { male: 'Adriano', female: 'Bianca', defaultLocale: 'it-IT' },
+        'pt': { male: 'Thiago', female: 'Vitoria', defaultLocale: 'pt-BR' },
+        'ja': { male: 'Takumi', female: 'Tomoko', defaultLocale: 'ja-JP' },
+        'ar': { male: 'Zayd', female: 'Hala', defaultLocale: 'ar-AE' }
+    };
+
+    const match = voiceMap[rawLocale] || voiceMap[primaryLang];
+
+    if (match) {
+        return {
+            voiceActor: isMale ? match.male : match.female,
+            languageCode: match.defaultLocale
+        };
+    }
+
+    return {
+        voiceActor: isMale ? 'Matthew' : 'Danielle',
+        languageCode: 'en-US'
+    };
+};
+
 export const executeEnterpriseVoiceAgent = async ({ 
     toolInput, 
     env, 
@@ -48,6 +91,7 @@ export const executeEnterpriseVoiceAgent = async ({
         dataToCapture, 
         voiceTone, 
         voiceGender, 
+        languageCode,
         callId 
     } = toolInput;
 
@@ -76,6 +120,8 @@ export const executeEnterpriseVoiceAgent = async ({
         const internalCallId = `va_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const parsedDataToCapture = safeJsonArray(dataToCapture);
 
+        const voiceConfig = resolveVoiceConfig(languageCode, voiceGender);
+
         try {
             await clients.dynamodb.send(new PutCommand({
                 TableName: VOICE_CALLS_TABLE,
@@ -88,6 +134,8 @@ export const executeEnterpriseVoiceAgent = async ({
                     dataToCapture: parsedDataToCapture,
                     voiceTone: voiceTone || 'professional',
                     voiceGender: voiceGender || 'FEMALE',
+                    languageCode: voiceConfig.languageCode,
+                    voiceActor: voiceConfig.voiceActor,
                     status: 'QUEUED',
                     createdAt: new Date().toISOString()
                 }
@@ -106,7 +154,9 @@ export const executeEnterpriseVoiceAgent = async ({
                 Attributes: {
                     internalCallId: internalCallId,
                     voiceTone: voiceTone || 'professional',
-                    voiceGender: voiceGender || 'FEMALE'
+                    voiceGender: voiceGender || 'FEMALE',
+                    languageCode: voiceConfig.languageCode,
+                    voiceActor: voiceConfig.voiceActor
                 }
             });
 
@@ -122,7 +172,7 @@ export const executeEnterpriseVoiceAgent = async ({
 
             return {
                 status: "Success",
-                message: "Autonomous voice agent dispatched via Amazon Connect. The call takes minutes to complete; use CHECK_CALL_RESULTS to retrieve outcomes later.",
+                message: `Autonomous voice agent dispatched via Amazon Connect using voice '${voiceConfig.voiceActor}' (${voiceConfig.languageCode}). The call takes minutes to complete; use CHECK_CALL_RESULTS to retrieve outcomes later.`,
                 callId: internalCallId
             };
 
