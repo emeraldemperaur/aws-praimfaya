@@ -396,6 +396,27 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         costImpact: "MEDIUM_COMPUTE"
     },
     {
+        toolName: "athenahealth_agent",
+        publicName: "Athenahealth Operations Agent",
+        systemPrompt: "You are a Practice Management and Clinical Operations AI for Athenahealth. Always ensure the 'practiceId' is correctly referenced from the environment. When triggering CDS Hooks, provide the precise FHIR prefetch payload. For appointment workflows, verify provider availability and department IDs before booking or canceling.",
+        userPrompts: [
+            {
+                promptName: "CDS Hook Evaluation",
+                userPrompt: "Execute a TRIGGER_CDS_HOOK action for the '{{hook_name_e.g._patient-view}}' workflow for patient '{{patient_id}}'. Evaluate the returned decision support cards and summarize any critical care gaps or medication adherence warnings."
+            },
+            {
+                promptName: "Encounter & Chart Prep",
+                userPrompt: "Search Athenahealth for patient '{{patient_name}}'. Execute GET_PATIENT_CHART to extract their current problem list, medications, and recent lab results to generate a structured pre-encounter briefing for the physician."
+            },
+            {
+                promptName: "Automated Rescheduling",
+                userPrompt: "Retrieve the upcoming appointments for Athenahealth patient '{{patient_id}}'. Execute MANAGE_APPOINTMENT to cancel appointment '{{appointment_id}}' and automatically reschedule it for the next available slot in department '{{department_id}}'."
+            }
+        ],
+        modelAvailability: "STANDARD_ONLY",
+        costImpact: "MEDIUM_COMPUTE"
+    },
+    {
         toolName: "raspberry_pi_fleet_agent",
         publicName: "Balena Cloud IoT Fleet Agent",
         systemPrompt: "You are an edge device fleet manager. Diagnose issues methodically: (1) Check device status. (2) Pull and parse recent logs for fatal exceptions, memory leaks, or networking faults. (3) Only trigger REBOOT_DEVICE if your analysis confirms an unrecoverable state. Always output a diagnostic summary.",
@@ -579,6 +600,27 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         ],
         modelAvailability: "STANDARD_ONLY",
         costImpact: "MEDIUM_COMPUTE"
+    },
+    {
+        toolName: "epic_systems_agent",
+        publicName: "Epic Systems EHR Agent",
+        systemPrompt: "You are an Enterprise Health Informatics AI operating on Epic Systems. Execute tasks systematically: (1) Use SEARCH_PATIENTS to resolve the exact patient FHIR ID. (2) Use GET_CLINICAL_DATA to pull targeted USCDI v3 data (Allergies, Care Plans, Notes). (3) Synthesize clinical data accurately without making medical diagnoses. When submitting prior authorizations, ensure the JSON payload adheres strictly to X12/FHIR compliance standards.",
+        userPrompts: [
+            {
+                promptName: "USCDI v3 Chart Audit",
+                userPrompt: "Search Epic Systems for patient '{{patient_name}}' (DOB: {{dob}}). Once identified, execute GET_CLINICAL_DATA to retrieve their active 'ALLERGIES' and recent 'CLINICAL_NOTES'. Synthesize a brief clinical summary highlighting any severe contraindications."
+            },
+            {
+                promptName: "Automated Prior Authorization",
+                userPrompt: "Fetch the active 'CARE_PLANS' and 'CONDITIONS' for Epic Patient ID '{{patient_id}}'. Construct a compliant prior authorization payload for the requested procedure '{{procedure_code}}', and execute SUBMIT_PRIOR_AUTH to the payer gateway."
+            },
+            {
+                promptName: "Discharge Scheduling",
+                userPrompt: "Execute GET_CLINICAL_DATA to review the discharge readiness 'CLINICAL_NOTES' for Patient ID '{{patient_id}}'. If cleared, execute MANAGE_APPOINTMENT to schedule their 7-day post-op follow-up with Dr. {{provider_name}}."
+            }
+        ],
+        modelAvailability: "STANDARD_ONLY",
+        costImpact: "HIGH_COMPUTE"
     },
     {
         toolName: "etrade_financial_agent",
@@ -827,6 +869,31 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         ],
         modelAvailability: "ALL_AGENTS",
         costImpact: "ULTRA_COMPUTE"
+    },
+    {
+        toolName: "noaa_weather_agent",
+        publicName: "NOAA Weather & Climate Agent",
+        systemPrompt: "You are an expert meteorological and climate data analyst. When querying NOAA APIs: 1) For forecasts, you must first convert lat/lon to grid points via the NWS API before fetching the forecast. 2) For historical data, ensure you pass the required CDO API token. Synthesize the raw JSON into actionable environmental insights or format it cleanly for downstream visualization tools.",
+        userPrompts: [
+            {
+                promptName: "Severe Weather Triage",
+                userPrompt: "Execute a GET_ALERTS action for coordinates {{latitude}}, {{longitude}}. Extract any active severe weather warnings, identify the affected zones, and generate an urgent summary detailing the primary threats and expiration times."
+            },
+            {
+                promptName: "Historical Climate Analysis",
+                userPrompt: "Run a GET_CLIMATE_DATA action using dataset '{{dataset_id_e.g._GHCND}}' for station '{{station_id}}' between {{start_date}} and {{end_date}}. Analyze the temperature and precipitation anomalies, and output a structured JSON payload suitable for rendering a historical trend chart."
+            },
+            {
+                promptName: "Hydrological Risk Assessment",
+                userPrompt: "Execute a GET_STREAMFLOW action for river gauge '{{station_id}}'. Analyze the current water level against historical flood stages and predict the likelihood of a crest exceeding minor flood stage within the next 48 hours."
+            },
+            {
+                promptName: "Multi-Day Forecast Briefing",
+                userPrompt: "Fetch the detailed forecast using GET_FORECAST for {{latitude}}, {{longitude}}. Synthesize the incoming 5-day weather pattern, highlighting significant temperature shifts, precipitation probability, and wind conditions for operational planning."
+            }
+        ],
+        modelAvailability: "STANDARD_ONLY",
+        costImpact: "MEDIUM_COMPUTE"
     },
     {
         toolName: "notion_workspace_agent",
@@ -1110,6 +1177,35 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         costImpact: "HIGH_COMPUTE"
     },
     {
+        toolName: "square_commerce_agent",
+        publicName: "Square Operations Agent",
+        systemPrompt: "You are an Enterprise Square Operations Manager. Work systematically: (1) Use EXECUTE_SQUARE_API targeting '/v2/locations' to identify the correct Location ID if unknown. (2) When creating Orders, Payments, or Refunds, ensure your JSON payload perfectly matches Square's v2 schema requirements. (3) Aggregate and synthesize financial, inventory, or labor data clearly before presenting to the user. Note: The executor automatically handles idempotency keys for you.",
+        userPrompts: [
+            {
+                promptName: "Omnichannel Fulfillment Audit",
+                userPrompt: "Execute a POST to '/v2/orders/search' to fetch all unfulfilled orders across all locations. Extract the item variations and fulfillment details, then synthesize a priority pick-list for the warehouse team."
+            },
+            {
+                promptName: "Process Refund & Reconcile",
+                userPrompt: "Retrieve the payment details for Transaction ID '{{transaction_id}}'. Verify the payment status, then execute a POST to '/v2/refunds' to issue a full refund, citing '{{refund_reason_e.g._Customer_Requested_Return}}' in the payload."
+            },
+            {
+                promptName: "Catalog & Inventory Sync",
+                userPrompt: "Fetch the active catalog items using '/v2/catalog/list'. Then, check the inventory counts for the '{{category_name_e.g._Apparel}}' category via '/v2/inventory/counts'. Generate a structured report highlighting SKUs that have dropped below the {{reorder_threshold}} unit threshold."
+            },
+            {
+                promptName: "Labor & Timecard Optimization",
+                userPrompt: "Query the '/v2/labor/timecards' endpoint to retrieve team timecards for the current pay period. Calculate the total hours worked per team member, cross-reference against their scheduled shifts via '/v2/labor/shifts', and flag any unauthorized overtime."
+            },
+            {
+                promptName: "Loyalty Program Segmentation",
+                userPrompt: "Query the '/v2/customers' and '/v2/loyalty/accounts' endpoints. Identify the top {{limit_e.g._10}} buyers based on accrued reward points and lifetime value, and generate a strategic list for a VIP targeted marketing campaign."
+            }
+        ],
+        modelAvailability: "STANDARD_ONLY",
+        costImpact: "HIGH_COMPUTE"
+    },
+    {
         toolName: "uipath_orchestrator_agent",
         publicName: "UiPath Orchestrator Agent",
         systemPrompt: "You are an autonomous RPA operations manager. Use GET_RELEASES to verify the target process ID exists before dispatching jobs. If diagnosing queue items, pull job logs to trace the specific selector or application failure before attempting a restart.",
@@ -1129,6 +1225,27 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         ],
         modelAvailability: "STANDARD_ONLY",
         costImpact: "HIGH_COMPUTE"
+    },
+    {
+        toolName: "vanguard_notification_agent",
+        publicName: "Vanguard Notification Pager",
+        systemPrompt: "You are the Vanguard Notification Dispatcher. Use this tool to send out-of-band alerts to users via SMS or WhatsApp when a long-running background task finishes, or when critical anomalies are detected. If 'destinationNumber' is not provided in the user's prompt, omit it; the backend will automatically route the message to the active user's profile phone number. Keep SMS messages concise. WhatsApp messages can include standard markdown styling.",
+        userPrompts: [
+            {
+                promptName: "Task Completion Alert",
+                userPrompt: "Once the nightly database reconciliation finishes, execute SEND_MESSAGE via the 'SMS' channel to notify me. The message should state: 'Vanguard Agent Update: Nightly database reconciliation completed successfully with {{record_count}} records processed.' Do not require my phone number; route it to my profile."
+            },
+            {
+                promptName: "WhatsApp Executive Summary",
+                userPrompt: "Analyze the {{quarterly_report_data}}. Once finished, execute SEND_MESSAGE via the 'WHATSAPP' channel to my profile number containing a bulleted executive summary of the top 3 financial takeaways."
+            },
+            {
+                promptName: "External Stakeholder Alert",
+                userPrompt: "Execute SEND_MESSAGE via 'SMS' to {{stakeholder_phone_number_e.g._+15550198372}}. The message should say: 'URGENT: Server latency has exceeded SLA thresholds. Please check the Grafana dashboard immediately.'"
+            }
+        ],
+        modelAvailability: "ALL_AGENTS",
+        costImpact: "LOW_COMPUTE"
     },
     {
         toolName: "vrbo_property_agent",

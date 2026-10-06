@@ -378,6 +378,84 @@ const EphemeralCredentialsModal: React.FC<EphemeralCredentialsModalProps> = ({
             </>
           )}
 
+          {activeAuthPrompt === 'square' && (
+            <>
+              <select 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, squareEnvironment: e.target.value })} 
+                required 
+                style={inputStyle}
+                defaultValue="sandbox"
+              >
+                <option value="sandbox">Sandbox Environment (connect.squareupsandbox.com)</option>
+                <option value="production">Production Environment (connect.squareup.com)</option>
+              </select>
+              <SecretInput 
+                placeholder="Square Personal Access Token / Bearer Token" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, squareAccessToken: e.target.value })} 
+                required 
+                style={inputStyle} 
+                darkMode={darkMode} 
+              />
+            </>
+          )}
+
+          {activeAuthPrompt === 'noaa_cdo' && (
+            <SecretInput 
+              placeholder="NOAA CDO Web Services Token" 
+              onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, noaaCdoToken: e.target.value })} 
+              required 
+              style={inputStyle} 
+              darkMode={darkMode} 
+            />
+          )}
+
+          {activeAuthPrompt === 'epic' && (
+            <>
+              <input 
+                type="url" 
+                placeholder="Epic FHIR Base URL (e.g. https://epicproxy.example.org/FHIR/api/FHIR/R4)" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, epicBaseUrl: e.target.value })} 
+                required 
+                style={inputStyle} 
+              />
+              <SecretInput 
+                placeholder="Epic OAuth2 Access Token" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, epicAccessToken: e.target.value })} 
+                required 
+                style={inputStyle} 
+                darkMode={darkMode} 
+              />
+            </>
+          )}
+
+          {activeAuthPrompt === 'athenahealth' && (
+            <>
+              <input 
+                type="text" 
+                placeholder="Athenahealth Practice ID (e.g. 195900)" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, athenaPracticeId: e.target.value })} 
+                required 
+                style={inputStyle} 
+              />
+              <SecretInput 
+                placeholder="Athenahealth OAuth2 Access Token" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, athenaAccessToken: e.target.value })} 
+                required 
+                style={inputStyle} 
+                darkMode={darkMode} 
+              />
+              <select 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, athenaEnvironment: e.target.value })} 
+                required 
+                style={inputStyle}
+                defaultValue="preview"
+              >
+                <option value="preview">Preview Environment (preview.athenahealth.com)</option>
+                <option value="api">Production Environment (api.athenahealth.com)</option>
+              </select>
+            </>
+          )}
+
           {activeAuthPrompt === 'etrade' && (
             <>
               <SecretInput 

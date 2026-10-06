@@ -117,4 +117,12 @@ export interface EphemeralSecrets {
   etradeAccessToken?:string;
   etradeAccessSecret?:string;
   etradeEnvironment?:string;
+  noaaCdoToken?:string;
+  athenaPracticeId?:string;
+  athenaAccessToken?:string;
+  athenaEnvironment?:string;
+  epicBaseUrl?:string;
+  epicAccessToken?:string;
+  squareEnvironment?:string;
+  squareAccessToken?:string;
 }

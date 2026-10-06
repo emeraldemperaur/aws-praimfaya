@@ -73,6 +73,11 @@ import enterpriseImageIcon from '../assets/image-icon.png';
 import powerPointIcon from '../assets/powerpoint-icon.png';
 import shopifyIcon from '../assets/shopify-icon.png';
 import etradeIcon from '../assets/etrade-icon.png';
+import squareIcon from '../assets/square-icon.png';
+import noaaIcon from '../assets/noaa-icon.png';
+import epicSystemsIcon from '../assets/epicsystems-icon.png';
+import athenaHealthIcon from '../assets/athena-icon.png';
+import notificationsPagerIcon from '../assets/notifications-icon.png';
 
 
 export const SuccessIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-regular fa-circle-check"></i>&nbsp;</a>;
@@ -272,6 +277,12 @@ export const getModelIcon = (identifier?: string | null): string => {
   if (id.includes('generate_powerpoint_agent') || id.includes('Enterprise Powerpoint Creator')) return powerPointIcon;
   if (id.includes('shopify_admin_agent') || id.includes('Shopify Store Administrator')) return shopifyIcon;
   if (id.includes('etrade_financial_agent') || id.includes('E*TRADE Financial Agent')) return etradeIcon;
+  if (id.includes('square_commerce_agent') || id.includes('Square Commerce & Operations Agent')) return squareIcon;
+  if (id.includes('noaa_weather_agent') || id.includes('NOAA Weather & Climate Agent')) return noaaIcon;
+  if (id.includes('epic_systems_agent') || id.includes('Epic Systems EHR Agent')) return epicSystemsIcon;
+  if (id.includes('athenahealth_agent') || id.includes('Athenahealth Operations Agent')) return athenaHealthIcon;
+  if (id.includes('vanguard_notification_agent') || id.includes('Vanguard Notification Pager')) return notificationsPagerIcon;
+  if (id.includes('data_visualizer_agent') || id.includes('Data Visualizer')) return notificationsPagerIcon;
 
   
 

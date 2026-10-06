@@ -242,6 +242,7 @@ const schema = a.schema({
       firstName: a.string(),
       lastName: a.string(),
       timeZone: a.string(),
+      phoneNumber: a.string(),
       mcpDiscovery: a.boolean().default(false),
       nocturnalAgents: a.boolean().default(false),
       integrations: a.json(),

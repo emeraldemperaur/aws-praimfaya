@@ -181,7 +181,8 @@ const WebLinksDropdown = ({
             fontFamily: 'Google Sans Code, monospace'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: darkMode ? '#f9fafb' : '#111827', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 300, fontFamily: 'Bodoni Moda Variable', letterSpacing: '0.06em',
+                 color: darkMode ? '#f9fafb' : '#111827', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <i className="fa-solid fa-globe" style={{ color: '#3b82f6' }}></i> Web Links ({hyperlinks.length}/{MAX_URL_COUNT})
               </span>
               {hyperlinks.length > 0 && (
@@ -218,6 +219,7 @@ const WebLinksDropdown = ({
                 style={{
                   flex: 1,
                   padding: '0.35rem 0.5rem',
+                  fontFamily: 'Google Sans Code',
                   borderRadius: '6px',
                   border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)'}`,
                   background: darkMode ? 'rgba(0, 0, 0, 0.3)' : 'rgba(255, 255, 255, 0.8)',

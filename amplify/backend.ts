@@ -89,7 +89,6 @@ const pollBedrockLambda = backend.pollBedrock.resources.lambda as lambda.Functio
 const updateUserGroupLambda = backend.updateUserGroup.resources.lambda as lambda.Function;
 const telemetryLambda = backend.getAgentTelemetry.resources.lambda as lambda.Function;
 
-
 const getGlobalDecoupledPolicy = () => new iam.PolicyStatement({
   actions: [
     'dynamodb:*', 
@@ -101,7 +100,10 @@ const getGlobalDecoupledPolicy = () => new iam.PolicyStatement({
     'bedrock:Retrieve', 
     'bedrock:InvokeAgent',
     'polly:SynthesizeSpeech',
-    'connect:StartOutboundVoiceContact'
+    'connect:StartOutboundVoiceContact',
+    'sns:Publish',
+    'sms-voice:*',
+    'social-messaging:*'
   ],
   resources: ['*']
 });
@@ -302,6 +304,8 @@ const sharedContextVars = {
   'CONNECT_SOURCE_PHONE_NUMBER': connectSourcePhone,
   'CONSOLE_TERMINAL_TABLE_NAME': backend.data.resources.tables["ConsoleTerminal"].tableName,
   'AGENT_ACTIVITY_TABLE_NAME': backend.data.resources.tables["AgentActivity"].tableName,
+  'AWS_MESSAGE_ORIGINATION_ID': process.env.AWS_MESSAGE_ORIGINATION_ID || '',
+  'AWS_WHATSAPP_ORIGINATION_ID': process.env.AWS_WHATSAPP_ORIGINATION_ID || '',
 };
 
 Object.entries(sharedContextVars).forEach(([key, value]) => {

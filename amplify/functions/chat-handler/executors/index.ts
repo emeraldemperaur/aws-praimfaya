@@ -24,6 +24,10 @@ import { executePowerPointGenerator } from './powerpoint-tools';
 import { executeShopifyAdminAgent } from './shopify-admin-tools';
 import { executeETradeFinancial } from './etrade-tools';
 import { schedule_future_task } from './scheduler-tools';
+import { executeNoaaWeather } from './noaa-tools';
+import { executeAthenahealth, executeEpicSystems } from './health-tools';
+import { executeSquareAgent } from './square-tools';
+import { executeAwsNotificationAgent } from './notifications-tools';
 
 
 export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
@@ -81,6 +85,10 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
     'generate_luma_video_presentation': executeLumaVideoPresentation,
     'generate_powerpoint_agent': executePowerPointGenerator,
     'shopify_admin_agent': executeShopifyAdminAgent,
+    'square_commerce_agent': executeSquareAgent,
     'etrade_financial_agent': executeETradeFinancial,
-
+    'noaa_weather_agent': executeNoaaWeather,
+    'epic_systems_agent': executeEpicSystems,
+    'athenahealth_agent': executeAthenahealth,
+    'vanguard_notification_agent': executeAwsNotificationAgent,
 };

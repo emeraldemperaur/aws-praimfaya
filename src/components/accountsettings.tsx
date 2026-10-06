@@ -6,9 +6,11 @@ import type { Schema } from '../../amplify/data/resource';
 import '../styles/accountsettings.scss';
 import BottomModal from './bottommodal'; 
 import ExtraLargeModal from './extralargemodal'; 
+import BottomRightModal from './bottomrightmodal';
 import { NATIVE_TOOLS_TEMPLATES } from '../utils/prometheus'; 
 import { getModelIcon } from '../utils/voltaire'; 
 import { TIMEZONES } from '../utils/chronos';
+import { parsePhoneNumberWithError } from 'libphonenumber-js';
 
 const client = generateClient<Schema>();
 
@@ -62,6 +64,10 @@ const TOOL_AUTH_MAP: Record<string, string[]> = {
     'jotform_agile_agent': ['jotformToken'],
     'shopify_admin_agent': ['shopifyDomain', 'shopifyAccessToken'],
     'etrade_financial_agent': ['etradeConsumerKey', 'etradeConsumerSecret', 'etradeAccessToken', 'etradeAccessSecret', 'etradeEnvironment'],
+    'square_commerce_agent': ['squareEnvironment', 'squareAccessToken'],
+    'noaa_weather_agent': ['noaaCdoToken'],
+    'epic_systems_agent': ['epicBaseUrl', 'epicAccessToken'],
+    'athenahealth_agent': ['athenaPracticeId', 'athenaAccessToken', 'athenaEnvironment'],
 };
 
 const SecretInput: React.FC<{ placeholder: string; value: string; onChange: (v: string) => void; required?: boolean; darkMode?: boolean; autoComplete?: string }> = ({ placeholder, value, onChange, required, autoComplete = "off" }) => {
@@ -85,6 +91,74 @@ const SecretInput: React.FC<{ placeholder: string; value: string; onChange: (v: 
     );
 };
 
+// Extracted dynamic field renderer for unified inputs/selects across both Modals
+const renderDynamicInput = (field: string, value: string, onChange: (val: string) => void) => {
+    const isEnv = field.toLowerCase().includes('environment');
+    const isSecret = field.toLowerCase().includes('token') || field.toLowerCase().includes('secret') || field.toLowerCase().includes('password') || field.toLowerCase().includes('key');
+
+    if (isEnv) {
+        return (
+            <select
+                className="as-input"
+                value={value || ""}
+                onChange={(e) => onChange(e.target.value)}
+                required
+                style={{ width: '100%', boxSizing: 'border-box' }}
+            >
+                <option value="" disabled>Select Environment...</option>
+                {field === 'athenaEnvironment' ? (
+                    <>
+                        <option value="preview">Preview Environment (preview.athenahealth.com)</option>
+                        <option value="api">Production Environment (api.athenahealth.com)</option>
+                    </>
+                ) : field === 'squareEnvironment' ? (
+                    <>
+                        <option value="sandbox">Sandbox Environment (connect.squareupsandbox.com)</option>
+                        <option value="production">Production Environment (connect.squareup.com)</option>
+                    </>
+                ) : field === 'etradeEnvironment' ? (
+                    <>
+                        <option value="sandbox">Sandbox (apisb.etrade.com)</option>
+                        <option value="production">Production (api.etrade.com)</option>
+                    </>
+                ) : (
+                    <>
+                        <option value="development">Development</option>
+                        <option value="production">Production</option>
+                    </>
+                )}
+            </select>
+        );
+    }
+
+    if (isSecret) {
+        return (
+            <SecretInput 
+                placeholder={`Enter ${field}`} 
+                value={value} 
+                onChange={onChange} 
+                required 
+                autoComplete="new-password"
+            />
+        );
+    }
+
+    return (
+        <input 
+            type="text" 
+            className="as-input" 
+            placeholder={`Enter ${field}`} 
+            value={value} 
+            onChange={(e) => onChange(e.target.value)} 
+            required 
+            autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            style={{ width: '100%', boxSizing: 'border-box' }}
+        />
+    );
+};
+
 const getInitials = (name: string) => {
     if (!name) return 'U';
     const parts = name.split(/[\s._-]+/).filter(Boolean);
@@ -101,6 +175,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
         firstName: '',
         lastName: '',
         email: '',
+        phoneNumber: '',
         timeZone: 'America/Vancouver',
         mcpDiscovery: false,
         nocturnalAgents: false
@@ -114,6 +189,21 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingToolId, setEditingToolId] = useState<string | null>(null);
+
+    const [phoneError, setPhoneError] = useState<string | null>(null);
+    const [notification, setNotification] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+        isError: false
+    });
+
+    const showNotification = (title: string, message: string, isError = false) => {
+        setNotification({ isOpen: true, title, message, isError });
+        setTimeout(() => {
+            setNotification(prev => ({ ...prev, isOpen: false }));
+        }, 4000);
+    };
 
     useEffect(() => {
         const fetchUserProfile = async () => {
@@ -133,6 +223,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
                         firstName: dbProfile.firstName || '',
                         lastName: dbProfile.lastName || '',
                         email: user.signInDetails?.loginId || 'user@vanguard.io',
+                        phoneNumber: dbProfile.phoneNumber || '',
                         timeZone: dbProfile.timeZone || 'America/Vancouver',
                         mcpDiscovery: dbProfile.mcpDiscovery ?? false,
                         nocturnalAgents: dbProfile.nocturnalAgents ?? false
@@ -150,7 +241,6 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
                     }
                     setIntegrations(parsedIntegrations);
                 } else {
-                    // Fallback email generation if profile doesn't exist yet
                     setProfile(prev => ({ ...prev, email: user.signInDetails?.loginId || 'user@vanguard.io' }));
                 }
             } catch (error) {
@@ -168,13 +258,38 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
         return template?.publicName.toLowerCase().includes(searchQuery.toLowerCase()) || searchQuery === '';
     });
 
+    const handlePhoneChange = (val: string) => {
+        setProfile({ ...profile, phoneNumber: val });
+        if (phoneError) setPhoneError(null);
+    };
+
     const handleSaveProfile = async () => {
+        setPhoneError(null);
+        let normalizedPhone: string | null = profile.phoneNumber?.trim() || null;
+
+        if (normalizedPhone) {
+            try {
+                const phoneNumber = parsePhoneNumberWithError(normalizedPhone, 'CA'); 
+                
+                if (!phoneNumber.isValid()) {
+                    setPhoneError("Please enter a valid phone number.");
+                    return;
+                }
+                
+                normalizedPhone = phoneNumber.format('E.164'); 
+            } catch (error) {
+                setPhoneError("Invalid phone number format. Please check the number and try again.");
+                return;
+            }
+        }
+
         try {
             if (profileId) {
                 await client.models.UserProfile.update({
                     id: profileId,
                     firstName: profile.firstName,
                     lastName: profile.lastName,
+                    phoneNumber: normalizedPhone,
                     timeZone: profile.timeZone,
                     mcpDiscovery: profile.mcpDiscovery,
                     nocturnalAgents: profile.nocturnalAgents
@@ -182,19 +297,21 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
             } else if (cognitoUserId) {
                 const response = await client.models.UserProfile.create({
                     cognitoUserId: cognitoUserId,
-                    // email is intentionally omitted here as it's not in the DB schema
                     firstName: profile.firstName,
                     lastName: profile.lastName,
+                    phoneNumber: normalizedPhone,
                     timeZone: profile.timeZone,
                     mcpDiscovery: profile.mcpDiscovery,
                     nocturnalAgents: profile.nocturnalAgents
                 });
                 if (response.data?.id) setProfileId(response.data.id);
             }
-            alert('Account Profile saved successfully.');
+            
+            setProfile(prev => ({ ...prev, phoneNumber: normalizedPhone || '' }));
+            showNotification("Success", "Account Profile saved successfully.");
         } catch (error) {
             console.error("Failed to update profile: ", error);
-            alert('Failed to save profile. Please try again.');
+            showNotification("Error", "Failed to save profile. Please try again.", true);
         }
     };
 
@@ -210,7 +327,6 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
             } else if (cognitoUserId) {
                 const response = await client.models.UserProfile.create({
                     cognitoUserId: cognitoUserId,
-                    // email is intentionally omitted here
                     timeZone: profile.timeZone,
                     mcpDiscovery: profile.mcpDiscovery,
                     nocturnalAgents: profile.nocturnalAgents,
@@ -220,7 +336,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
             }
         } catch (error) {
             console.error("Failed to save integrations: ", error);
-            alert("Failed to sync credentials to cloud.");
+            showNotification("Sync Failed", "Failed to sync credentials to cloud.", true);
         }
     };
 
@@ -339,6 +455,26 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
                         <div className="as-input-group">
                             <label>Email Address <span className="as-badge-readonly">Immutable</span></label>
                             <input type="email" className="as-input disabled" value={profile.email} disabled style={{ width: '100%', boxSizing: 'border-box' }} />
+                        </div>
+                        <div className="as-input-group">
+                            <label>Phone Number <span style={{ opacity: 0.6, fontWeight: 400, marginLeft: '6px' }}>(Optional)</span></label>
+                            <input 
+                                type="tel" 
+                                className="as-input" 
+                                value={profile.phoneNumber} 
+                                onChange={e => handlePhoneChange(e.target.value)} 
+                                placeholder="+1 (234) 567-8900"
+                                style={{ 
+                                    width: '100%', 
+                                    boxSizing: 'border-box',
+                                    borderColor: phoneError ? '#9e0f33' : undefined 
+                                }} 
+                            />
+                            {phoneError && (
+                                <span style={{ color: '#9e0f33', fontSize: '0.75rem', marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    <i className="fa-solid fa-triangle-exclamation"></i> {phoneError}
+                                </span>
+                            )}
                         </div>
                         
                         <div className="as-input-group">
@@ -486,27 +622,10 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
                                     {TOOL_AUTH_MAP[selectedToolForAdd].map(field => (
                                         <div className="as-input-group" key={field} style={{ width: '100%', boxSizing: 'border-box' }}>
                                             <label>{field.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</label>
-                                            {field.toLowerCase().includes('token') || field.toLowerCase().includes('secret') || field.toLowerCase().includes('password') || field.toLowerCase().includes('key') ? (
-                                                <SecretInput 
-                                                    placeholder={`Enter ${field}`} 
-                                                    value={newCredential[field] || ''} 
-                                                    onChange={(val) => setNewCredential({...newCredential, [field]: val})} 
-                                                    required 
-                                                    autoComplete="new-password"
-                                                />
-                                            ) : (
-                                                <input 
-                                                    type="text" 
-                                                    className="as-input" 
-                                                    placeholder={`Enter ${field}`} 
-                                                    value={newCredential[field] || ''} 
-                                                    onChange={(e) => setNewCredential({...newCredential, [field]: e.target.value})} 
-                                                    required 
-                                                    autoComplete="off"
-                                                    data-1p-ignore
-                                                    data-lpignore="true"
-                                                    style={{ width: '100%', boxSizing: 'border-box' }}
-                                                />
+                                            {renderDynamicInput(
+                                                field, 
+                                                newCredential[field] || '', 
+                                                (val) => setNewCredential({...newCredential, [field]: val})
                                             )}
                                         </div>
                                     ))}
@@ -553,24 +672,10 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
                                                 {TOOL_AUTH_MAP[editingToolId].map(field => (
                                                     <div className="as-input-group" key={field} style={{ width: '100%', boxSizing: 'border-box' }}>
                                                         <label>{field.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</label>
-                                                        {field.toLowerCase().includes('token') || field.toLowerCase().includes('secret') || field.toLowerCase().includes('password') || field.toLowerCase().includes('key') ? (
-                                                            <SecretInput 
-                                                                placeholder={`Enter ${field}`} 
-                                                                value={(cred[field] as string) || ''} 
-                                                                onChange={(val) => handleEditCredentialField(editingToolId, idx, field, val)} 
-                                                                autoComplete="new-password"
-                                                            />
-                                                        ) : (
-                                                            <input 
-                                                                type="text" 
-                                                                className="as-input" 
-                                                                value={(cred[field] as string) || ''} 
-                                                                onChange={e => handleEditCredentialField(editingToolId, idx, field, e.target.value)} 
-                                                                autoComplete="off"
-                                                                data-1p-ignore
-                                                                data-lpignore="true"
-                                                                style={{ width: '100%', boxSizing: 'border-box' }}
-                                                            />
+                                                        {renderDynamicInput(
+                                                            field, 
+                                                            (cred[field] as string) || '', 
+                                                            (val) => handleEditCredentialField(editingToolId, idx, field, val)
                                                         )}
                                                     </div>
                                                 ))}
@@ -604,6 +709,30 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
                         )}
                     </div>
                 </ExtraLargeModal>,
+                document.body
+            )}
+
+            {createPortal(
+                <BottomRightModal 
+                    isOpen={notification.isOpen} 
+                    onClose={() => setNotification(prev => ({ ...prev, isOpen: false }))} 
+                    title={notification.title}
+                    icon={
+                        notification.isError 
+                        ? <i className="fa-solid fa-triangle-exclamation" style={{ color: '#9e0f33' }}></i>
+                        : <i className="fa-solid fa-circle-check" style={{ color: '#10b981' }}></i>
+                    }
+                    darkMode={darkMode}
+                >
+                    <p style={{ 
+                        margin: 0, 
+                        fontSize: '0.9rem', 
+                        fontFamily: 'Bodoni Moda Variable, monospace',
+                        color: notification.isError ? '#9e0f33' : (darkMode ? '#d1d5db' : '#4b5563') 
+                    }}>
+                        {notification.message}
+                    </p>
+                </BottomRightModal>,
                 document.body
             )}
 

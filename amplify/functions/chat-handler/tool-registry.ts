@@ -1460,6 +1460,149 @@ export const NATIVE_TOOLS_REGISTRY = [
                     }
                }
     },
+    {
+        toolSpec: {
+            name: 'noaa_weather_agent',
+            description: "Retrieves rich weather and meteorological data via NOAA APIs (NWS, CDO, NWPS). Fetches current forecasts, historical climate data, active alerts, and streamflow predictions for downstream visualization and analysis.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["GET_FORECAST", "GET_ALERTS", "GET_CLIMATE_DATA", "GET_STREAMFLOW"],
+                            description: "The NOAA action to execute."
+                        },
+                        latitude: { type: "number", description: "Latitude coordinate. Required for GET_FORECAST and GET_ALERTS." },
+                        longitude: { type: "number", description: "Longitude coordinate. Required for GET_FORECAST and GET_ALERTS." },
+                        datasetId: { type: "string", description: "NOAA CDO Dataset ID (e.g., 'GHCND'). Required for GET_CLIMATE_DATA." },
+                        stationId: { type: "string", description: "NOAA Station ID or River Gauge ID. Required for GET_CLIMATE_DATA and GET_STREAMFLOW." },
+                        startDate: { type: "string", description: "Start date in YYYY-MM-DD format. Used for GET_CLIMATE_DATA." },
+                        endDate: { type: "string", description: "End date in YYYY-MM-DD format. Used for GET_CLIMATE_DATA." }
+                    },
+                    required: ["action"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: 'epic_systems_agent',
+            description: "Interacts with Epic Systems EHR via FHIR and Epic-specific APIs. Manages USCDI v3 clinical data, patient charts, appointments, and prior authorizations. Use this for hospital-level enterprise health data workflows.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["SEARCH_PATIENTS", "GET_CLINICAL_DATA", "MANAGE_APPOINTMENT", "SUBMIT_PRIOR_AUTH"],
+                            description: "The Epic Systems action to execute."
+                        },
+                        patientId: { type: "string", description: "The Epic Patient FHIR ID or MRN. Required for GET_CLINICAL_DATA and MANAGE_APPOINTMENT." },
+                        dataType: { 
+                            type: "string", 
+                            enum: ["ALLERGIES", "CARE_PLANS", "CLINICAL_NOTES", "CONDITIONS", "MEDICATIONS"],
+                            description: "The specific USCDI v3 data category to fetch. Required for GET_CLINICAL_DATA." 
+                        },
+                        query: { type: "string", description: "Search parameters for SEARCH_PATIENTS (e.g., name, birthdate) formatted as a query string." },
+                        payload: { type: "string", description: "Stringified JSON object for MANAGE_APPOINTMENT or SUBMIT_PRIOR_AUTH." }
+                    },
+                    required: ["action"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: 'athenahealth_agent',
+            description: "Interacts with the Athenahealth API for practice management and EHR operations. Manages patient encounters, appointments, CDS Hooks, and public operational web services.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["SEARCH_PATIENTS", "GET_PATIENT_CHART", "MANAGE_APPOINTMENT", "TRIGGER_CDS_HOOK", "GET_PRACTICE_INFO"],
+                            description: "The Athenahealth action to execute."
+                        },
+                        patientId: { type: "string", description: "The Athenahealth Patient ID. Required for GET_PATIENT_CHART and MANAGE_APPOINTMENT." },
+                        appointmentId: { type: "string", description: "The Athenahealth Appointment ID." },
+                        departmentId: { type: "number", description: "The Department ID within the practice." },
+                        payload: { type: "string", description: "Stringified JSON object for appointments or CDS Hook request payloads." }
+                    },
+                    required: ["action"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: 'square_commerce_agent',
+            description: "Interacts with the Square API for enterprise commerce, PoS, and business operations. Manages Catalog, Inventory, Orders (Fulfillment), Payments (Transactions, Refunds, Subscriptions), Customers (Profiles, Loyalty, Gift Cards), and Team Labor (Timecards, Schedules).",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["EXECUTE_SQUARE_API", "GET_BUSINESS_SUMMARY"],
+                            description: "The action to execute. Use GET_BUSINESS_SUMMARY for top-level sales/labor aggregation, or EXECUTE_SQUARE_API for targeted REST actions."
+                        },
+                        method: { 
+                            type: "string", 
+                            enum: ["GET", "POST", "PUT", "DELETE"],
+                            description: "HTTP method for REST action. Default is GET."
+                        },
+                        endpoint: { 
+                            type: "string", 
+                            description: "The relative Square API v2 path (e.g., '/v2/orders/search', '/v2/payments', '/v2/catalog/list', '/v2/labor/timecards')."
+                        },
+                        payload: { 
+                            type: "string", 
+                            description: "Stringified JSON payload for POST or PUT requests. The executor will automatically inject an 'idempotency_key' if missing."
+                        },
+                        queryParams: { 
+                            type: "object", 
+                            description: "Key-value pairs for URL query parameters."
+                        }
+                    },
+                    required: ["action"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: 'vanguard_notification_agent',
+            description: "Platform notification service utilizing AWS SNS and AWS End User Messaging. Dispatches asynchronous SMS, RCS, or WhatsApp messages to users. Can be used to alert users of completed agentic tasks, critical system errors, or generated reports.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["SEND_MESSAGE"],
+                            description: "The notification action to execute."
+                        },
+                        channel: { 
+                            type: "string", 
+                            enum: ["SMS", "RCS", "WHATSAPP"],
+                            description: "The delivery channel. 'RCS' includes automatic SMS fallback. Defaults to 'SMS'."
+                        },
+                        message: { 
+                            type: "string", 
+                            description: "The text content of the notification to send."
+                        },
+                        destinationNumber: { 
+                            type: "string", 
+                            description: "The E.164 formatted phone number (e.g., '+1234567890'). If omitted, the system will automatically query the database for the active user's profile phone number."
+                        }
+                    },
+                    required: ["action", "message"]
+                }
+            }
+        }
+    },
     
 ];
 
