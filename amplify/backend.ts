@@ -39,6 +39,7 @@ import { createPortalSession } from './functions/stripe-portal/resource';
 import { getAgentTelemetry } from './functions/get-agent-telemetry/resource';
 import { scriptWriter } from './functions/script-writer/resource';
 import { VideoOrchestration } from './custom/video-orchestration/resource';
+import { postConfirmation } from './auth/post-confirmation/resource';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -48,7 +49,7 @@ const backend = defineBackend({
   agentProvisioner, webhookRouter, agentReaper, chatHandler, agentWorker,
   createCheckoutSession, grantPromoCredits, stripeWebhook, multimediaExecutor,
   lexFulfillment, postCallAnalysis, foundationModelSeeder, syncKnowledgeBase, pollBedrock, 
-  updateUserGroup , createPortalSession, getAgentTelemetry, scriptWriter
+  updateUserGroup , createPortalSession, getAgentTelemetry, scriptWriter, postConfirmation
 });
 
 const customStack = cdk.Stack.of(backend.chatHandler.resources.lambda);
@@ -431,3 +432,10 @@ mediaLambda.addToRolePolicy(startExecutionPolicy);
 
 workerLambda.addEnvironment('LONG_FORM_VIDEO_STATE_MACHINE_ARN', videoEngine.stateMachineArn);
 mediaLambda.addEnvironment('LONG_FORM_VIDEO_STATE_MACHINE_ARN', videoEngine.stateMachineArn);
+
+backend.postConfirmation.resources.lambda.addToRolePolicy(
+  new iam.PolicyStatement({
+    actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+    resources: ['*'], 
+  })
+);
