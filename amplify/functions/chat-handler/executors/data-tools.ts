@@ -5,6 +5,9 @@ import { InvokeCommand } from "@aws-sdk/client-lambda";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { ToolExecutionContext } from './types';
 
+const TIMEOUT_MS = 15000;
+const MAX_RECORDS = 50;
+
 const safeJsonParse = (data: any, fallback: any = []) => {
     if (!data) return fallback;
     if (typeof data === 'object') return data;
@@ -15,7 +18,37 @@ const safeJsonParse = (data: any, fallback: any = []) => {
     }
 };
 
-const TIMEOUT_MS = 15000;
+const projectRecord = (record: Record<string, any>): Record<string, any> => {
+    if (!record || typeof record !== 'object') return record;
+    
+    const projected: Record<string, any> = {};
+    const IGNORED_KEYS = new Set([
+        'attributes', 'SystemModstamp', 'CreatedById', 'LastModifiedById', 
+        'IsDeleted', 'MayEdit', 'IsLocked', 'LastViewedDate', 'LastReferencedDate',
+        'PhotoUrl', '_links', 'archived'
+    ]);
+
+    for (const [key, value] of Object.entries(record)) {
+        if (IGNORED_KEYS.has(key) || value === null || value === undefined || value === '') {
+            continue;
+        }
+        
+        if (typeof value === 'object' && !Array.isArray(value)) {
+            projected[key] = value.Name || value.name || value.id || '[Object]';
+        } else if (Array.isArray(value)) {
+            projected[key] = `[Array (${value.length} items)]`;
+        } else {
+            projected[key] = value;
+        }
+    }
+
+    return projected;
+};
+
+const slimAndProjectRecords = (records: any[], max = MAX_RECORDS) => {
+    if (!Array.isArray(records)) return [];
+    return records.slice(0, max).map(r => (typeof r === 'object' && r !== null ? projectRecord(r) : r));
+};
 
 export const executeAirtable = async ({ toolInput, ephemeralSecrets }: ToolExecutionContext) => {
     const AIRTABLE_API_KEY = ephemeralSecrets.airtableApiKey;
@@ -30,16 +63,31 @@ export const executeAirtable = async ({ toolInput, ephemeralSecrets }: ToolExecu
         };
         const { action, baseId, tableIdOrName, fileUrl, queryParams, recordsData } = toolInput;
         const baseUrl = `https://api.airtable.com/v0`;
+        const baseCost = { action: `AIRTABLE_${action}`, creditsToDeduct: 5 };
 
         if (action === 'INSPECT_SCHEMA' && baseId) {
             const res = await axios.get(`${baseUrl}/meta/bases/${baseId}/tables`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", tables: res.data.tables.map((t: any) => ({ name: t.name, id: t.id, fields: t.fields.map((f:any) => f.name) })) };
+            return { 
+                status: "Success", 
+                tables: res.data.tables.map((t: any) => ({ name: t.name, id: t.id, fields: t.fields.map((f: any) => f.name) })),
+                billingMetrics: baseCost
+            };
         } 
         else if (action === 'QUERY_RECORDS' && baseId && tableIdOrName) {
-            // DEFENSE 2: Protect against LLMs hallucinating the '?' in query params
-            const query = queryParams ? (queryParams.startsWith('?') ? queryParams : `?${queryParams}`) : '';
+            const query = queryParams 
+                ? (queryParams.startsWith('?') ? queryParams : `?${queryParams}`) 
+                : `?maxRecords=${MAX_RECORDS}`;
+            
             const res = await axios.get(`${baseUrl}/${baseId}/${encodeURIComponent(tableIdOrName)}${query}`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", records: res.data.records };
+            const cleanRecords = slimAndProjectRecords(res.data.records, MAX_RECORDS);
+            
+            return { 
+                status: "Success", 
+                totalSize: res.data.records?.length || 0,
+                count: cleanRecords.length, 
+                records: cleanRecords, 
+                billingMetrics: baseCost 
+            };
         }
         else if (action === 'CREATE_RECORDS' && baseId && tableIdOrName && recordsData) {
             const parsedRecords = safeJsonParse(recordsData, []);
@@ -48,7 +96,12 @@ export const executeAirtable = async ({ toolInput, ephemeralSecrets }: ToolExecu
             }
             const payload = { records: parsedRecords, typecast: true };
             const res = await axios.post(`${baseUrl}/${baseId}/${encodeURIComponent(tableIdOrName)}`, payload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", createdRecords: res.data.records.length };
+            
+            return { 
+                status: "Success", 
+                createdRecords: res.data.records.length, 
+                billingMetrics: baseCost 
+            };
         }
         else if (action === 'INGEST_SPREADSHEET' && fileUrl && baseId && tableIdOrName) {
             const fileRes = await axios.get(fileUrl, { 
@@ -73,7 +126,8 @@ export const executeAirtable = async ({ toolInput, ephemeralSecrets }: ToolExecu
             return { 
                 status: "Success", 
                 message: `Parsed ${workbook.SheetNames.length} sheets. Ingested ${mappedRecords.length} rows into ${tableIdOrName}.`,
-                totalRowsInFile: rawJson.length
+                totalRowsInFile: rawJson.length,
+                billingMetrics: { action: "AIRTABLE_INGEST", creditsToDeduct: 15 }
             };
         }
 
@@ -82,7 +136,6 @@ export const executeAirtable = async ({ toolInput, ephemeralSecrets }: ToolExecu
         return { error: `Airtable Error: ${err.response?.data?.error?.message || err.message}` }; 
     }
 };
-
 
 export function generateSnowflakeJWT(account: string, user: string, key: string): string { 
     return jwt.sign(
@@ -122,15 +175,28 @@ export const executeSnowflake = async ({ toolInput, ephemeralSecrets }: ToolExec
         const res = await axios.post(`https://${sfAccount}.snowflakecomputing.com/api/v2/statements`, payload, { headers, timeout: TIMEOUT_MS });
         
         if (res.data?.code === '333334') {
-            return { status: "Processing", message: "Query is running asynchronously.", statementHandle: res.data.statementHandle };
+            return { 
+                status: "Processing", 
+                message: "Query is running asynchronously.", 
+                statementHandle: res.data.statementHandle,
+                billingMetrics: { action: "SNOWFLAKE_ASYNC", creditsToDeduct: 5 }
+            };
         }
         
-        return { status: "Success", data: res.data };
+        const slimmedData = { ...res.data };
+        if (slimmedData.data && Array.isArray(slimmedData.data)) {
+            slimmedData.data = slimAndProjectRecords(slimmedData.data, MAX_RECORDS);
+        }
+
+        return { 
+            status: "Success", 
+            data: slimmedData,
+            billingMetrics: { action: "SNOWFLAKE_SYNC", creditsToDeduct: 8 }
+        };
     } catch (err: any) { 
         return { error: `Snowflake Error: ${err.response?.data?.message || err.message}` }; 
     }
 };
-
 
 export const executeAirflow = async ({ toolInput, ephemeralSecrets, env, clients }: ToolExecutionContext) => {
     const airflowUrl = ephemeralSecrets.airflowBaseUrl;
@@ -146,6 +212,7 @@ export const executeAirflow = async ({ toolInput, ephemeralSecrets, env, clients
 
         const { action, dagId, dagRunId, logicalDate, dagPythonCode, dagFilename } = toolInput;
         const baseUrl = `${airflowUrl.replace(/\/$/, "")}/api/v1`;
+        const baseCost = { action: `AIRFLOW_${action}`, creditsToDeduct: 6 };
 
         if (action === 'GENERATE_AND_DEPLOY_DAG' && dagPythonCode) {
             const lambdaArn = env.PYTHON_VALIDATOR_LAMBDA_ARN;
@@ -173,20 +240,39 @@ export const executeAirflow = async ({ toolInput, ephemeralSecrets, env, clients
                 ContentType: "text/x-python"
             }));
             
-            return { status: "Success", message: `DAG validated and successfully deployed to s3://${dagsBucket}/dags/${targetFilename}.` };
+            return { 
+                status: "Success", 
+                message: `DAG validated and successfully deployed to s3://${dagsBucket}/dags/${targetFilename}.`,
+                billingMetrics: { action: "AIRFLOW_DEPLOY_DAG", creditsToDeduct: 25 }
+            };
         }
         else if (action === 'TRIGGER_DAG' && dagId) {
             const payload = logicalDate ? { logical_date: logicalDate } : {};
             const res = await axios.post(`${baseUrl}/dags/${dagId}/dagRuns`, payload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", dagRunId: res.data.dag_run_id, state: res.data.state };
+            return { 
+                status: "Success", 
+                dagRunId: res.data.dag_run_id, 
+                state: res.data.state,
+                billingMetrics: baseCost 
+            };
         }
         else if (action === 'GET_DAG_RUNS' && dagId) {
             const res = await axios.get(`${baseUrl}/dags/${dagId}/dagRuns?limit=10&order_by=-start_date`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", runs: res.data.dag_runs };
+            const cleanRuns = slimAndProjectRecords(res.data.dag_runs, 10);
+            return { 
+                status: "Success", 
+                runs: cleanRuns,
+                billingMetrics: baseCost 
+            };
         }
         else if (action === 'GET_FAILED_TASKS' && dagId && dagRunId) {
             const res = await axios.get(`${baseUrl}/dags/${dagId}/dagRuns/${dagRunId}/taskInstances?state=failed`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", failedTasks: res.data.task_instances };
+            const cleanFailed = slimAndProjectRecords(res.data.task_instances, 15);
+            return { 
+                status: "Success", 
+                failedTasks: cleanFailed,
+                billingMetrics: baseCost 
+            };
         }
 
         return { error: `Missing required parameters or unsupported Airflow action: ${action}` };

@@ -4,7 +4,6 @@ import { ToolExecutionContext } from './types';
 const TIMEOUT_MS = 10000; 
 const MAX_RECORD_LIMIT = 15;
 
-
 const safeJsonObject = (data: any): Record<string, any> => {
     if (!data) return {};
     if (typeof data === 'object' && !Array.isArray(data)) return data;
@@ -35,6 +34,8 @@ export const executeZendesk = async ({ toolInput, ephemeralSecrets }: ToolExecut
         const cleanSubdomain = encodeURIComponent(ZENDESK_SUBDOMAIN.replace(/[^a-zA-Z0-9-]/g, ''));
         const baseUrl = `https://${cleanSubdomain}.zendesk.com/api/v2`;
         const { action, ticketId, query, ticketData, commentText, isPublic } = toolInput;
+        const isWrite = ['CREATE_TICKET', 'UPDATE_TICKET', 'ADD_COMMENT'].includes(action);
+        const baseCost = { action: `ZENDESK_${action}`, creditsToDeduct: isWrite ? 15 : 5 };
 
         if (action === 'TRIAGE_TICKETS' || action === 'SEARCH_KB') {
             const endpoint = action === 'TRIAGE_TICKETS' ? 'search.json' : 'help_center/articles/search.json';
@@ -51,37 +52,24 @@ export const executeZendesk = async ({ toolInput, ephemeralSecrets }: ToolExecut
                 snippet: item.snippet || (item.body ? item.body.substring(0, 300) : '')
             }));
 
-            return { status: "Success", resultsFound: rawResults.length, returnedCount: results.length, results };
+            return { status: "Success", resultsFound: rawResults.length, returnedCount: results.length, results, billingMetrics: baseCost };
         } 
         else if (action === 'CREATE_TICKET') {
             const parsedPayload = safeJsonObject(ticketData);
-            if (Object.keys(parsedPayload).length === 0) {
-                return { error: "Invalid or empty JSON provided in ticketData." };
-            }
-
+            if (Object.keys(parsedPayload).length === 0) return { error: "Invalid or empty JSON provided in ticketData." };
             const res = await axios.post(`${baseUrl}/tickets.json`, { ticket: parsedPayload }, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", ticket: res.data.ticket };
+            return { status: "Success", ticket: res.data.ticket, billingMetrics: baseCost };
         }
         else if (action === 'UPDATE_TICKET' && ticketId) {
             const parsedPayload = safeJsonObject(ticketData);
-            if (Object.keys(parsedPayload).length === 0) {
-                return { error: "Invalid or empty JSON provided in ticketData." };
-            }
-
+            if (Object.keys(parsedPayload).length === 0) return { error: "Invalid or empty JSON provided in ticketData." };
             const res = await axios.put(`${baseUrl}/tickets/${encodeURIComponent(ticketId)}.json`, { ticket: parsedPayload }, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", ticket: res.data.ticket };
+            return { status: "Success", ticket: res.data.ticket, billingMetrics: baseCost };
         }
         else if (action === 'ADD_COMMENT' && ticketId && commentText) {
-            const payload = {
-                ticket: {
-                    comment: {
-                        body: commentText,
-                        public: isPublic ?? false
-                    }
-                }
-            };
+            const payload = { ticket: { comment: { body: commentText, public: isPublic ?? false } } };
             const res = await axios.put(`${baseUrl}/tickets/${encodeURIComponent(ticketId)}.json`, payload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", ticket: res.data.ticket };
+            return { status: "Success", ticket: res.data.ticket, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters or unsupported Zendesk action: ${action}` };
@@ -89,7 +77,6 @@ export const executeZendesk = async ({ toolInput, ephemeralSecrets }: ToolExecut
         return { error: `Zendesk Error: ${err.response?.data?.description || err.response?.data?.error || err.message}` };
     }
 };
-
 
 export const executeServiceNow = async ({ toolInput, ephemeralSecrets }: ToolExecutionContext) => {
     const SNOW_USER = ephemeralSecrets.serviceNowUser;
@@ -111,14 +98,15 @@ export const executeServiceNow = async ({ toolInput, ephemeralSecrets }: ToolExe
         const baseUrl = `https://${cleanInstance}.service-now.com/api/now/table`;
         const { action, incidentId, sysId, resolutionNotes, closeCode, shortDescription, urgency, impact, assignmentGroup, query } = toolInput;
 
+        const isWrite = ['CREATE_INCIDENT', 'RESOLVE_INCIDENT'].includes(action);
+        const baseCost = { action: `SERVICENOW_${action}`, creditsToDeduct: isWrite ? 20 : 10 };
+
         const resolveSysId = async (identifier: string): Promise<string | null> => {
             if (/^[0-9a-f]{32}$/i.test(identifier)) return identifier;
             try {
                 const searchRes = await axios.get(`${baseUrl}/incident?sysparm_query=number=${encodeURIComponent(identifier)}&sysparm_limit=1`, { headers, timeout: TIMEOUT_MS });
                 return searchRes.data?.result?.[0]?.sys_id || null;
-            } catch {
-                return null;
-            }
+            } catch { return null; }
         };
 
         const targetId = incidentId || sysId;
@@ -144,7 +132,7 @@ export const executeServiceNow = async ({ toolInput, ephemeralSecrets }: ToolExe
                 sys_created_on: rawIncident.sys_created_on
             };
 
-            return { status: "Success", incident: trimmedIncident };
+            return { status: "Success", incident: trimmedIncident, billingMetrics: baseCost };
         }
         else if (action === 'QUERY_INCIDENTS') {
             const sysparmQuery = query || 'active=true^priorityIN1,2';
@@ -152,16 +140,11 @@ export const executeServiceNow = async ({ toolInput, ephemeralSecrets }: ToolExe
             
             const rawIncidents = Array.isArray(res.data?.result) ? res.data.result : [];
             const incidents = rawIncidents.map((inc: any) => ({
-                sys_id: inc.sys_id,
-                number: inc.number,
-                short_description: inc.short_description,
-                state: inc.state,
-                urgency: inc.urgency,
-                priority: inc.priority,
-                sys_created_on: inc.sys_created_on
+                sys_id: inc.sys_id, number: inc.number, short_description: inc.short_description,
+                state: inc.state, urgency: inc.urgency, priority: inc.priority, sys_created_on: inc.sys_created_on
             }));
 
-            return { status: "Success", count: incidents.length, incidents };
+            return { status: "Success", count: incidents.length, incidents, billingMetrics: baseCost };
         }
         else if (action === 'CREATE_INCIDENT') {
             const payload = {
@@ -171,7 +154,7 @@ export const executeServiceNow = async ({ toolInput, ephemeralSecrets }: ToolExe
                 assignment_group: assignmentGroup || undefined
             };
             const res = await axios.post(`${baseUrl}/incident`, payload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", incidentNumber: res.data.result?.number, sysId: res.data.result?.sys_id };
+            return { status: "Success", incidentNumber: res.data.result?.number, sysId: res.data.result?.sys_id, billingMetrics: baseCost };
         }
         else if (action === 'RESOLVE_INCIDENT' && targetId) {
             const resolvedId = await resolveSysId(targetId);
@@ -183,7 +166,7 @@ export const executeServiceNow = async ({ toolInput, ephemeralSecrets }: ToolExe
                 close_notes: resolutionNotes || 'Resolved via automated assistant workflow.' 
             };
             const res = await axios.put(`${baseUrl}/incident/${resolvedId}`, payload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", incidentNumber: res.data.result?.number, state: res.data.result?.state };
+            return { status: "Success", incidentNumber: res.data.result?.number, state: res.data.result?.state, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters or unsupported ServiceNow action: ${action}` };
@@ -191,7 +174,6 @@ export const executeServiceNow = async ({ toolInput, ephemeralSecrets }: ToolExe
         return { error: `ServiceNow Error: ${err.response?.data?.error?.message || err.message}` };
     }
 };
-
 
 export const executePagerDuty = async ({ toolInput, ephemeralSecrets }: ToolExecutionContext) => {
     const PD_API_KEY = ephemeralSecrets.pagerDutyApiKey;
@@ -211,21 +193,20 @@ export const executePagerDuty = async ({ toolInput, ephemeralSecrets }: ToolExec
 
         const baseUrl = 'https://api.pagerduty.com';
         const { action, incidentId, noteText, serviceId, title, urgency } = toolInput;
+        
+        const isWrite = ['TRIGGER_INCIDENT', 'ACKNOWLEDGE_INCIDENT', 'RESOLVE_INCIDENT', 'ADD_NOTE'].includes(action);
+        const baseCost = { action: `PAGERDUTY_${action}`, creditsToDeduct: isWrite ? 15 : 5 };
 
         if (action === 'LIST_ALERTS' || action === 'RUN_DIAGNOSTICS') {
             const res = await axios.get(`${baseUrl}/incidents?statuses[]=triggered&statuses[]=acknowledged&limit=${MAX_RECORD_LIMIT}`, { headers, timeout: TIMEOUT_MS });
             
             const rawIncidents = Array.isArray(res.data?.incidents) ? res.data.incidents : [];
             const incidents = rawIncidents.map((inc: any) => ({
-                id: inc.id,
-                summary: inc.summary || inc.title,
-                status: inc.status,
-                urgency: inc.urgency,
-                created_at: inc.created_at,
-                service: inc.service?.summary || inc.service?.id
+                id: inc.id, summary: inc.summary || inc.title, status: inc.status,
+                urgency: inc.urgency, created_at: inc.created_at, service: inc.service?.summary || inc.service?.id
             }));
 
-            return { status: "Success", count: incidents.length, incidents };
+            return { status: "Success", count: incidents.length, incidents, billingMetrics: baseCost };
         }
         else if (action === 'GET_ON_CALL') {
             const res = await axios.get(`${baseUrl}/oncalls?include[]=users`, { headers, timeout: TIMEOUT_MS });
@@ -236,44 +217,29 @@ export const executePagerDuty = async ({ toolInput, ephemeralSecrets }: ToolExec
                 user: oc.user?.summary,
                 email: oc.user?.email
             }));
-            return { status: "Success", onCalls };
+            return { status: "Success", onCalls, billingMetrics: baseCost };
         }
         else if (action === 'TRIGGER_INCIDENT' && serviceId && title) {
             if (!PD_USER_EMAIL) return { error: "PagerDuty requires 'pagerDutyUserEmail' in ephemeralSecrets to trigger incidents." };
 
-            const payload = {
-                incident: {
-                    type: 'incident',
-                    title: title,
-                    service: { id: serviceId, type: 'service_reference' },
-                    urgency: urgency || 'high'
-                }
-            };
+            const payload = { incident: { type: 'incident', title: title, service: { id: serviceId, type: 'service_reference' }, urgency: urgency || 'high' } };
             const res = await axios.post(`${baseUrl}/incidents`, payload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", incidentId: res.data.incident?.id, status_state: res.data.incident?.status };
+            return { status: "Success", incidentId: res.data.incident?.id, status_state: res.data.incident?.status, billingMetrics: baseCost };
         }
         else if ((action === 'ACKNOWLEDGE_INCIDENT' || action === 'RESOLVE_INCIDENT') && incidentId) {
             if (!PD_USER_EMAIL) return { error: "PagerDuty requires 'pagerDutyUserEmail' in ephemeralSecrets to update incident status." };
 
             const newStatus = action === 'ACKNOWLEDGE_INCIDENT' ? 'acknowledged' : 'resolved';
-            const payload = {
-                incident: {
-                    type: 'incident_reference',
-                    status: newStatus
-                }
-            };
+            const payload = { incident: { type: 'incident_reference', status: newStatus } };
             const res = await axios.put(`${baseUrl}/incidents/${encodeURIComponent(incidentId)}`, payload, { headers, timeout: TIMEOUT_MS });
-            return { 
-                status: "Success", 
-                incidentId: res.data.incident?.id, 
-                incidentStatus: res.data.incident?.status,  };
+            return { status: "Success", incidentId: res.data.incident?.id, incidentStatus: res.data.incident?.status, billingMetrics: baseCost };
         }
         else if (action === 'ADD_NOTE' && incidentId && noteText) {
             if (!PD_USER_EMAIL) return { error: "PagerDuty requires 'pagerDutyUserEmail' in ephemeralSecrets to add notes." };
 
             const payload = { note: { content: noteText } };
             const res = await axios.post(`${baseUrl}/incidents/${encodeURIComponent(incidentId)}/notes`, payload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", noteId: res.data.note?.id };
+            return { status: "Success", noteId: res.data.note?.id, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters or unsupported PagerDuty action: ${action}` };

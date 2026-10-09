@@ -78,7 +78,8 @@ import noaaIcon from '../assets/noaa-icon.png';
 import epicSystemsIcon from '../assets/epicsystems-icon.png';
 import athenaHealthIcon from '../assets/athena-icon.png';
 import notificationsPagerIcon from '../assets/notifications-icon.png';
-
+import dataVisualizationIcon from '../assets/data-visualization-icon.png';
+import oneVestIcon from '../assets/onevest-icon.jpg';
 
 export const SuccessIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-regular fa-circle-check"></i>&nbsp;</a>;
 export const ErrorIcon = () => <a style={{ fontSize: '1.2rem' }}><i className="fa-solid fa-radiation"></i>&nbsp;</a>;
@@ -282,11 +283,8 @@ export const getModelIcon = (identifier?: string | null): string => {
   if (id.includes('epic_systems_agent') || id.includes('Epic Systems EHR Agent')) return epicSystemsIcon;
   if (id.includes('athenahealth_agent') || id.includes('Athenahealth Operations Agent')) return athenaHealthIcon;
   if (id.includes('vanguard_notification_agent') || id.includes('Vanguard Notification Pager')) return notificationsPagerIcon;
-  if (id.includes('data_visualizer_agent') || id.includes('Data Visualizer')) return notificationsPagerIcon;
-
-  
-
-
+  if (id.includes('data_visualization_agent') || id.includes('Data Visualizer')) return dataVisualizationIcon;
+  if (id.includes('onevest_mcp_agent') || (id.includes('onevest_wealth_agent')) || id.includes('OneVest Wealth Agent')) return oneVestIcon;
   
   return cpuIcon;
 };

@@ -5,7 +5,6 @@ const TIMEOUT_MS = 10000;
 const MAX_DATAPOINTS_PER_SERIES = 30;
 const MAX_SERIES_LIMIT = 15;
 
-
 const safeJsonObject = (data: any, fallback: any = {}): Record<string, any> => {
     if (!data) return fallback;
     if (typeof data === 'object' && !Array.isArray(data)) return data;
@@ -37,7 +36,6 @@ const parseToUnixSeconds = (input: any, defaultOffsetSeconds = 3600): { from: nu
     return { from, to };
 };
 
-
 const downsamplePoints = (points: any[]): any[] => {
     if (!Array.isArray(points)) return [];
     if (points.length <= MAX_DATAPOINTS_PER_SERIES) return points;
@@ -61,31 +59,35 @@ export const executeGrafana = async ({ toolInput, ephemeralSecrets }: ToolExecut
         };
         const baseUrl = GRAFANA_URL.replace(/\/$/, "");
         const { action, dataSourceUid, query, dashboardJson, dashboardUid, start, end, step, limit } = toolInput;
+        
+        const isWrite = action === 'CREATE_DASHBOARD';
+        const baseCost = { action: `GRAFANA_${action}`, creditsToDeduct: isWrite ? 25 : 10 };
 
         if (action === 'GET_DATA_SOURCES') {
             const res = await axios.get(`${baseUrl}/api/datasources`, { headers, timeout: TIMEOUT_MS });
             return { 
                 status: "Success", 
-                dataSources: res.data.map((ds: any) => ({ id: ds.id, uid: ds.uid, name: ds.name, type: ds.type, isDefault: ds.isDefault })) 
+                dataSources: res.data.map((ds: any) => ({ id: ds.id, uid: ds.uid, name: ds.name, type: ds.type, isDefault: ds.isDefault })),
+                billingMetrics: baseCost 
             };
         }
         else if (action === 'SEARCH_DASHBOARDS') {
             const searchQuery = query ? `?query=${encodeURIComponent(query)}` : '?type=dash-db';
             const res = await axios.get(`${baseUrl}/api/search${searchQuery}`, { headers, timeout: TIMEOUT_MS });
             const dashboards = res.data.slice(0, 15).map((d: any) => ({ uid: d.uid, title: d.title, url: d.url, tags: d.tags }));
-            return { status: "Success", dashboards };
+            return { status: "Success", dashboards, billingMetrics: baseCost };
         }
         else if (action === 'GET_DASHBOARD' && dashboardUid) {
             const res = await axios.get(`${baseUrl}/api/dashboards/uid/${encodeURIComponent(dashboardUid)}`, { headers, timeout: TIMEOUT_MS });
             const { dashboard } = res.data;
             const panels = dashboard.panels?.slice(0, 20).map((p: any) => ({ id: p.id, title: p.title, type: p.type, targets: p.targets }));
-            return { status: "Success", title: dashboard.title, uid: dashboard.uid, panels };
+            return { status: "Success", title: dashboard.title, uid: dashboard.uid, panels, billingMetrics: baseCost };
         }
         else if (action === 'QUERY_METRICS' && dataSourceUid && query) {
             const res = await axios.get(`${baseUrl}/api/datasources/proxy/uid/${encodeURIComponent(dataSourceUid)}/api/v1/query?query=${encodeURIComponent(query)}`, { headers, timeout: TIMEOUT_MS });
             const rawMetrics = Array.isArray(res.data.data?.result) ? res.data.data.result : [];
             const metrics = rawMetrics.slice(0, MAX_SERIES_LIMIT);
-            return { status: "Success", count: metrics.length, metrics };
+            return { status: "Success", count: metrics.length, metrics, billingMetrics: baseCost };
         }
         else if (action === 'QUERY_METRICS_RANGE' && dataSourceUid && query) {
             const { from, to } = parseToUnixSeconds({ from: start, to: end });
@@ -99,7 +101,7 @@ export const executeGrafana = async ({ toolInput, ephemeralSecrets }: ToolExecut
                 values: downsamplePoints(series.values)
             }));
 
-            return { status: "Success", resultType: res.data.data?.resultType, seriesCount: rawMetrics.length, metrics };
+            return { status: "Success", resultType: res.data.data?.resultType, seriesCount: rawMetrics.length, metrics, billingMetrics: baseCost };
         }
         else if (action === 'QUERY_LOKI_LOGS' && dataSourceUid && query) {
             const { from, to } = parseToUnixSeconds({ from: start, to: end });
@@ -110,7 +112,7 @@ export const executeGrafana = async ({ toolInput, ephemeralSecrets }: ToolExecut
             const rawLogs = Array.isArray(res.data.data?.result) ? res.data.data.result : [];
             const logs = rawLogs.slice(0, MAX_SERIES_LIMIT);
 
-            return { status: "Success", logs };
+            return { status: "Success", logs, billingMetrics: baseCost };
         }
         else if (action === 'CREATE_DASHBOARD' && dashboardJson) {
             const parsedDashboard = safeJsonObject(dashboardJson);
@@ -122,12 +124,12 @@ export const executeGrafana = async ({ toolInput, ephemeralSecrets }: ToolExecut
                 message: "Provisioned automatically by SRE Agent"
             };
             const res = await axios.post(`${baseUrl}/api/dashboards/db`, payload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", dashboardUrl: `${baseUrl}${res.data.url}`, uid: res.data.uid };
+            return { status: "Success", dashboardUrl: `${baseUrl}${res.data.url}`, uid: res.data.uid, billingMetrics: baseCost };
         }
         else if (action === 'GET_ALERT_RULES') {
             const res = await axios.get(`${baseUrl}/api/v1/provisioning/alert-rules`, { headers, timeout: TIMEOUT_MS });
             const rules = res.data?.slice(0, 20).map((r: any) => ({ uid: r.uid, title: r.title, folderUID: r.folderUID, condition: r.condition }));
-            return { status: "Success", alertRules: rules };
+            return { status: "Success", alertRules: rules, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters or unsupported Grafana action: ${action}` };
@@ -135,7 +137,6 @@ export const executeGrafana = async ({ toolInput, ephemeralSecrets }: ToolExecut
         return { error: `Grafana Error: ${err.response?.data?.message || err.message}` };
     }
 };
-
 
 export const executeDatadog = async ({ toolInput, ephemeralSecrets }: ToolExecutionContext) => {
     const DD_API_KEY = ephemeralSecrets.datadogApiKey;
@@ -157,6 +158,9 @@ export const executeDatadog = async ({ toolInput, ephemeralSecrets }: ToolExecut
         const baseUrl = `https://api.${cleanSite}/api`;
         const { action, query, from, to, dashboardJson, monitorId, muteScope } = toolInput;
 
+        const isWrite = ['CREATE_DASHBOARD', 'MUTE_MONITOR'].includes(action);
+        const baseCost = { action: `DATADOG_${action}`, creditsToDeduct: isWrite ? 25 : 10 };
+
         if (action === 'QUERY_LOGS') {
             const { from: fromSec, to: toSec } = parseToUnixSeconds({ from, to });
             const payload = {
@@ -170,7 +174,7 @@ export const executeDatadog = async ({ toolInput, ephemeralSecrets }: ToolExecut
                 service: l.attributes?.service,
                 message: l.attributes?.message
             }));
-            return { status: "Success", count: logs?.length, logs };
+            return { status: "Success", count: logs?.length, logs, billingMetrics: baseCost };
         }
         else if (action === 'QUERY_METRICS' && query) {
             const { from: fromSec, to: toSec } = parseToUnixSeconds({ from, to });
@@ -184,39 +188,39 @@ export const executeDatadog = async ({ toolInput, ephemeralSecrets }: ToolExecut
                 pointlist: downsamplePoints(s.pointlist)
             }));
 
-            return { status: "Success", seriesCount: rawSeries.length, series };
+            return { status: "Success", seriesCount: rawSeries.length, series, billingMetrics: baseCost };
         }
         else if (action === 'SEARCH_DASHBOARDS') {
             const res = await axios.get(`${baseUrl}/v1/dashboard`, { headers, timeout: TIMEOUT_MS });
             const dashboards = res.data.dashboards?.slice(0, 20).map((d: any) => ({ id: d.id, title: d.title, author_handle: d.author_handle, layout_type: d.layout_type }));
-            return { status: "Success", dashboards };
+            return { status: "Success", dashboards, billingMetrics: baseCost };
         }
         else if (action === 'CREATE_DASHBOARD' && dashboardJson) {
             const parsedDashboard = safeJsonObject(dashboardJson);
             if (Object.keys(parsedDashboard).length === 0) return { error: "Invalid JSON provided in dashboardJson." };
 
             const res = await axios.post(`${baseUrl}/v1/dashboard`, parsedDashboard, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", dashboardUrl: `https://app.${cleanSite}/dashboard/${res.data.id}` };
+            return { status: "Success", dashboardUrl: `https://app.${cleanSite}/dashboard/${res.data.id}`, billingMetrics: baseCost };
         }
         else if (action === 'GET_MONITORS') {
             const res = await axios.get(`${baseUrl}/v1/monitor?group_states=alert,warn`, { headers, timeout: TIMEOUT_MS });
             const monitors = res.data?.slice(0, 20).map((m: any) => ({ id: m.id, name: m.name, type: m.type, overall_state: m.overall_state, query: m.query }));
-            return { status: "Success", openMonitorsCount: monitors?.length, monitors };
+            return { status: "Success", openMonitorsCount: monitors?.length, monitors, billingMetrics: baseCost };
         }
         else if (action === 'MUTE_MONITOR' && monitorId) {
             const payload = muteScope ? { scope: muteScope } : {};
             const res = await axios.post(`${baseUrl}/v1/monitor/${encodeURIComponent(monitorId)}/mute`, payload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", message: `Monitor ${monitorId} muted successfully.`, details: res.data };
+            return { status: "Success", message: `Monitor ${monitorId} muted successfully.`, details: res.data, billingMetrics: baseCost };
         }
         else if (action === 'LIST_INCIDENTS') {
             const res = await axios.get(`https://api.${cleanSite}/api/v2/incidents`, { headers, timeout: TIMEOUT_MS });
             const incidents = res.data.data?.slice(0, 15).map((i: any) => ({ id: i.id, title: i.attributes?.title, customer_impacted: i.attributes?.customer_impacted, state: i.attributes?.state }));
-            return { status: "Success", incidents };
+            return { status: "Success", incidents, billingMetrics: baseCost };
         }
         else if (action === 'GET_SLOS') {
             const res = await axios.get(`${baseUrl}/v1/slo`, { headers, timeout: TIMEOUT_MS });
             const slos = res.data.data?.slice(0, 15).map((s: any) => ({ id: s.id, name: s.name, type: s.type, target_threshold: s.target_threshold }));
-            return { status: "Success", slos };
+            return { status: "Success", slos, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters or unsupported Datadog action: ${action}` };

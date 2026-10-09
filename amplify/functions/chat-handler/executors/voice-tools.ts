@@ -96,12 +96,15 @@ export const executeEnterpriseVoiceAgent = async ({
     } = toolInput;
 
     const VOICE_CALLS_TABLE = env.VOICE_AGENT_TRACKING_TABLE || 'VoiceAgentCallLogs';
+    const readCost = { action: `VOICE_DB_READ`, creditsToDeduct: 5 };
 
     if (action === 'DISPATCH_CALL') {
+        const dispatchCost = { action: `VOICE_DISPATCH`, creditsToDeduct: 2500 };
+
         if (!destinationPhoneNumber || !objective) {
             return { 
                 error: "Missing required parameters: destinationPhoneNumber and objective are required to dispatch a call.",
-                additionalCreditsUsed: -2500 
+                billingMetrics: { action: "VOICE_DISPATCH_FAIL", creditsToDeduct: 10 } 
             };
         }
 
@@ -112,7 +115,7 @@ export const executeEnterpriseVoiceAgent = async ({
         if (!instanceId || !contactFlowId || !sourcePhoneNumber) {
             return { 
                 error: "Platform Voice Error: Amazon Connect system environment variables are missing.",
-                additionalCreditsUsed: -2500
+                billingMetrics: { action: "VOICE_SYSTEM_FAIL", creditsToDeduct: 10 }
             };
         }
 
@@ -173,7 +176,8 @@ export const executeEnterpriseVoiceAgent = async ({
             return {
                 status: "Success",
                 message: `Autonomous voice agent dispatched via Amazon Connect using voice '${voiceConfig.voiceActor}' (${voiceConfig.languageCode}). The call takes minutes to complete; use CHECK_CALL_RESULTS to retrieve outcomes later.`,
-                callId: internalCallId
+                callId: internalCallId,
+                billingMetrics: dispatchCost
             };
 
         } catch (err: any) {
@@ -191,17 +195,14 @@ export const executeEnterpriseVoiceAgent = async ({
 
             return { 
                 error: `Voice Agent Dispatch Error: ${err.message}`,
-                additionalCreditsUsed: -2500
+                billingMetrics: { action: "VOICE_DISPATCH_FAIL", creditsToDeduct: 50 }
             };
         }
     } 
     
     else if (action === 'CHECK_CALL_RESULTS') {
         if (!callId) {
-            return { 
-                error: "Missing required parameter: callId",
-                additionalCreditsUsed: -2500
-            };
+            return { error: "Missing required parameter: callId" };
         }
 
         try {
@@ -211,10 +212,7 @@ export const executeEnterpriseVoiceAgent = async ({
             }));
 
             if (!res.Item) {
-                return { 
-                    error: `Call ID ${callId} not found in tracking system.`,
-                    additionalCreditsUsed: -2500
-                };
+                return { error: `Call ID ${callId} not found in tracking system.`, billingMetrics: readCost };
             }
 
             const callData = res.Item;
@@ -223,7 +221,7 @@ export const executeEnterpriseVoiceAgent = async ({
                 return { 
                     status: "In Progress", 
                     message: "The AI agent is currently on the call or waiting for the recipient to answer. Please wait a minute and check back.",
-                    additionalCreditsUsed: -2500
+                    billingMetrics: readCost
                 };
             }
 
@@ -235,19 +233,16 @@ export const executeEnterpriseVoiceAgent = async ({
                 summary: safeSummary,
                 capturedData: callData.capturedData || {},
                 actionItems: callData.actionItems || [],
-                additionalCreditsUsed: -2500
+                billingMetrics: readCost
             };
         } catch (err: any) {
-            return { 
-                error: `Failed to retrieve call results: ${err.message}`,
-                additionalCreditsUsed: -2500
-            };
+            return { error: `Failed to retrieve call results: ${err.message}`, billingMetrics: readCost };
         }
     }
 
     else if (action === 'GET_CALL_TRANSCRIPT') {
         if (!callId) {
-            return { error: "Missing required parameter: callId", additionalCreditsUsed: -2500 };
+            return { error: "Missing required parameter: callId" };
         }
 
         try {
@@ -257,10 +252,7 @@ export const executeEnterpriseVoiceAgent = async ({
             }));
 
             if (!res.Item || !res.Item.transcript) {
-                return { 
-                    error: `No transcript available for Call ID ${callId}.`,
-                    additionalCreditsUsed: -2500 
-                };
+                return { error: `No transcript available for Call ID ${callId}.`, billingMetrics: readCost };
             }
 
             const rawTranscript: Array<{ speaker: string; text: string; timestamp?: string }> = 
@@ -268,7 +260,6 @@ export const executeEnterpriseVoiceAgent = async ({
 
             const { searchQuery, page = 1 } = toolInput;
             const pageSize = 30;
-
             let filteredTranscript = rawTranscript;
 
             if (searchQuery) {
@@ -289,18 +280,12 @@ export const executeEnterpriseVoiceAgent = async ({
                 page,
                 totalPages: Math.ceil(totalTurns / pageSize),
                 transcript: paginatedTurns,
-                additionalCreditsUsed: -2500 
+                billingMetrics: readCost
             };
         } catch (err: any) {
-            return { 
-                error: `Failed to retrieve call transcript: ${err.message}`,
-                additionalCreditsUsed: -2500 
-            };
+            return { error: `Failed to retrieve call transcript: ${err.message}`, billingMetrics: readCost };
         }
     }
 
-    return { 
-        error: `Unsupported action: ${action}`,
-        additionalCreditsUsed: -2500 
-    };
+    return { error: `Unsupported action: ${action}` };
 };

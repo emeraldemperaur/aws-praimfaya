@@ -19,7 +19,7 @@ async function recordRAGArtifact(
     const fileName = fileUrl.split('/').pop() || 'presentation.pptx';
     
     try {
-        await dynamodb.send(new PutCommand({
+        const putPromise = dynamodb.send(new PutCommand({
             TableName: ragArtifactsTable,
             Item: {
                 id: `art_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -34,6 +34,9 @@ async function recordRAGArtifact(
                 createdAt: new Date().toISOString()
             }
         }));
+
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("DynamoDB RAG telemetry timeout")), 4000));
+        await Promise.race([putPromise, timeoutPromise]);
     } catch (err) {
         console.error("Failed to record RAG artifact telemetry:", err);
     }
@@ -59,8 +62,7 @@ export const executePowerPointGenerator = async ({
 
         if (!Array.isArray(slides) || slides.length === 0) {
             return { 
-                error: "Invalid payload: 'slides' must be a non-empty array.",
-                additionalCreditsUsed: -10 
+                error: "Invalid payload: 'slides' must be a non-empty array."
             };
         }
 
@@ -167,14 +169,13 @@ export const executePowerPointGenerator = async ({
             status: "Success", 
             message: "Enterprise presentation successfully generated.",
             fileUrl: fileUrl,
-            additionalCreditsUsed: -computeCreditsUsed
+            billingMetrics: { action: "GENERATE_POWERPOINT", creditsToDeduct: computeCreditsUsed } 
         };
 
     } catch (err: any) {
         console.error("Presentation Generation Error:", err);
         return { 
-            error: `Failed to generate presentation: ${err.message}`, 
-            additionalCreditsUsed: -100 
+            error: `Failed to generate presentation: ${err.message}`
         };
     }
 };

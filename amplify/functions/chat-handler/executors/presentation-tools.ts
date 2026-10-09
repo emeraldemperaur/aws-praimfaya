@@ -1,13 +1,47 @@
 import { BedrockRuntimeClient, StartAsyncInvokeCommand } from "@aws-sdk/client-bedrock-runtime";
-import { generateClient } from 'aws-amplify/api';
-import type { Schema } from '../../../data/resource';
+import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ToolExecutionContext } from './types';
 
 const bedrockClient = new BedrockRuntimeClient({ 
     region: process.env.BEDROCK_REGION || 'us-west-2' 
 });
 
-export const executeLumaVideoPresentation = async ({ toolInput, env }: ToolExecutionContext) => {
+async function recordRAGArtifact(
+    profile: any,
+    session: { userId: string; id: string; title?: string },
+    fileUrl: string,
+    fileType: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT',
+    dynamodb: any,
+    ragArtifactsTable?: string
+) {
+    if (!ragArtifactsTable || !dynamodb) return;
+    const fileName = fileUrl.split('/').pop() || 'presentation.mp4';
+    
+    try {
+        const putPromise = dynamodb.send(new PutCommand({
+            TableName: ragArtifactsTable,
+            Item: {
+                id: `art_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                userId: session.userId,
+                terminalId: session.id,
+                terminalTitle: session.title || profile?.name || 'Terminal Session',
+                modelName: profile?.llmModelId || 'amazon.nova-pro-v1:0',
+                contextProfileName: profile?.name || 'Vanguard AI',
+                fileUrl: fileUrl,
+                fileName: fileName,
+                fileType: fileType,
+                createdAt: new Date().toISOString()
+            }
+        }));
+
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("DynamoDB RAG telemetry timeout")), 4000));
+        await Promise.race([putPromise, timeoutPromise]);
+    } catch (err) {
+        console.error("Failed to record RAG artifact telemetry:", err);
+    }
+}
+
+export const executeLumaVideoPresentation = async ({ toolInput, env, clients, profile, cognitoUserId: ctxUserId, sessionId: ctxSessionId }: ToolExecutionContext) => {
     const { 
         topicDescription, industryTheme, voiceoverStyle, 
         slides, taskId, cognitoUserId, sessionId 
@@ -16,49 +50,19 @@ export const executeLumaVideoPresentation = async ({ toolInput, env }: ToolExecu
     const outputBucket = env.MEDIA_OUTPUT_BUCKET_NAME;
     if (!outputBucket) return { error: "System configuration error: MEDIA_OUTPUT_BUCKET_NAME missing." };
 
-    const userId = cognitoUserId || 'SYSTEM_USER';
-    const activeSessionId = sessionId || taskId || `session_${Date.now()}`;
+    const userId = cognitoUserId || ctxUserId || 'SYSTEM_USER';
+    const activeSessionId = sessionId || ctxSessionId || taskId || `session_${Date.now()}`;
     const jobId = taskId || `vanguard_deck_${Date.now()}`;
     const s3DestinationPrefix = `s3://${outputBucket}/luma-presentations/${jobId}`;
 
-    const client = generateClient<Schema>();
 
-   
     let computeCredits = 20; 
     computeCredits += (slides.length * 80);
     if (voiceoverStyle && voiceoverStyle !== 'NONE') {
         computeCredits += (slides.length * 5);
     }
 
-    
-    const userProfileResp = await client.models.UserProfile.list({
-        filter: { cognitoUserId: { eq: userId } }
-    });
-    const userProfile = userProfileResp.data?.[0];
-
-    if (!userProfile) return { error: `User profile not found. Cannot bill credits.` };
-
-    const originalBalance = userProfile.computeCredits ?? 0;
-    if (originalBalance < computeCredits) {
-        return { error: `Insufficient compute credits. Required: ${computeCredits}, Available: ${originalBalance}.` };
-    }
-
-    const updatedBalance = originalBalance - computeCredits;
-    await client.models.UserProfile.update({ id: userProfile.id, computeCredits: updatedBalance });
-
     try {
-        await client.models.UsageRecord.create({
-            userId: userId,
-            sessionId: activeSessionId,
-            sessionTitle: topicDescription?.slice(0, 50) || 'Cinematic Presentation',
-            actionType: 'TOOL_EXECUTION',
-            modelId: 'luma.ray-v2:0',
-            toolName: 'generate_luma_video_presentation',
-            creditsUsed: computeCredits,
-            createdAt: new Date().toISOString()
-        });
-
-        
         const dispatchedJobs = [];
         
         for (let i = 0; i < slides.length; i++) {
@@ -92,48 +96,35 @@ export const executeLumaVideoPresentation = async ({ toolInput, env }: ToolExecu
                 speakerScript: slide.speakerScript
             });
 
-            await new Promise(resolve => setTimeout(resolve, 250));
+            await new Promise(resolve => setTimeout(resolve, 300));
         }
 
-        
         const primaryArtifactUrl = `https://${outputBucket}.s3.${process.env.AWS_REGION || 'us-west-2'}.amazonaws.com/luma-presentations/${jobId}/slide_1/output.mp4`;
 
-        await client.models.RAGArtifact.create({
-            userId: userId,
-            terminalId: activeSessionId,
-            terminalTitle: topicDescription?.slice(0, 50) || 'Cinematic Luma Deck',
-            modelName: 'luma.ray-v2:0',
-            contextProfileName: 'Presentation Agent',
-            fileName: `${jobId}.mp4`,
-            fileUrl: primaryArtifactUrl,
-            fileType: 'VIDEO',
-            createdAt: new Date().toISOString()
-        });
+        await recordRAGArtifact(
+            profile,
+            { userId, id: activeSessionId, title: topicDescription?.slice(0, 50) || 'Cinematic Luma Deck' },
+            primaryArtifactUrl,
+            'VIDEO',
+            clients?.dynamodb,
+            env.RAG_ARTIFACTS_TABLE_NAME
+        );
 
         return {
             status: "Success",
             message: `Successfully dispatched ${slides.length} scenes to Amazon Bedrock Luma Ray-2.`,
-            computeDeduction: computeCredits,
-            remainingUserCredits: updatedBalance,
             compilationPipeline: {
                 orchestrator: "Vanguard_Bedrock_Compiler",
                 theme: industryTheme,
                 tasks: dispatchedJobs
             },
-            uiDirective: "POLL_BEDROCK_STATUS" 
+            primaryArtifactUrl,
+            uiDirective: "POLL_BEDROCK_STATUS",
+            billingMetrics: { action: "LUMA_VIDEO_DECK", creditsToDeduct: computeCredits }
         };
 
     } catch (err: any) {
-        console.error("[BedrockLumaExecutor] Execution error. Rolling back credits:", err.message);
-        try {
-            await client.models.UserProfile.update({ 
-                id: userProfile.id, 
-                computeCredits: originalBalance 
-            });
-        } catch (rollbackErr) {
-            console.error("FATAL: Credit rollback failed", rollbackErr);
-        }
-
-        return { error: `Bedrock Presentation Engine Error: ${err.message}. Credits have been refunded.` };
+        console.error("[BedrockLumaExecutor] Execution error:", err.message);
+        return { error: `Bedrock Presentation Engine Error: ${err.message}.` };
     }
 };

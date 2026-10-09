@@ -4,7 +4,6 @@ import { ToolExecutionContext } from './types';
 const TIMEOUT_MS = 10000; 
 const MAX_RECORD_LIMIT = 20; 
 
-
 const safeJsonObject = (data: any, fallback: any = {}): Record<string, any> => {
     if (!data) return fallback;
     if (typeof data === 'object' && !Array.isArray(data)) return data;
@@ -15,7 +14,6 @@ const safeJsonObject = (data: any, fallback: any = {}): Record<string, any> => {
         return fallback;
     }
 };
-
 
 const escapeODataString = (str: string): string => {
     return str.replace(/'/g, "''");
@@ -36,7 +34,7 @@ export const executeUiPathOrchestrator = async ({ toolInput, ephemeralSecrets }:
         const headers = { 
             Authorization: `Bearer ${UI_TOKEN}`, 
             'Content-Type': 'application/json',
-            'X-UIPATH-OrganizationUnitId': UI_FOLDER 
+            'X-UIPATH-OrganizationUnitId': String(UI_FOLDER) 
         };
         const { action, releaseKey, jobId, queueName, payload, statusFilter } = toolInput;
         
@@ -44,6 +42,9 @@ export const executeUiPathOrchestrator = async ({ toolInput, ephemeralSecrets }:
         const cleanOrg = encodeURIComponent(UI_ORG);
         const cleanTenant = encodeURIComponent(UI_TENANT);
         const baseUrl = `${cleanUrl}/${cleanOrg}/${cleanTenant}/orchestrator_/odata`;
+
+        const isWrite = ['START_JOB', 'STOP_JOB', 'ADD_QUEUE_ITEM'].includes(action);
+        const baseCost = { action: `UIPATH_${action}`, creditsToDeduct: isWrite ? 15 : 5 };
 
         if (action === 'GET_RELEASES') {
             const res = await axios.get(`${baseUrl}/Releases?$top=30`, { headers, timeout: TIMEOUT_MS });
@@ -55,7 +56,7 @@ export const executeUiPathOrchestrator = async ({ toolInput, ephemeralSecrets }:
                 ProcessKey: r.ProcessKey
             }));
 
-            return { status: "Success", count: releases.length, releases };
+            return { status: "Success", count: releases.length, releases, billingMetrics: baseCost };
         } 
         else if (action === 'GET_JOBS') {
             const res = await axios.get(`${baseUrl}/Jobs?$top=${MAX_RECORD_LIMIT}&$orderby=CreationTime desc`, { headers, timeout: TIMEOUT_MS });
@@ -69,7 +70,7 @@ export const executeUiPathOrchestrator = async ({ toolInput, ephemeralSecrets }:
                 EndTime: j.EndTime
             }));
 
-            return { status: "Success", count: jobs.length, jobs };
+            return { status: "Success", count: jobs.length, jobs, billingMetrics: baseCost };
         } 
         else if (action === 'GET_JOB_LOGS' && jobId) {
             const safeJobId = encodeURIComponent(jobId);
@@ -81,7 +82,7 @@ export const executeUiPathOrchestrator = async ({ toolInput, ephemeralSecrets }:
                 TimeStamp: l.TimeStamp
             }));
 
-            return { status: "Success", count: logs.length, logs };
+            return { status: "Success", count: logs.length, logs, billingMetrics: baseCost };
         }
         else if (action === 'START_JOB' && releaseKey) {
             const parsedArgs = safeJsonObject(payload);
@@ -94,14 +95,14 @@ export const executeUiPathOrchestrator = async ({ toolInput, ephemeralSecrets }:
                 } 
             };
             const res = await axios.post(`${baseUrl}/Jobs/UiPath.Server.Configuration.OData.StartJobs`, body, { headers, timeout: TIMEOUT_MS });
-            const jobsStarted = Array.isArray(res.data?.value) ? res.data.value.map((j: any) => ({ Id: j.Id, Key: j.Key, State: j.State })) : res.data?.value;
+            const jobsStarted = Array.isArray(res.data?.value) ? res.data.value.slice(0, MAX_RECORD_LIMIT).map((j: any) => ({ Id: j.Id, Key: j.Key, State: j.State })) : res.data?.value;
 
-            return { status: "Success", jobsStarted };
+            return { status: "Success", jobsStarted, billingMetrics: baseCost };
         } 
         else if (action === 'STOP_JOB' && jobId) {
             const safeJobId = encodeURIComponent(jobId);
             await axios.post(`${baseUrl}/Jobs(${safeJobId})/UiPath.Server.Configuration.OData.StopJob`, { strategy: "Kill" }, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", message: `Job ${jobId} termination requested.` };
+            return { status: "Success", message: `Job ${jobId} termination requested.`, billingMetrics: baseCost };
         } 
         else if (action === 'GET_QUEUE_ITEMS' && queueName) {
             const safeQueueName = escapeODataString(queueName);
@@ -123,14 +124,14 @@ export const executeUiPathOrchestrator = async ({ toolInput, ephemeralSecrets }:
                 ProcessingException: q.ProcessingException?.Reason ? q.ProcessingException.Reason.substring(0, 300) : undefined
             }));
 
-            return { status: "Success", count: items.length, items };
+            return { status: "Success", count: items.length, items, billingMetrics: baseCost };
         } 
         else if (action === 'ADD_QUEUE_ITEM' && queueName) {
             const parsedContent = safeJsonObject(payload);
             const body = { itemData: { Name: queueName, SpecificContent: parsedContent } };
             const res = await axios.post(`${baseUrl}/Queues/UiPathODataSvc.AddQueueItem`, body, { headers, timeout: TIMEOUT_MS });
             
-            return { status: "Success", itemId: res.data?.Id, itemStatus: res.data?.Status };
+            return { status: "Success", itemId: res.data?.Id, itemStatus: res.data?.Status, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters or unsupported UiPath action: ${action}` };

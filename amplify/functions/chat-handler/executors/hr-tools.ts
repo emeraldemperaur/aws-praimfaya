@@ -52,6 +52,28 @@ const safeJsonObject = (data: any): Record<string, any> => {
     }
 };
 
+const projectRecord = (record: Record<string, any>): Record<string, any> => {
+    if (!record || typeof record !== 'object') return record;
+    const projected: Record<string, any> = {};
+    const IGNORED_KEYS = new Set(['attributes', 'meta', 'ssn', 'socialSecurityNumber', '_links']);
+
+    for (const [key, value] of Object.entries(record)) {
+        if (IGNORED_KEYS.has(key) || value === null || value === undefined || value === '') continue;
+        if (typeof value === 'object' && !Array.isArray(value)) {
+            projected[key] = value.name || value.displayName || value.id || '[Object]';
+        } else if (Array.isArray(value)) {
+            projected[key] = `[Array (${value.length} items)]`;
+        } else {
+            projected[key] = value;
+        }
+    }
+    return projected;
+};
+
+const slimAndProjectRecords = (records: any[], max = MAX_RECORD_LIMIT) => {
+    if (!Array.isArray(records)) return [];
+    return records.slice(0, max).map(r => (typeof r === 'object' && r !== null ? projectRecord(r) : r));
+};
 
 export const executeRippling = async ({ 
     toolInput, 
@@ -68,8 +90,7 @@ export const executeRippling = async ({
     
     if (!RIPPLING_API_KEY) {
         return { 
-            error: "Missing Rippling API Key. You MUST call 'request_secure_credentials' with serviceName 'rippling' to proceed.",
-            additionalCreditsUsed: -10 
+            error: "Missing Rippling API Key. You MUST call 'request_secure_credentials' with serviceName 'rippling' to proceed."
         };
     }
 
@@ -86,24 +107,24 @@ export const executeRippling = async ({
 
         let url = "";
         let method = "GET";
-        let baseCost = 150;
+        let baseCost = 15;
 
         if (action === 'GET_EMPLOYEE' && safeEmployeeId) {
             url = `https://api.rippling.com/platform/api/employees/${safeEmployeeId}`;
         } else if (action === 'ONBOARD_EMPLOYEE') {
             url = `https://api.rippling.com/platform/api/employees`;
             method = "POST";
-            baseCost = 400;
+            baseCost = 40;
         } else if (action === 'UPDATE_EMPLOYEE' && safeEmployeeId) {
             url = `https://api.rippling.com/platform/api/employees/${safeEmployeeId}`;
             method = "PUT";
-            baseCost = 300;
+            baseCost = 30;
         } else if (action === 'TERMINATE_EMPLOYEE' && safeEmployeeId) {
             url = `https://api.rippling.com/platform/api/employees/${safeEmployeeId}/terminate`;
             method = "POST";
-            baseCost = 500;
+            baseCost = 50;
         } else {
-            return { error: `Missing parameters or unsupported Rippling action: ${action}`, additionalCreditsUsed: -10 };
+            return { error: `Missing parameters or unsupported Rippling action: ${action}` };
         }
 
         const fetchOptions: RequestInit = { method, headers, signal: AbortSignal.timeout(TIMEOUT_MS) };
@@ -112,33 +133,42 @@ export const executeRippling = async ({
         const response = await fetch(url, fetchOptions);
         if (!response.ok) throw new Error(`Rippling HTTP ${response.status}: ${await response.text()}`);
         
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = projectRecord(rawData);
 
-        // Telemetry Logging for reads to avoid context bloat
         if (action === 'GET_EMPLOYEE') {
             const bucketName = getMediaBucketName(env);
             const fileName = `hr-reports/rippling-${safeEmployeeId}-${Date.now()}.json`;
             
             await clients.s3.send(new PutObjectCommand({
                 Bucket: bucketName, Key: fileName,
-                Body: JSON.stringify(data, null, 2), ContentType: "application/json"
+                Body: JSON.stringify(rawData, null, 2), ContentType: "application/json"
             }));
 
             const fileUrl = `https://${bucketName}.s3.amazonaws.com/${fileName}`;
             await recordRAGArtifact(profile, { userId: cognitoUserId, id: sessionId }, fileUrl, 'DOCUMENT', clients.dynamodb, env.RAG_ARTIFACTS_TABLE_NAME);
             citations.push({ type: 'asset', uri: fileUrl });
 
-            return { status: "Success", data, reportUrl: fileUrl, additionalCreditsUsed: -baseCost };
+            return { 
+                status: "Success", 
+                data, 
+                reportUrl: fileUrl, 
+                billingMetrics: { action: `RIPPLING_${action}`, creditsToDeduct: baseCost } 
+            };
         }
 
-        return { status: "Success", action, data, additionalCreditsUsed: -baseCost };
+        return { 
+            status: "Success", 
+            action, 
+            data, 
+            billingMetrics: { action: `RIPPLING_${action}`, creditsToDeduct: baseCost } 
+        };
 
     } catch (err: any) { 
         console.error("[Rippling Vanguard Error]:", err);
-        return { error: `Rippling Error: ${err.message}`, additionalCreditsUsed: -50 }; 
+        return { error: `Rippling Error: ${err.message}` }; 
     }
 };
-
 
 export const executeBambooHR = async ({ 
     toolInput, 
@@ -156,8 +186,7 @@ export const executeBambooHR = async ({
     
     if (!BAMBOO_API_KEY || !BAMBOO_SUBDOMAIN) {
         return { 
-            error: "Missing BambooHR credentials. You MUST call 'request_secure_credentials' with serviceName 'bamboohr'.",
-            additionalCreditsUsed: -10 
+            error: "Missing BambooHR credentials. You MUST call 'request_secure_credentials' with serviceName 'bamboohr'."
         };
     } 
 
@@ -203,7 +232,6 @@ export const executeBambooHR = async ({
                 directory: finalDirectory 
             };
 
-            // Telemetry & RAG
             const bucketName = getMediaBucketName(env);
             const fileName = `hr-reports/bamboo-dir-${Date.now()}.json`;
             await clients.s3.send(new PutObjectCommand({
@@ -215,7 +243,11 @@ export const executeBambooHR = async ({
             await recordRAGArtifact(profile, { userId: cognitoUserId, id: sessionId }, fileUrl, 'DOCUMENT', clients.dynamodb, env.RAG_ARTIFACTS_TABLE_NAME);
             citations.push({ type: 'asset', uri: fileUrl });
 
-            return { ...resultSummary, reportUrl: fileUrl, additionalCreditsUsed: -150 };
+            return { 
+                ...resultSummary, 
+                reportUrl: fileUrl, 
+                billingMetrics: { action: "BAMBOOHR_GET_DIRECTORY", creditsToDeduct: 15 } 
+            };
         } 
         
         else if (action === 'GET_TIME_OFF') {
@@ -226,10 +258,14 @@ export const executeBambooHR = async ({
             if (!response.ok) throw new Error(`BambooHR HTTP ${response.status}`);
             
             const rawRequests = await response.json();
-            const requests = (Array.isArray(rawRequests) ? rawRequests : []).slice(0, MAX_RECORD_LIMIT);
+            const requests = slimAndProjectRecords(Array.isArray(rawRequests) ? rawRequests : [], MAX_RECORD_LIMIT);
 
             return { 
-                status: "Success", totalFound: rawRequests.length, returnedCount: requests.length, requests, additionalCreditsUsed: -100 
+                status: "Success", 
+                totalFound: rawRequests.length, 
+                returnedCount: requests.length, 
+                requests, 
+                billingMetrics: { action: "BAMBOOHR_GET_TIME_OFF", creditsToDeduct: 10 } 
             };
         }
         
@@ -240,13 +276,17 @@ export const executeBambooHR = async ({
             });
             if (!response.ok) throw new Error(`BambooHR HTTP ${response.status}`);
 
-            return { status: "Success", message: `Time off request ${requestId} marked as ${status}.`, additionalCreditsUsed: -250 };
+            return { 
+                status: "Success", 
+                message: `Time off request ${requestId} marked as ${status}.`, 
+                billingMetrics: { action: "BAMBOOHR_APPROVE_TIME_OFF", creditsToDeduct: 25 } 
+            };
         }
 
-        return { error: `Missing parameters or unsupported BambooHR action: ${action}`, additionalCreditsUsed: -10 };
+        return { error: `Missing parameters or unsupported BambooHR action: ${action}` };
 
     } catch (err: any) { 
         console.error("[BambooHR Vanguard Error]:", err);
-        return { error: `BambooHR Error: ${err.message}`, additionalCreditsUsed: -50 }; 
+        return { error: `BambooHR Error: ${err.message}` }; 
     }
 };

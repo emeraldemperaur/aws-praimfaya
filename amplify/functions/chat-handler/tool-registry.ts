@@ -1574,7 +1574,7 @@ export const NATIVE_TOOLS_REGISTRY = [
     {
         toolSpec: {
             name: 'vanguard_notification_agent',
-            description: "Platform notification service utilizing AWS SNS and AWS End User Messaging. Dispatches asynchronous SMS, RCS, or WhatsApp messages to users. Can be used to alert users of completed agentic tasks, critical system errors, or generated reports.",
+            description: "Platform notification service utilizing AWS SNS, AWS End User Messaging, and AWS SES. Dispatches asynchronous SMS, RCS, WhatsApp, or Email messages to users. Can be used to alert users of completed agentic tasks, critical system errors, or generated reports.",
             inputSchema: {
                 json: {
                     type: "object",
@@ -1586,8 +1586,8 @@ export const NATIVE_TOOLS_REGISTRY = [
                         },
                         channel: { 
                             type: "string", 
-                            enum: ["SMS", "RCS", "WHATSAPP"],
-                            description: "The delivery channel. 'RCS' includes automatic SMS fallback. Defaults to 'SMS'."
+                            enum: ["SMS", "RCS", "WHATSAPP", "EMAIL"], // <-- Added EMAIL
+                            description: "The delivery channel. 'RCS' includes automatic SMS fallback. 'EMAIL' routes via AWS SES. Defaults to 'SMS'."
                         },
                         message: { 
                             type: "string", 
@@ -1595,7 +1595,11 @@ export const NATIVE_TOOLS_REGISTRY = [
                         },
                         destinationNumber: { 
                             type: "string", 
-                            description: "The E.164 formatted phone number (e.g., '+1234567890'). If omitted, the system will automatically query the database for the active user's profile phone number."
+                            description: "The E.164 formatted phone number (e.g., '+1234567890'). If omitted for SMS/RCS/WHATSAPP, queries active user profile."
+                        },
+                        destinationEmail: { 
+                            type: "string", 
+                            description: "Optional recipient email address for EMAIL channel. If omitted, queries active user profile."
                         }
                     },
                     required: ["action", "message"]
@@ -1603,6 +1607,128 @@ export const NATIVE_TOOLS_REGISTRY = [
             }
         }
     },
+    {
+        toolSpec: {
+            name: 'data_visualization_agent',
+            description: "Enterprise Data Visualization engine powered by D3.js. Parses datasets, determines optimal chart types, and generates rich interactive HTML dashboards or exportable PDF reports with Rehoboam styling.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["GENERATE_DASHBOARD"],
+                            description: "The execution action."
+                        },
+                        outputFormat: {
+                            type: "string",
+                            enum: ["HTML_DASHBOARD", "PDF_REPORT"],
+                            description: "The target output medium. 'HTML_DASHBOARD' produces an interactive dark-mode web application. 'PDF_REPORT' generates a print-ready vector PDF document with structured page breaks."
+                        },
+                        dashboardTitle: { 
+                            type: "string", 
+                            description: "The overarching title of the report or dashboard."
+                        },
+                        dashboardDescription: { 
+                            type: "string", 
+                            description: "A summary explaining the divergence, analysis, or trends."
+                        },
+                        charts: {
+                            type: "array",
+                            description: "Array of charts to render in the visualization.",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    chartType: { type: "string", description: "The D3 chart type chosen." },
+                                    title: { type: "string", description: "Title of the specific chart." },
+                                    dataUrl: { type: "string", description: "Optional HTTP URL to fetch the dataset (JSON/CSV)." },
+                                    rawData: { type: "array", description: "Optional raw JSON array of data." },
+                                    d3Script: { type: "string", description: "The valid D3.v7 JavaScript rendering logic." }
+                                },
+                                required: ["chartType", "title", "d3Script"]
+                            }
+                        }
+                    },
+                    required: ["action", "outputFormat", "dashboardTitle", "charts"]
+                }
+            }
+        }
+    },
+    {
+        toolSpec: {
+            name: "onevest_wealth_agent",
+            description: "Enterprise Wealth-as-a-Service integration for OneVest. Handles automated custodian onboarding, real-time portfolio data streaming, programmatic funding (contributions, rollovers, cash checks), and executing compliance/document workflows.",
+            inputSchema: {
+                json: {
+                    type: "object",
+                    properties: {
+                        action: { 
+                            type: "string", 
+                            enum: ["GET_CLIENTS", "GET_PORTFOLIO", "ONBOARD_CLIENT", "PROCESS_FUNDS", "EXECUTE_WORKFLOW"],
+                            description: "The wealth management operation to perform."
+                        },
+                        clientId: { 
+                            type: "string", 
+                            description: "The unique identifier of the client." 
+                        },
+                        portfolioId: { 
+                            type: "string", 
+                            description: "The unique identifier of the portfolio account." 
+                        },
+                        amount: { 
+                            type: "number", 
+                            description: "Monetary amount for funding operations." 
+                        },
+                        currency: { 
+                            type: "string", 
+                            description: "Currency code (e.g. USD, CAD)." 
+                        },
+                        fundType: { 
+                            type: "string", 
+                            enum: ["CONTRIBUTION", "ROLLOVER", "CASH_CHECK"],
+                            description: "Type of financial transaction being executed." 
+                        },
+                        payload: { 
+                            type: "string", 
+                            description: "JSON string containing onboarding KYC data, transaction metadata, or workflow parameters." 
+                        }
+                    },
+                    required: ["action"]
+                }
+            }
+        }
+    },
+    {
+    toolSpec: {
+        name: "generate_luma_long_form_video",
+        description: "Produces long-form, Hollywood-grade video content (up to 30 minutes) with continuous voiceover narration and cinematic scene generation. Dispatches a long-running async background job. Do NOT use for short clips under 1 minute.",
+        inputSchema: {
+            json: {
+                type: "object",
+                properties: {
+                    topic: { 
+                        type: "string", 
+                        description: "The overarching subject, script outline, or storyline to generate." 
+                    },
+                    durationMinutes: { 
+                        type: "number", 
+                        description: "Desired length in minutes (maximum 30)." 
+                    },
+                    style: { 
+                        type: "string", 
+                        description: "Visual aesthetic (e.g., 'photorealistic documentary', 'anime', 'cinematic sci-fi')." 
+                    },
+                    voiceId: { 
+                        type: "string", 
+                        description: "Polly voice actor (e.g., 'Matthew', 'Danielle', 'Stephen').",
+                        default: "Matthew"
+                    }
+                },
+                required: ["topic", "durationMinutes"]
+                }
+                    }
+                }
+    }
     
 ];
 

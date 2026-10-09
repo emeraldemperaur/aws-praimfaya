@@ -21,7 +21,6 @@ const CORPORATE_CSS = `
     @media print { body { padding: 0; } }
 `;
 
-
 function parseS3Location(fileUrl: string): { bucket: string; key: string } {
     if (fileUrl.startsWith('s3://')) {
         const uriParts = fileUrl.replace('s3://', '').split('/');
@@ -107,7 +106,8 @@ export const executeGenerateDocument = async ({ toolInput, profile, sessionId, c
         return { 
             status: "Success", 
             downloadUrl: presignedUrl, 
-            message: `Document saved securely as ${safeFormat.toUpperCase()}. Provide the downloadUrl to the user.` 
+            message: `Document saved securely as ${safeFormat.toUpperCase()}. Provide the downloadUrl to the user.`,
+            billingMetrics: { action: "GENERATE_DOCUMENT", creditsToDeduct: 15 } 
         };
 
     } catch (err: any) {
@@ -129,16 +129,11 @@ export const executeExtractPdf = async ({ toolInput, clients }: ToolExecutionCon
         if (fileUrl.includes('.s3.') || fileUrl.startsWith('s3://') || fileUrl.includes('amazonaws.com')) {
             const { bucket, key } = parseS3Location(fileUrl);
 
-            const s3Res = await activeS3.send(new GetObjectCommand({
-                Bucket: bucket,
-                Key: key
-            }));
-            
+            const s3Res = await activeS3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
             const byteArr = await s3Res.Body?.transformToByteArray();
             if (!byteArr) throw new Error("Empty S3 object received.");
             pdfBuffer = Buffer.from(byteArr);
         } else {
-            // Hardened external HTTP download with timeout and size cap
             const res = await axios.get(fileUrl, { 
                 responseType: 'arraybuffer',
                 timeout: TIMEOUT_MS,
@@ -164,7 +159,8 @@ export const executeExtractPdf = async ({ toolInput, clients }: ToolExecutionCon
                 author: parsedData.info?.Author || "Unknown",
                 pagesExtracted: parsedData.numpages,
             },
-            extractedText: cleanText.substring(0, 100000) 
+            extractedText: cleanText.substring(0, 100000),
+            billingMetrics: { action: "EXTRACT_PDF", creditsToDeduct: 20 }
         };
 
     } catch (parseErr: any) {

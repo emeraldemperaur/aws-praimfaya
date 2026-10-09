@@ -15,7 +15,6 @@ const safeJsonObject = (data: any, fallback: any = {}): Record<string, any> => {
     }
 };
 
-
 const simplifyJsonApiArray = (items: any[]): any[] => {
     if (!Array.isArray(items)) return [];
     return items.slice(0, MAX_RECORD_LIMIT).map((item: any) => ({
@@ -41,10 +40,13 @@ export const executeButterflyMX = async ({ toolInput, ephemeralSecrets }: ToolEx
         const { action, buildingId, tenantId, deviceId, virtualKeyId, virtualKeyData, tenantData } = toolInput;
         const baseUrl = `https://api.butterflymx.com/v3`;
 
+        const isWrite = ['OPEN_DOOR', 'CREATE_VIRTUAL_KEY', 'REVOKE_VIRTUAL_KEY', 'UPDATE_TENANT'].includes(action);
+        const baseCost = { action: `BUTTERFLY_${action}`, creditsToDeduct: isWrite ? 15 : 5 };
+
         if (action === 'GET_BUILDINGS') {
             const res = await axios.get(`${baseUrl}/buildings`, { headers, timeout: TIMEOUT_MS });
             const buildings = simplifyJsonApiArray(res.data?.data);
-            return { status: "Success", count: buildings.length, buildings };
+            return { status: "Success", count: buildings.length, buildings, billingMetrics: baseCost };
         } 
         else if (action === 'GET_TENANTS' && buildingId) {
             const safeBldgId = encodeURIComponent(buildingId);
@@ -52,69 +54,57 @@ export const executeButterflyMX = async ({ toolInput, ephemeralSecrets }: ToolEx
             const rawTenants = Array.isArray(res.data?.data) ? res.data.data : [];
             const tenants = simplifyJsonApiArray(rawTenants);
 
-            return { status: "Success", totalFound: rawTenants.length, returnedCount: tenants.length, tenants };
+            return { status: "Success", totalFound: rawTenants.length, returnedCount: tenants.length, tenants, billingMetrics: baseCost };
         } 
         else if (action === 'GET_DEVICES' && buildingId) {
             const safeBldgId = encodeURIComponent(buildingId);
             const res = await axios.get(`${baseUrl}/buildings/${safeBldgId}/devices`, { headers, timeout: TIMEOUT_MS });
             const devices = simplifyJsonApiArray(res.data?.data);
 
-            return { status: "Success", count: devices.length, devices };
+            return { status: "Success", count: devices.length, devices, billingMetrics: baseCost };
         }
         else if (action === 'GET_ACCESS_LOGS' && buildingId) {
             const safeBldgId = encodeURIComponent(buildingId);
             const res = await axios.get(`${baseUrl}/buildings/${safeBldgId}/access_logs?page[limit]=${MAX_RECORD_LIMIT}`, { headers, timeout: TIMEOUT_MS });
             const logs = simplifyJsonApiArray(res.data?.data);
 
-            return { status: "Success", count: logs.length, logs };
+            return { status: "Success", count: logs.length, logs, billingMetrics: baseCost };
         } 
         else if (action === 'GET_MY_ACCESS_LOGS' && tenantId) {
             const safeTenantId = encodeURIComponent(tenantId);
             const res = await axios.get(`${baseUrl}/tenants/${safeTenantId}/access_logs?page[limit]=10`, { headers, timeout: TIMEOUT_MS });
             const logs = simplifyJsonApiArray(res.data?.data);
 
-            return { status: "Success", count: logs.length, logs };
+            return { status: "Success", count: logs.length, logs, billingMetrics: baseCost };
         }
         else if (action === 'OPEN_DOOR' && deviceId) {
             const safeDeviceId = encodeURIComponent(deviceId);
             const res = await axios.post(`${baseUrl}/devices/${safeDeviceId}/open`, {}, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", message: "Door release command sent successfully.", data: res.data };
+            return { status: "Success", message: "Door release command sent successfully.", data: res.data, billingMetrics: baseCost };
         } 
         else if (action === 'CREATE_VIRTUAL_KEY' && buildingId && virtualKeyData) {
             const safeBldgId = encodeURIComponent(buildingId);
             const parsedData = safeJsonObject(virtualKeyData);
-            
-            if (Object.keys(parsedData).length === 0) {
-                return { error: "Invalid or empty JSON provided in virtualKeyData." };
-            }
+            if (Object.keys(parsedData).length === 0) return { error: "Invalid JSON provided in virtualKeyData." };
 
             const payload = { data: { type: "virtual_keys", attributes: parsedData } };
             const res = await axios.post(`${baseUrl}/buildings/${safeBldgId}/virtual_keys`, payload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", virtualKey: res.data?.data };
+            return { status: "Success", virtualKey: res.data?.data, billingMetrics: baseCost };
         }
         else if (action === 'REVOKE_VIRTUAL_KEY' && buildingId && virtualKeyId) {
             const safeBldgId = encodeURIComponent(buildingId);
             const safeKeyId = encodeURIComponent(virtualKeyId);
             await axios.delete(`${baseUrl}/buildings/${safeBldgId}/virtual_keys/${safeKeyId}`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", message: `Virtual key ${virtualKeyId} revoked successfully.` };
+            return { status: "Success", message: `Virtual key ${virtualKeyId} revoked successfully.`, billingMetrics: baseCost };
         }
         else if (action === 'UPDATE_TENANT' && tenantId && tenantData) {
             const safeTenantId = encodeURIComponent(tenantId);
             const parsedData = safeJsonObject(tenantData);
-            
-            if (Object.keys(parsedData).length === 0) {
-                return { error: "Invalid or empty JSON provided in tenantData." };
-            }
+            if (Object.keys(parsedData).length === 0) return { error: "Invalid JSON provided in tenantData." };
 
-            const payload = { 
-                data: { 
-                    type: "tenants", 
-                    id: tenantId, 
-                    attributes: parsedData 
-                } 
-            };
+            const payload = { data: { type: "tenants", id: tenantId, attributes: parsedData } };
             const res = await axios.patch(`${baseUrl}/tenants/${safeTenantId}`, payload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", message: "Tenant preferences updated.", tenant: res.data?.data };
+            return { status: "Success", message: "Tenant preferences updated.", tenant: res.data?.data, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters or unsupported ButterflyMX action: ${action}` };
@@ -141,13 +131,14 @@ export const executeYardi = async ({ toolInput, ephemeralSecrets, env }: ToolExe
         if (YARDI_PROPERTY_ID) headers['X-Yardi-Property-Id'] = YARDI_PROPERTY_ID;
 
         const { action, mcpToolName, mcpArguments } = toolInput;
+        const baseCost = { action: `YARDI_${action}`, creditsToDeduct: action === 'LIST_YARDI_TOOLS' ? 5 : 15 };
         
         if (action === 'LIST_YARDI_TOOLS') {
             const res = await axios.get(`${YARDI_MCP_URL}/tools/list`, { headers, timeout: TIMEOUT_MS });
             const rawTools = Array.isArray(res.data?.tools) ? res.data.tools : [];
             const availableTools = rawTools.slice(0, MAX_RECORD_LIMIT);
 
-            return { status: "Success", totalTools: rawTools.length, availableTools };
+            return { status: "Success", totalTools: rawTools.length, availableTools, billingMetrics: baseCost };
         }
         else if (action === 'CALL_YARDI_TOOL' && mcpToolName) {
             const parsedArgs = safeJsonObject(mcpArguments);
@@ -166,7 +157,7 @@ export const executeYardi = async ({ toolInput, ephemeralSecrets, env }: ToolExe
                 };
             }
 
-            return { status: "Success", data };
+            return { status: "Success", data, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters or unsupported Yardi action: ${action}` };

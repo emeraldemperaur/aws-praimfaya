@@ -6,7 +6,8 @@ const CDO_API_BASE = 'https://www.ncdc.noaa.gov/cdo-web/api/v2';
 const NWPS_API_BASE = 'https://api.water.noaa.gov/nwps/v1';
 
 const TIMEOUT_MS = 15000;
-const MAX_CLIMATE_RECORDS_RETURNED = 100;
+const MAX_CLIMATE_RECORDS_RETURNED = 50;
+const MAX_ALERTS = 20;
 
 const formatAxiosError = (err: any): string => {
     if (err.response?.data) {
@@ -35,6 +36,7 @@ export const executeNoaaWeather = async ({ toolInput, ephemeralSecrets }: ToolEx
 
     try {
         const { action, latitude, longitude, datasetId, stationId, startDate, endDate } = toolInput;
+        const baseCost = { action: `NOAA_${action}`, creditsToDeduct: 5 };
 
         if (action === 'GET_FORECAST') {
             if (!isValidCoordinate(latitude, longitude)) {
@@ -60,7 +62,6 @@ export const executeNoaaWeather = async ({ toolInput, ephemeralSecrets }: ToolEx
             });
 
             const rawPeriods = forecastRes.data?.properties?.periods || [];
-
             const slimmedForecast = rawPeriods.slice(0, 7).map((p: any) => ({
                 name: p.name,
                 temperature: p.temperature,
@@ -75,7 +76,8 @@ export const executeNoaaWeather = async ({ toolInput, ephemeralSecrets }: ToolEx
                 status: "Success",
                 coordinates: { latitude: Number(cleanLat), longitude: Number(cleanLon) },
                 elevation: forecastRes.data?.properties?.elevation?.value || null,
-                forecast: slimmedForecast
+                forecast: slimmedForecast,
+                billingMetrics: baseCost
             };
         }
 
@@ -94,8 +96,9 @@ export const executeNoaaWeather = async ({ toolInput, ephemeralSecrets }: ToolEx
             });
 
             const rawFeatures = alertsRes.data?.features || [];
-
-            const slimmedAlerts = rawFeatures.map((f: any) => ({
+            
+            // Limit unbounded arrays to prevent context window crash during widespread storms
+            const slimmedAlerts = rawFeatures.slice(0, MAX_ALERTS).map((f: any) => ({
                 id: f.properties?.id,
                 event: f.properties?.event,
                 headline: f.properties?.headline,
@@ -110,8 +113,10 @@ export const executeNoaaWeather = async ({ toolInput, ephemeralSecrets }: ToolEx
 
             return {
                 status: "Success",
-                activeAlertsCount: slimmedAlerts.length,
-                alerts: slimmedAlerts
+                activeAlertsCount: rawFeatures.length,
+                returnedCount: slimmedAlerts.length,
+                alerts: slimmedAlerts,
+                billingMetrics: baseCost
             };
         }
 
@@ -136,7 +141,6 @@ export const executeNoaaWeather = async ({ toolInput, ephemeralSecrets }: ToolEx
             });
 
             const rawResults = climateRes.data?.results || [];
-
             const slimmedClimateData = rawResults.map((r: any) => ({
                 date: r.date,
                 datatype: r.datatype,
@@ -150,7 +154,8 @@ export const executeNoaaWeather = async ({ toolInput, ephemeralSecrets }: ToolEx
                 stationId,
                 recordCountReturned: slimmedClimateData.length,
                 totalAvailableRecords: climateRes.data?.metadata?.resultset?.count || slimmedClimateData.length,
-                climateData: slimmedClimateData
+                climateData: slimmedClimateData,
+                billingMetrics: baseCost
             };
         }
 
@@ -176,7 +181,8 @@ export const executeNoaaWeather = async ({ toolInput, ephemeralSecrets }: ToolEx
                     stageUnit: data.status?.observed?.primaryUnit || null,
                     floodStage: data.flood?.stages?.flood || null,
                     actionStage: data.flood?.stages?.action || null
-                }
+                },
+                billingMetrics: baseCost
             };
         }
 

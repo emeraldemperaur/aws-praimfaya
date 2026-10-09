@@ -1,0 +1,139 @@
+{
+  "Comment": "Vanguard Long-Form Video Engine - Scripting, Parallel Luma Rendering, and MediaConvert Stitching",
+  "StartAt": "AgentWritesScriptAndScenes",
+  "States": {
+    "AgentWritesScriptAndScenes": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Comment": "Lambda uses Amazon Nova to write a continuous script and split it into an array of 5-second Luma Ray prompts.",
+      "Parameters": {
+        "FunctionName": "SCRIPT_WRITER_LAMBDA_ARN",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.ScriptData",
+      "Next": "ParallelMediaGeneration"
+    },
+    "ParallelMediaGeneration": {
+      "Type": "Parallel",
+      "ResultPath": "$.MediaResults",
+      "Branches": [
+        {
+          "StartAt": "StartPollyMasterAudio",
+          "States": {
+            "StartPollyMasterAudio": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:polly:startSpeechSynthesisTask",
+              "Comment": "Async Polly job for long-form text -> S3",
+              "Parameters": {
+                "Engine": "generative",
+                "OutputFormat": "mp3",
+                "Text.$": "$.ScriptData.Payload.FullScriptText",
+                "VoiceId.$": "$.voiceId",
+                "OutputS3BucketName.$": "$.outputBucket",
+                "OutputS3KeyPrefix": "audio-renders/long-form-"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "DistributedLumaSceneRenderer",
+          "States": {
+            "DistributedLumaSceneRenderer": {
+              "Type": "Map",
+              "Comment": "Fans out up to 360 Luma Ray scenes concurrently",
+              "ItemReader": {
+                "Resource": "arn:aws:states:::s3:getObject",
+                "ReaderConfig": {
+                  "InputType": "JSON"
+                },
+                "ItemLocation": {
+                  "Bucket.$": "$.outputBucket",
+                  "Key.$": "$.ScriptData.Payload.SceneArrayS3Key"
+                }
+              },
+              "ItemProcessor": {
+                "ProcessorConfig": {
+                  "Mode": "DISTRIBUTED",
+                  "ExecutionType": "STANDARD"
+                },
+                "StartAt": "StartLumaRayVideo",
+                "States": {
+                  "StartLumaRayVideo": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::aws-sdk:bedrockruntime:startAsyncInvoke",
+                    "Parameters": {
+                      "ModelId": "luma.ray-v2:0",
+                      "ModelInput": {
+                        "prompt.$": "$.Item.prompt",
+                        "aspect_ratio": "16:9"
+                      },
+                      "OutputDataConfig": {
+                        "S3OutputDataConfig": {
+                          "S3Uri.$": "States.Format('s3://{}/video-renders/scenes/{}', $.outputBucket, $.Item.sceneId)"
+                        }
+                      }
+                    },
+                    "End": true
+                  }
+                }
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "WaitForAsyncBedrockCompletion"
+    },
+    "WaitForAsyncBedrockCompletion": {
+      "Type": "Wait",
+      "Seconds": 180,
+      "Comment": "Allow time for Luma and Polly async queues to clear. Usually handled via EventBridge callbacks in prod.",
+      "Next": "StitchWithMediaConvert"
+    },
+    "StitchWithMediaConvert": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:mediaconvert:createJob",
+      "Comment": "AWS Elemental MediaConvert appends all 5s clips chronologically and layers the Polly master audio track.",
+      "Parameters": {
+        "Role": "MEDIACONVERT_ROLE_ARN",
+        "Settings": {
+          "Inputs.$": "$.ScriptData.Payload.MediaConvertInputArray",
+          "OutputGroups": [
+            {
+              "Name": "File Group",
+              "OutputGroupSettings": {
+                "Type": "FILE_GROUP_SETTINGS",
+                "FileGroupSettings": {
+                  "Destination.$": "States.Format('s3://{}/vanguard-master-outputs/movie', $.outputBucket)"
+                }
+              },
+              "Outputs": [
+                {
+                  "ContainerSettings": { "Container": "MP4" },
+                  "VideoDescription": { "CodecSettings": { "Codec": "H_264" } },
+                  "AudioDescriptions": [
+                    {
+                      "AudioSourceName": "Audio Selector 1",
+                      "CodecSettings": { "Codec": "AAC" }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "Next": "LogToRAGAndNotify"
+    },
+    "LogToRAGAndNotify": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "SNS_TOPIC_ARN",
+        "Message.$": "States.Format('Your {}-minute Vanguard AI cinematic video is ready for download.', $.targetDurationMinutes)"
+      },
+      "End": true
+    }
+  }
+}

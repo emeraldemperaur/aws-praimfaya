@@ -110,6 +110,40 @@ const EphemeralCredentialsModal: React.FC<EphemeralCredentialsModalProps> = ({
 
         <form onSubmit={onSubmit}>
           
+          {activeAuthPrompt === 'onevest' && (
+            <>
+              <input 
+                type="url" 
+                placeholder="OneVest API Base URL (Optional, defaults to https://api.onevest.com/v1)" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, onevestApiUrl: e.target.value })} 
+                style={inputStyle} 
+              />
+              <input 
+                type="text" 
+                placeholder="OneVest Firm ID (X-Firm-ID)" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, onevestFirmId: e.target.value })} 
+                required 
+                style={inputStyle} 
+              />
+              <SecretInput 
+                placeholder="OneVest Bearer Token" 
+                onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, onevestToken: e.target.value })} 
+                required 
+                style={inputStyle} 
+                darkMode={darkMode} 
+              />
+            </>
+          )}
+
+          {activeAuthPrompt === 'custom_mcp' && (
+            <textarea
+              placeholder='Custom Headers (JSON)&#10;{&#10;  "Authorization": "Bearer TOKEN",&#10;  "X-Custom-Auth": "KEY"&#10;}'
+              onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, customMcpHeaders: e.target.value })}
+              required
+              style={{ ...inputStyle, height: '120px', resize: 'vertical' }}
+            />
+          )}
+
           {activeAuthPrompt === 'airtable' && (
             <SecretInput placeholder="Airtable API Key / PAT" onChange={e => setEphemeralSecrets({ ...ephemeralSecrets, airtableApiKey: e.target.value })} required style={inputStyle} darkMode={darkMode} />
           )}

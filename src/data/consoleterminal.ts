@@ -125,4 +125,9 @@ export interface EphemeralSecrets {
   epicAccessToken?:string;
   squareEnvironment?:string;
   squareAccessToken?:string;
+  onevestApiUrl?:string;
+  onevestFirmId?:string;
+  onevestToken?:string;
+  customMcpHeaders?:string;
+
 }

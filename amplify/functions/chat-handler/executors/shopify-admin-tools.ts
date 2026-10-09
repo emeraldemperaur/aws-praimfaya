@@ -3,7 +3,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { ToolExecutionContext } from "./types";
 
 const DEFAULT_SHOPIFY_API_VERSION = "2026-07";
-const MAX_QUERY_LIMIT = 250; 
+const MAX_QUERY_LIMIT = 50;
 
 interface ShopifyRequestOptions {
     shopDomain: string;
@@ -129,13 +129,12 @@ export const executeShopifyAdminAgent = async ({
 
         if (!shopDomain || !accessToken) {
             return {
-                error: "Authentication Error: Missing Shopify Domain or Access Token. Provide credentials in ephemeral memory or environment context.",
-                additionalCreditsUsed: -10
+                error: "Authentication Error: Missing Shopify Domain or Access Token. Provide credentials in ephemeral memory or environment context."
             };
         }
 
         if (action === "GET_FINANCIAL_INSIGHTS") {
-            const baseCredits = 400;
+            const baseCredits = 40;
 
             const dateThreshold = new Date();
             dateThreshold.setDate(dateThreshold.getDate() - timeframeDays);
@@ -252,21 +251,20 @@ export const executeShopifyAdminAgent = async ({
                 action: "GET_FINANCIAL_INSIGHTS",
                 insights: insightsSummary,
                 reportUrl: fileUrl,
-                additionalCreditsUsed: -computeCreditsUsed
+                billingMetrics: { action: "SHOPIFY_FINANCIAL_INSIGHTS", creditsToDeduct: computeCreditsUsed }
             };
         }
 
         if (!endpoint) {
             return {
-                error: "Execution Error: Parameter 'endpoint' is required for EXECUTE_REST_ACTION.",
-                additionalCreditsUsed: -10
+                error: "Execution Error: Parameter 'endpoint' is required for EXECUTE_REST_ACTION."
             };
         }
 
-        let baseCost = 150;
-        if (method === "POST") baseCost = 300;
-        if (method === "PUT") baseCost = 250;
-        if (method === "DELETE") baseCost = 400;
+        let baseCost = 15;
+        if (method === "POST") baseCost = 30;
+        if (method === "PUT") baseCost = 25;
+        if (method === "DELETE") baseCost = 40;
 
         const apiResult = await callShopifyAdminAPI({
             shopDomain,
@@ -284,14 +282,13 @@ export const executeShopifyAdminAgent = async ({
             endpoint,
             method,
             result: apiResult,
-            additionalCreditsUsed: -baseCost
+            billingMetrics: { action: `SHOPIFY_${method}`, creditsToDeduct: baseCost }
         };
 
     } catch (err: any) {
         console.error("[Shopify Vanguard Agent Error]:", err);
         return {
-            error: `Shopify Execution Failed: ${err.message}`,
-            additionalCreditsUsed: -50
+            error: `Shopify Execution Failed: ${err.message}`
         };
     }
 };

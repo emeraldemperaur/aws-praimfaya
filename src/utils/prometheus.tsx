@@ -186,6 +186,31 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         costImpact: "ULTRA_COMPUTE"
     },
     {
+        toolName: "generate_luma_long_form_video",
+        publicName: "Luma Dream Studio",
+        systemPrompt: "You are the Vanguard Long-Form Video Producer. Use this tool to orchestrate the generation of cinematic, documentary, or narrative videos up to 30 minutes in length. This tool dispatches an asynchronous AWS Step Functions workflow that writes the script, renders parallel visual scenes via Luma Ray-v2, synthesizes a master voiceover via Amazon Polly, and stitches the final output using AWS Elemental MediaConvert. Do not use this tool for short media requests under 1 minute.",
+        userPrompts: [
+            {
+                promptName: "Cinematic Documentary",
+                userPrompt: "Create a {{duration_minutes}}-minute cinematic documentary about {{topic}}. Use a photorealistic style and a professional male voiceover."
+            },
+            {
+                promptName: "Corporate Training Video",
+                userPrompt: "Generate a {{duration_minutes}}-minute corporate training video about {{training_topic}}. Keep the visuals clean and corporate, and use a clear female voice for the narration."
+            },
+            {
+                promptName: "Sci-Fi Short Film",
+                userPrompt: "Produce a {{duration_minutes}}-minute sci-fi short film exploring {{storyline_concept}}. Apply a cinematic cyberpunk visual style and use a dramatic voice actor."
+            },
+            {
+                promptName: "YouTube Explainer",
+                userPrompt: "Develop an {{duration_minutes}}-minute educational YouTube explainer about {{complex_topic}}. Make the visual style engaging and animated, and use an upbeat voiceover."
+            }
+        ],
+        modelAvailability: "ALL_AGENTS",
+        costImpact: "HIGH_COMPUTE"
+    },
+    {
         toolName: "generate_powerpoint_agent",
         publicName: "Enterprise Powerpoint Creator",
         systemPrompt: "You are a Fractional Chief Operating Officer and Expert Presentation Architect. Construct dense, highly professional PowerPoint payloads. Workflow: (1) Evaluate the core objective. (2) Structurally map the narrative arc (Introduction, Body, Data/Analysis, Conclusion). (3) Write precise speaker notes for each slide. (4) Map aesthetic coordinates (x, y, w, h) for all texts, shapes, and images to ensure clean, vivid layouts. Apply fluid slide transitions, element animations, and use the appropriate corporate theme constraint.",
@@ -568,6 +593,27 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         costImpact: "MEDIUM_COMPUTE"
     },
     {
+        toolName: "data_visualization_agent",
+        publicName: "Data Visualization Engine",
+        systemPrompt: "You are the Vanguard Data Visualization Architect.\n- FORMAT SELECTION: Pay strict attention to the user's requested medium. Set 'outputFormat' to 'PDF_REPORT' if the user asks for a printable document, executive brief, or PDF artifact. Set 'outputFormat' to 'HTML_DASHBOARD' if the user requests an interactive live dashboard or web view.\n- CHART SELECTION: Discern the optimal D3.js chart type (Violin, Scatter, Hexbin, Chord, Ridgeline, Sankey, Streamgraph, etc.) for the data structure.\n- CODE RULES: Write valid D3.v7 code. Use 'containerId' for selection and 'chartData' for data binding. Apply Westworld Rehoboam styling variables: var(--reho-bg), var(--reho-danger), var(--reho-cyan), var(--reho-text). \n- CONTEXT PRESERVATION: If the user provides a link to a dataset, pass it into the `dataUrl` field to save context tokens. The backend will fetch and parse it for you.",
+        userPrompts: [
+            {
+                promptName: "Demographic Ridgeline Analysis (Dashboard)",
+                userPrompt: "Analyze the attached population distribution CSV. Generate a dashboard using a Ridgeline Chart to show the age distribution across the 5 primary sectors. Output as HTML_DASHBOARD."
+            },
+            {
+                promptName: "Network Operations Flow (PDF Report)",
+                userPrompt: "Map the server traffic data from {{server_traffic_json_endpoint_url}} using a Sankey Diagram to visualize data routing anomalies. Output as a printable PDF_REPORT."
+            },
+            {
+                promptName: "Multi-Variate Density",
+                userPrompt: "Generate a Hexbin map based on the attached geolocation data to highlight regional concentration."
+            }
+        ],
+        modelAvailability: "ALL_AGENTS",
+        costImpact: "HIGH_COMPUTE"
+    },
+    {
         toolName: "datadog_monitoring_agent",
         publicName: "Datadog Telemetry Analyst",
         systemPrompt: "You are an autonomous Datadog telemetry analyst. Formulate multi-step investigations: (1) Query logs using exact Datadog tag syntax (e.g., env:prod). (2) Correlate log anomalies with metric spikes. (3) Synthesize a root cause analysis. If muting monitors, explicitly define the 'muteScope' to prevent global silences.",
@@ -913,6 +959,31 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
         costImpact: "MEDIUM_COMPUTE"
     },
     {
+        toolName: "onevest_wealth_agent",
+        publicName: "OneVest Wealth Agent",
+        systemPrompt: "You are the Vanguard Wealth Management Integrator for OneVest. Use this tool to automate custodian onboarding, stream real-time client portfolios, and execute event-driven financial workflows. You can programmatically process funds including contributions, rollovers, and cash checks. Always ensure JSON payloads for onboarding, transactions, and workflows are strictly formatted according to the required schema.",
+        userPrompts: [
+            {
+                promptName: "Fetch Client Portfolio",
+                userPrompt: "Execute GET_PORTFOLIO for portfolio ID {{portfolio_id}} to retrieve current holdings and performance metrics. Summarize the top 3 holding allocations."
+            },
+            {
+                promptName: "Process Contribution",
+                userPrompt: "Execute PROCESS_FUNDS for client {{client_id}}. Process a 'CONTRIBUTION' of {{amount}} {{currency}} and verify the transaction success."
+            },
+            {
+                promptName: "Automated Client Onboarding",
+                userPrompt: "Execute ONBOARD_CLIENT using the provided KYC details: {{kyc_json_payload}}. Return the new client's unique identifier upon success."
+            },
+            {
+                "promptName": "Trigger Compliance Workflow",
+                "userPrompt": "Execute EXECUTE_WORKFLOW to trigger the AML compliance review workflow. Use workflow ID {{workflow_id}} and pass the client's internal ID in the payload."
+            }
+        ],
+        modelAvailability: "ALL_AGENTS",
+        costImpact: "HIGH_COMPUTE"
+    },
+    {
         toolName: "extract_pdf",
         publicName: "PDF OCR Extractor",
         systemPrompt: "You are a specialized data extraction agent. Pass the fileUrl directly to the tool. Read the resulting text critically; recognize that OCR can occasionally merge columns or lose table structures. Apply deep reasoning to reconstruct tabular/financial data accurately before providing your final analysis.",
@@ -1228,20 +1299,24 @@ export const NATIVE_TOOLS_TEMPLATES: VanguardToolTemplate[] = [
     },
     {
         toolName: "vanguard_notification_agent",
-        publicName: "Vanguard Notification Pager",
-        systemPrompt: "You are the Vanguard Notification Dispatcher. Use this tool to send out-of-band alerts to users via SMS or WhatsApp when a long-running background task finishes, or when critical anomalies are detected. If 'destinationNumber' is not provided in the user's prompt, omit it; the backend will automatically route the message to the active user's profile phone number. Keep SMS messages concise. WhatsApp messages can include standard markdown styling.",
+        publicName: "AWS Notification Service (SNS, WhatsApp & Email)",
+        systemPrompt: "You are the Vanguard AWS Notification Dispatcher. Use this tool to send out-of-band alerts via AWS SNS (SMS/RCS), AWS End User Messaging Social (WhatsApp), or AWS SES (Email) when background tasks finish or critical anomalies are detected. If 'destinationNumber' or 'destinationEmail' is omitted, the backend routes the notification to the active user's profile contact information. Keep SMS messages concise. RCS, WhatsApp, and Email support rich formatting.",
         userPrompts: [
             {
-                promptName: "Task Completion Alert",
-                userPrompt: "Once the nightly database reconciliation finishes, execute SEND_MESSAGE via the 'SMS' channel to notify me. The message should state: 'Vanguard Agent Update: Nightly database reconciliation completed successfully with {{record_count}} records processed.' Do not require my phone number; route it to my profile."
+                promptName: "Task Completion Alert (SMS/RCS)",
+                userPrompt: "Once the nightly database reconciliation completes, execute SEND_MESSAGE via the 'RCS' channel to notify me. Message: 'Vanguard Alert: Nightly database reconciliation completed with {{record_count}} records processed.' Route to my profile number."
+            },
+            {
+                promptName: "Executive Email Alert",
+                userPrompt: "Analyze {{quarterly_report_data}}. Once complete, execute SEND_MESSAGE via the 'EMAIL' channel to my profile email with an executive summary of the top 3 financial takeaways."
             },
             {
                 promptName: "WhatsApp Executive Summary",
-                userPrompt: "Analyze the {{quarterly_report_data}}. Once finished, execute SEND_MESSAGE via the 'WHATSAPP' channel to my profile number containing a bulleted executive summary of the top 3 financial takeaways."
+                userPrompt: "Analyze the {{quarterly_report_data}}. Once complete, execute SEND_MESSAGE via 'WHATSAPP' to my profile number containing a bulleted executive summary of the top 3 financial takeaways."
             },
             {
                 promptName: "External Stakeholder Alert",
-                userPrompt: "Execute SEND_MESSAGE via 'SMS' to {{stakeholder_phone_number_e.g._+15550198372}}. The message should say: 'URGENT: Server latency has exceeded SLA thresholds. Please check the Grafana dashboard immediately.'"
+                userPrompt: "Execute SEND_MESSAGE via 'SMS' to {{stakeholder_phone_number_e.g._+15550198372}}. Message: 'URGENT: Server latency has exceeded SLA thresholds. Please review the Grafana dashboard.'"
             }
         ],
         modelAvailability: "ALL_AGENTS",

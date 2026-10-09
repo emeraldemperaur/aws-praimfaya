@@ -29,7 +29,8 @@ export const schedule_future_task = async (context: any) => {
 
         return { 
             __END_CURRENT_EXECUTION__: true, 
-            message: `Task successfully scheduled for ${scheduledTimeIso} (${userTimeZone}). Agent is going to sleep.` 
+            message: `Task successfully scheduled for ${scheduledTimeIso} (${userTimeZone}). Agent is going to sleep.`,
+            billingMetrics: { action: "SCHEDULE_FUTURE_TASK", creditsToDeduct: 10 }
         };
     } catch (err: any) {
         return { error: `Failed to schedule task: ${err.message}` };

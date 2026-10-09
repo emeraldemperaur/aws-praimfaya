@@ -5,7 +5,6 @@ import { ToolExecutionContext } from './types';
 const TIMEOUT_MS = 8000; 
 const MAX_ARRAY_ITEMS = 50; 
 
-
 const safeJsonObject = (input: any, fallback: any = {}) => {
     if (!input) return fallback;
     if (typeof input === 'object' && !Array.isArray(input)) return input;
@@ -28,30 +27,22 @@ export const executeJotformAgent = async ({ toolInput, ephemeralSecrets }: ToolE
         };
     }
 
- 
-    let cleanEndpoint = (endpoint || '/user')
-        .replace(/^https?:\/\/(www\.|eu-api\.|hipaa-api\.|api\.)?jotform\.com/i, '')
-        .replace(/{(\d+)}/g, '$1');
-
+    let cleanEndpoint = (endpoint || '/user').replace(/^https?:\/\/(www\.|eu-api\.|hipaa-api\.|api\.)?jotform\.com/i, '').replace(/{(\d+)}/g, '$1');
     let inlineParams: Record<string, any> = {};
+    
     if (cleanEndpoint.includes('?')) {
         const [pathPart, queryString] = cleanEndpoint.split('?');
         cleanEndpoint = pathPart;
         const searchParams = new URLSearchParams(queryString);
-        searchParams.forEach((val, key) => {
-            inlineParams[key] = val;
-        });
+        searchParams.forEach((val, key) => { inlineParams[key] = val; });
     }
 
     cleanEndpoint = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
     const baseUrl = `https://api.jotform.com${cleanEndpoint}`;
 
-   
     const parsedPayload = safeJsonObject(payload);
-    const parsedQueryParams = {
-        ...inlineParams,
-        ...safeJsonObject(queryParams)
-    };
+    const parsedQueryParams = { ...inlineParams, ...safeJsonObject(queryParams) };
+    const baseCost = { action: `JOTFORM_${method.toUpperCase()}`, creditsToDeduct: 5 };
 
     const executeRequest = async (url: string, params: any, retryCount = 0): Promise<any> => {
         try {
@@ -59,10 +50,7 @@ export const executeJotformAgent = async ({ toolInput, ephemeralSecrets }: ToolE
                 method: method.toUpperCase(),
                 url,
                 timeout: TIMEOUT_MS, 
-                headers: {
-                    'APIKEY': apiKey, 
-                    'Accept': 'application/json'
-                }
+                headers: { 'APIKEY': apiKey, 'Accept': 'application/json' }
             };
 
             if (config.method === 'GET' || config.method === 'DELETE') {
@@ -91,7 +79,6 @@ export const executeJotformAgent = async ({ toolInput, ephemeralSecrets }: ToolE
             throw new Error(`Jotform returned code ${data.responseCode}: ${data.message}`);
         }
 
-        
         let content = data.content;
         let truncated = false;
         
@@ -105,7 +92,8 @@ export const executeJotformAgent = async ({ toolInput, ephemeralSecrets }: ToolE
             message: data.message,
             truncated,
             content,
-            limitLeft: data.limitJSON 
+            limitLeft: data.limitJSON,
+            billingMetrics: baseCost
         };
 
     } catch (error: any) {

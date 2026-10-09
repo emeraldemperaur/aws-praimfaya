@@ -37,6 +37,8 @@ import { pollBedrock } from './functions/poll-bedrock/resource';
 import { updateUserGroup } from './functions/update-user-group/resource';
 import { createPortalSession } from './functions/stripe-portal/resource';
 import { getAgentTelemetry } from './functions/get-agent-telemetry/resource';
+import { scriptWriter } from './functions/script-writer/resource';
+import { VideoOrchestration } from './custom/video-orchestration/resource';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -46,7 +48,7 @@ const backend = defineBackend({
   agentProvisioner, webhookRouter, agentReaper, chatHandler, agentWorker,
   createCheckoutSession, grantPromoCredits, stripeWebhook, multimediaExecutor,
   lexFulfillment, postCallAnalysis, foundationModelSeeder, syncKnowledgeBase, pollBedrock, 
-  updateUserGroup , createPortalSession, getAgentTelemetry
+  updateUserGroup , createPortalSession, getAgentTelemetry, scriptWriter
 });
 
 const customStack = cdk.Stack.of(backend.chatHandler.resources.lambda);
@@ -88,6 +90,7 @@ const syncKbLambda = backend.syncKnowledgeBase.resources.lambda as lambda.Functi
 const pollBedrockLambda = backend.pollBedrock.resources.lambda as lambda.Function;
 const updateUserGroupLambda = backend.updateUserGroup.resources.lambda as lambda.Function;
 const telemetryLambda = backend.getAgentTelemetry.resources.lambda as lambda.Function;
+const scriptWriterLambda = backend.scriptWriter.resources.lambda as lambda.Function;
 
 const getGlobalDecoupledPolicy = () => new iam.PolicyStatement({
   actions: [
@@ -103,7 +106,9 @@ const getGlobalDecoupledPolicy = () => new iam.PolicyStatement({
     'connect:StartOutboundVoiceContact',
     'sns:Publish',
     'sms-voice:*',
-    'social-messaging:*'
+    'social-messaging:*',
+    'ses:SendEmail', 
+    'ses:SendRawEmail'
   ],
   resources: ['*']
 });
@@ -121,6 +126,7 @@ promoLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 lexFulfillmentLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 postCallAnalysisLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 syncKbLambda.addToRolePolicy(getGlobalDecoupledPolicy());
+scriptWriterLambda.addToRolePolicy(getGlobalDecoupledPolicy());
 pollBedrockLambda.addToRolePolicy(new iam.PolicyStatement({ actions: ['bedrock:GetAsyncInvoke'], resources: ['*'] }));
 telemetryLambda.addToRolePolicy(new iam.PolicyStatement({
   actions: [
@@ -306,6 +312,7 @@ const sharedContextVars = {
   'AGENT_ACTIVITY_TABLE_NAME': backend.data.resources.tables["AgentActivity"].tableName,
   'AWS_MESSAGE_ORIGINATION_ID': process.env.AWS_MESSAGE_ORIGINATION_ID || '',
   'AWS_WHATSAPP_ORIGINATION_ID': process.env.AWS_WHATSAPP_ORIGINATION_ID || '',
+  'SES_FROM_EMAIL': process.env.SES_FROM_EMAIL || '',
 };
 
 Object.entries(sharedContextVars).forEach(([key, value]) => {
@@ -408,3 +415,20 @@ new cdk.CfnOutput(customStack, 'StripeWebhookUrl', {
   value: webhookUrl.url, 
   description: 'Copy this URL and paste it into the Stripe Webhook Dashboard' 
 });
+
+const videoEngine = new VideoOrchestration(
+  backend.createStack('VideoOrchestrationStack'), 
+  'VideoOrchestration',
+  { scriptWriterLambdaArn: scriptWriterLambda.functionArn }
+);
+
+const startExecutionPolicy = new iam.PolicyStatement({
+  actions: ['states:StartExecution'],
+  resources: [videoEngine.stateMachineArn],
+});
+
+workerLambda.addToRolePolicy(startExecutionPolicy);
+mediaLambda.addToRolePolicy(startExecutionPolicy);
+
+workerLambda.addEnvironment('LONG_FORM_VIDEO_STATE_MACHINE_ARN', videoEngine.stateMachineArn);
+mediaLambda.addEnvironment('LONG_FORM_VIDEO_STATE_MACHINE_ARN', videoEngine.stateMachineArn);

@@ -46,7 +46,8 @@ const TOOL_AUTH_MAP: Record<string, string[]> = {
     'booking_com_agent': ['bookingAffiliateId', 'bookingToken'],
     'priceline_partner_agent': ['pricelineApiKey'],
     'vrbo_property_agent': ['vrboPartnerId', 'vrboApiKey'],
-    'byo_mcp_agent': ['mcpBaseUrl', 'mcpToken'],
+    'byo_mcp_agent': ['mcpBaseUrl', 'mcpToken', 'customMcpHeaders'],
+    'onevest_wealth_agent': ['onevestFirmId', 'onevestToken', 'onevestApiUrl'],
     'alphabet_home_agent': ['googleHomeProjectId', 'googleHomeToken'],
     'alexa_agent': ['alexaToken'],
     'arduino_iot_agent': ['arduinoClientId', 'arduinoClientSecret'],
@@ -91,7 +92,6 @@ const SecretInput: React.FC<{ placeholder: string; value: string; onChange: (v: 
     );
 };
 
-// Extracted dynamic field renderer for unified inputs/selects across both Modals
 const renderDynamicInput = (field: string, value: string, onChange: (val: string) => void) => {
     const isEnv = field.toLowerCase().includes('environment');
     const isSecret = field.toLowerCase().includes('token') || field.toLowerCase().includes('secret') || field.toLowerCase().includes('password') || field.toLowerCase().includes('key');
@@ -128,6 +128,19 @@ const renderDynamicInput = (field: string, value: string, onChange: (val: string
                     </>
                 )}
             </select>
+        );
+    }
+
+    if (field === 'customMcpHeaders') {
+        return (
+            <textarea
+                className="as-input"
+                placeholder='Custom Headers (JSON)&#10;{&#10;  "Authorization": "Bearer TOKEN",&#10;  "X-Custom-Auth": "KEY"&#10;}'
+                value={value || ""}
+                onChange={(e) => onChange(e.target.value)}
+                autoComplete="off"
+                style={{ width: '100%', boxSizing: 'border-box', height: '100px', resize: 'vertical', fontFamily: 'monospace', fontSize: '0.85rem' }}
+            />
         );
     }
 
@@ -182,27 +195,17 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
     });
 
     const [integrations, setIntegrations] = useState<IntegrationsMap>({});
-
     const [isBottomModalOpen, setIsBottomModalOpen] = useState(false);
     const [selectedToolForAdd, setSelectedToolForAdd] = useState<string>('');
     const [newCredential, setNewCredential] = useState<Record<string, string>>({});
-
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingToolId, setEditingToolId] = useState<string | null>(null);
-
     const [phoneError, setPhoneError] = useState<string | null>(null);
-    const [notification, setNotification] = useState({
-        isOpen: false,
-        title: '',
-        message: '',
-        isError: false
-    });
+    const [notification, setNotification] = useState({ isOpen: false, title: '', message: '', isError: false });
 
     const showNotification = (title: string, message: string, isError = false) => {
         setNotification({ isOpen: true, title, message, isError });
-        setTimeout(() => {
-            setNotification(prev => ({ ...prev, isOpen: false }));
-        }, 4000);
+        setTimeout(() => setNotification(prev => ({ ...prev, isOpen: false })), 4000);
     };
 
     useEffect(() => {
@@ -236,7 +239,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
                                 ? JSON.parse(dbProfile.integrations) 
                                 : dbProfile.integrations;
                         } catch (parseError) {
-                            console.error("Failed to parse integrations JSON. Falling back to empty object.", parseError);
+                            console.error("Failed to parse integrations JSON.", parseError);
                         }
                     }
                     setIntegrations(parsedIntegrations);
@@ -251,7 +254,9 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
         fetchUserProfile();
     }, []);
 
-    const availableTools = NATIVE_TOOLS_TEMPLATES.filter(t => TOOL_AUTH_MAP[t.toolName]);
+    const availableTools = NATIVE_TOOLS_TEMPLATES
+    .filter(t => TOOL_AUTH_MAP[t.toolName])
+    .sort((a, b) => a.publicName.localeCompare(b.publicName));
 
     const filteredIntegrations = Object.entries(integrations).filter(([toolName]) => {
         const template = availableTools.find(t => t.toolName === toolName);
@@ -270,12 +275,10 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ searchQuery, darkMode
         if (normalizedPhone) {
             try {
                 const phoneNumber = parsePhoneNumberWithError(normalizedPhone, 'CA'); 
-                
                 if (!phoneNumber.isValid()) {
                     setPhoneError("Please enter a valid phone number.");
                     return;
                 }
-                
                 normalizedPhone = phoneNumber.format('E.164'); 
             } catch (error) {
                 setPhoneError("Invalid phone number format. Please check the number and try again.");

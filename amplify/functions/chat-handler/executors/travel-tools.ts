@@ -2,7 +2,7 @@ import axios from 'axios';
 import { ToolExecutionContext } from './types';
 
 const TIMEOUT_MS = 10000; 
-const MAX_RECORD_LIMIT = 15;
+const MAX_RECORD_LIMIT = 20;
 
 const safeJsonObject = (data: any, fallback: any = {}): Record<string, any> => {
     if (!data) return fallback;
@@ -39,12 +39,10 @@ const simplifyFlightOffers = (offers: any[]): any[] => {
     });
 };
 
-
 const simplifyPropertyDetails = (details: any): any => {
     if (!details || typeof details !== 'object') return {};
     const copy = { ...details };
     
-    // Strip large image URL arrays if present
     if (Array.isArray(copy.images)) copy.images = copy.images.slice(0, 3);
     if (Array.isArray(copy.photos)) copy.photos = copy.photos.slice(0, 3);
     if (Array.isArray(copy.amenities)) copy.amenities = copy.amenities.slice(0, 20);
@@ -68,6 +66,7 @@ export const executeBooking = async ({ toolInput, ephemeralSecrets }: ToolExecut
         };
         const { action, query, propertyId, orderId, checkIn, checkOut, adults, currency } = toolInput;
         const baseUrl = `https://demandapi.booking.com/3.2`;
+        const baseCost = { action: `BOOKING_${action}`, creditsToDeduct: 5 };
 
         if (action === 'SEARCH_PROPERTIES') {
             const curr = encodeURIComponent(currency || 'USD');
@@ -84,12 +83,12 @@ export const executeBooking = async ({ toolInput, ephemeralSecrets }: ToolExecut
             const rawProperties = Array.isArray(res.data?.results) ? res.data.results : [];
             const properties = rawProperties.slice(0, MAX_RECORD_LIMIT).map((p: any) => simplifyPropertyDetails(p));
 
-            return { status: "Success", totalFound: rawProperties.length, returnedCount: properties.length, properties };
+            return { status: "Success", totalFound: rawProperties.length, returnedCount: properties.length, properties, billingMetrics: baseCost };
         } 
         else if (action === 'GET_PROPERTY_DETAILS' && propertyId) {
             const safePropId = encodeURIComponent(propertyId);
             const res = await axios.get(`${baseUrl}/accommodations/${safePropId}/details`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", details: simplifyPropertyDetails(res.data) };
+            return { status: "Success", details: simplifyPropertyDetails(res.data), billingMetrics: baseCost };
         } 
         else if (action === 'GET_REVIEWS' && propertyId) {
             const safePropId = encodeURIComponent(propertyId);
@@ -103,12 +102,12 @@ export const executeBooking = async ({ toolInput, ephemeralSecrets }: ToolExecut
                 date: r.date
             }));
 
-            return { status: "Success", count: reviews.length, reviews };
+            return { status: "Success", count: reviews.length, reviews, billingMetrics: baseCost };
         } 
         else if (action === 'GET_ORDER_DETAILS' && orderId) {
             const safeOrderId = encodeURIComponent(orderId);
             const res = await axios.get(`${baseUrl}/orders/${safeOrderId}`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", order: res.data };
+            return { status: "Success", order: res.data, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters for Booking.com action: ${action}` };
@@ -116,7 +115,6 @@ export const executeBooking = async ({ toolInput, ephemeralSecrets }: ToolExecut
         return { error: `Booking.com Error: ${err.response?.data?.message || err.message}` }; 
     }
 };
-
 
 export const executePriceline = async ({ toolInput, ephemeralSecrets }: ToolExecutionContext) => {
     const PL_TOKEN = ephemeralSecrets.pricelineApiKey;
@@ -129,6 +127,8 @@ export const executePriceline = async ({ toolInput, ephemeralSecrets }: ToolExec
         const headers = { Authorization: `Bearer ${PL_TOKEN}`, 'Content-Type': 'application/json' };
         const { action, destination, hotelId, reservationId } = toolInput;
         const baseUrl = `https://api.pricelinepartnersolutions.com/v3`;
+        const isWrite = action === 'CANCEL_RESERVATION';
+        const baseCost = { action: `PRICELINE_${action}`, creditsToDeduct: isWrite ? 15 : 5 };
 
         if (action === 'SEARCH_HOTELS' && destination) {
             const safeDest = encodeURIComponent(destination);
@@ -136,12 +136,12 @@ export const executePriceline = async ({ toolInput, ephemeralSecrets }: ToolExec
             const rawHotels = Array.isArray(res.data?.hotels) ? res.data.hotels : [];
             const hotels = rawHotels.slice(0, MAX_RECORD_LIMIT).map((h: any) => simplifyPropertyDetails(h));
 
-            return { status: "Success", totalFound: rawHotels.length, returnedCount: hotels.length, hotels };
+            return { status: "Success", totalFound: rawHotels.length, returnedCount: hotels.length, hotels, billingMetrics: baseCost };
         } 
         else if (action === 'GET_HOTEL_DETAILS' && hotelId) {
             const safeHotelId = encodeURIComponent(hotelId);
             const res = await axios.get(`${baseUrl}/hotels/${safeHotelId}`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", details: simplifyPropertyDetails(res.data) };
+            return { status: "Success", details: simplifyPropertyDetails(res.data), billingMetrics: baseCost };
         } 
         else if (action === 'GET_REVIEWS' && hotelId) {
             const safeHotelId = encodeURIComponent(hotelId);
@@ -149,17 +149,17 @@ export const executePriceline = async ({ toolInput, ephemeralSecrets }: ToolExec
             const rawReviews = Array.isArray(res.data?.reviews) ? res.data.reviews : [];
             const reviews = rawReviews.slice(0, 10);
 
-            return { status: "Success", count: reviews.length, reviews };
+            return { status: "Success", count: reviews.length, reviews, billingMetrics: baseCost };
         } 
         else if (action === 'GET_RESERVATION' && reservationId) {
             const safeResId = encodeURIComponent(reservationId);
             const res = await axios.get(`${baseUrl}/reservations/${safeResId}`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", reservation: res.data };
+            return { status: "Success", reservation: res.data, billingMetrics: baseCost };
         } 
         else if (action === 'CANCEL_RESERVATION' && reservationId) {
             const safeResId = encodeURIComponent(reservationId);
             const res = await axios.post(`${baseUrl}/reservations/${safeResId}/cancel`, {}, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", cancellationRecord: res.data };
+            return { status: "Success", cancellationRecord: res.data, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters for Priceline action: ${action}` };
@@ -167,7 +167,6 @@ export const executePriceline = async ({ toolInput, ephemeralSecrets }: ToolExec
         return { error: `Priceline Error: ${err.response?.data?.message || err.message}` }; 
     }
 };
-
 
 export const executeVrbo = async ({ toolInput, ephemeralSecrets }: ToolExecutionContext) => {
     const VRBO_PARTNER_ID = ephemeralSecrets.vrboPartnerId;
@@ -185,22 +184,22 @@ export const executeVrbo = async ({ toolInput, ephemeralSecrets }: ToolExecution
         };
         const { action, propertyId, reservationId, payload, startDate, endDate } = toolInput;
         const baseUrl = `https://api.expediagroup.com/v1/vrbo`;
+        const isWrite = action === 'UPDATE_RATES';
+        const baseCost = { action: `VRBO_${action}`, creditsToDeduct: isWrite ? 15 : 5 };
 
         if (action === 'GET_LISTING' && propertyId) {
             const safePropId = encodeURIComponent(propertyId);
             const res = await axios.get(`${baseUrl}/properties/${safePropId}`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", listing: simplifyPropertyDetails(res.data) };
+            return { status: "Success", listing: simplifyPropertyDetails(res.data), billingMetrics: baseCost };
         } 
         else if (action === 'UPDATE_RATES' && propertyId && payload) {
             const safePropId = encodeURIComponent(propertyId);
             const parsedPayload = safeJsonObject(payload);
             
-            if (Object.keys(parsedPayload).length === 0) {
-                return { error: "Invalid or empty JSON provided in payload for rate update." };
-            }
+            if (Object.keys(parsedPayload).length === 0) return { error: "Invalid JSON provided in payload for rate update." };
 
             await axios.post(`${baseUrl}/properties/${safePropId}/rates`, parsedPayload, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", message: "Rates updated successfully." };
+            return { status: "Success", message: "Rates updated successfully.", billingMetrics: baseCost };
         } 
         else if (action === 'GET_AVAILABILITY' && propertyId && startDate && endDate) {
             const safePropId = encodeURIComponent(propertyId);
@@ -208,12 +207,12 @@ export const executeVrbo = async ({ toolInput, ephemeralSecrets }: ToolExecution
             const safeEnd = encodeURIComponent(endDate);
             const res = await axios.get(`${baseUrl}/properties/${safePropId}/availability?start=${safeStart}&end=${safeEnd}`, { headers, timeout: TIMEOUT_MS });
             
-            return { status: "Success", calendar: res.data };
+            return { status: "Success", calendar: res.data, billingMetrics: baseCost };
         } 
         else if (action === 'GET_RESERVATION' && reservationId) {
             const safeResId = encodeURIComponent(reservationId);
             const res = await axios.get(`${baseUrl}/reservations/${safeResId}`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", reservation: res.data };
+            return { status: "Success", reservation: res.data, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters for Vrbo action: ${action}` };
@@ -239,6 +238,7 @@ export const executeAmadeus = async ({ toolInput, ephemeralSecrets }: ToolExecut
         const headers = { Authorization: `Bearer ${tokenRes.data.access_token}`, 'Content-Type': 'application/json' };
         const { action, origin, destination, departureDate, returnDate, adults, flightOrderId } = toolInput;
         const baseUrl = 'https://test.api.amadeus.com/v2';
+        const baseCost = { action: `AMADEUS_${action}`, creditsToDeduct: 5 };
 
         if (action === 'SEARCH_FLIGHTS' && origin && destination && departureDate) {
             const safeOrigin = encodeURIComponent(origin);
@@ -253,12 +253,12 @@ export const executeAmadeus = async ({ toolInput, ephemeralSecrets }: ToolExecut
             const rawOffers = Array.isArray(res.data?.data) ? res.data.data : [];
             const flights = simplifyFlightOffers(rawOffers);
 
-            return { status: "Success", totalFound: rawOffers.length, returnedCount: flights.length, flights };
+            return { status: "Success", totalFound: rawOffers.length, returnedCount: flights.length, flights, billingMetrics: baseCost };
         }
         else if (action === 'GET_FLIGHT_ORDER' && flightOrderId) {
             const safeOrderId = encodeURIComponent(flightOrderId);
             const res = await axios.get(`https://test.api.amadeus.com/v1/booking/flight-orders/${safeOrderId}`, { headers, timeout: TIMEOUT_MS });
-            return { status: "Success", order: res.data?.data };
+            return { status: "Success", order: res.data?.data, billingMetrics: baseCost };
         }
 
         return { error: `Missing required parameters for Amadeus action: ${action}` };

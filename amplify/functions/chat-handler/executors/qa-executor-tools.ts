@@ -1,5 +1,5 @@
 import { ToolExecutionContext } from './types';
-import { QAExecutor, TestExecutionIntent } from './qa-executor'; // (The class from earlier)
+import { QAExecutor, TestExecutionIntent } from './qa-executor'; 
 
 export const executeVanguardQA = async ({ toolInput, ephemeralSecrets, env }: ToolExecutionContext) => {
     try {
@@ -22,18 +22,22 @@ export const executeVanguardQA = async ({ toolInput, ephemeralSecrets, env }: To
         };
 
         const report = await executor.executeTask(intent);
+        const baseCost = { action: "VANGUARD_QA_EXECUTION", creditsToDeduct: 100 }; 
+
         if (report.status === 'FAILED') {
             return { 
                 status: "Failed", 
                 message: "QA execution failed on one or more steps.", 
-                report 
+                report,
+                billingMetrics: baseCost
             };
         }
 
         return { 
             status: "Success", 
             message: `QA execution completed with status: ${report.status}`, 
-            report 
+            report,
+            billingMetrics: baseCost
         };
 
     } catch (err: any) {

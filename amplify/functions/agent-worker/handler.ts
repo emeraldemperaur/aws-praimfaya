@@ -5,7 +5,6 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { PollyClient } from "@aws-sdk/client-polly";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-
 import { CORE_SYSTEM_TOOLS, isValidUrl, NATIVE_TOOLS_REGISTRY } from "../chat-handler/tool-registry";
 import { TOOL_EXECUTORS } from "../chat-handler/executors";
 import { MODEL_CREDIT_MULTIPLIERS } from "../chat-handler/model-credit-multipliers";
@@ -390,9 +389,19 @@ export const handler = async (event: any) => {
                             };
                             
                             executionResult = await TOOL_EXECUTORS[toolUse.name](context);
-                            if (executionResult?.additionalCreditsUsed) flatToolCredits += executionResult.additionalCreditsUsed;
+                            let physicalComputeCredits = 0;
+                            if (executionResult?.additionalCreditsUsed) {
+                                physicalComputeCredits += executionResult.additionalCreditsUsed;
+                            }
+                            if (executionResult?.billingMetrics?.creditsToDeduct) {
+                                physicalComputeCredits += executionResult.billingMetrics.creditsToDeduct;
+                            }
                             
-                            await logActivity(activeSessionId, cognitoUserId, 'COMPLETED', toolUse.name, `Successfully executed [${toolUse.name}].`, targetModelId, startTime, executionResult?.additionalCreditsUsed || 0, totalInboundTokens, totalOutboundTokens);
+                            if (physicalComputeCredits > 0) {
+                                flatToolCredits += physicalComputeCredits;
+                            }
+                            
+                            await logActivity(activeSessionId, cognitoUserId, 'COMPLETED', toolUse.name, `Successfully executed [${toolUse.name}].`, targetModelId, startTime, physicalComputeCredits, totalInboundTokens, totalOutboundTokens);
 
                             if (executionResult && executionResult.__END_CURRENT_EXECUTION__) {
                                 isGoingToSleep = true;
@@ -406,7 +415,7 @@ export const handler = async (event: any) => {
                             executionResult = { error: `Tool Execution Error: ${err.message}` };
                             await logActivity(activeSessionId, cognitoUserId, 'FAILED', toolUse.name, `Tool execution failed: ${err.message}`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);
                         }
-                    } 
+                    }
                     else if (isWorkflow) {
                         const matchedWf = assignedWorkflows.find(wf => sanitizeToolName(`wf_${wf.id}`) === toolUse.name);
                         await logActivity(activeSessionId, cognitoUserId, 'RUNNING', toolUse.name, `Routing to Workflow Engine: ${matchedWf?.name || 'Unknown'}`, targetModelId, startTime, 0, totalInboundTokens, totalOutboundTokens);

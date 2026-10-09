@@ -1,6 +1,6 @@
 import { ToolExecutor } from './types';
 import { executeRippling, executeBambooHR } from './hr-tools';
-import { executeAudioGenerator, executeImageGenerator, executeLumaVideo } from './media-tools';
+import { executeAudioGenerator, executeImageGenerator, executeLongFormVideoCompiler, executeLumaVideo } from './media-tools';
 import { executePagerDuty, executeServiceNow, executeZendesk } from './ops-tools';
 import { executeGitHub, executeGitLab } from './dev-tools';
 import { executeAirflow, executeAirtable, executeSnowflake } from './data-tools';
@@ -28,6 +28,8 @@ import { executeNoaaWeather } from './noaa-tools';
 import { executeAthenahealth, executeEpicSystems } from './health-tools';
 import { executeSquareAgent } from './square-tools';
 import { executeAwsNotificationAgent } from './notifications-tools';
+import { executeD3Visualization } from './data-visualization-tools';
+import { executeOneVestAgent } from './onevest-tools';
 
 
 export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
@@ -91,4 +93,7 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
     'epic_systems_agent': executeEpicSystems,
     'athenahealth_agent': executeAthenahealth,
     'vanguard_notification_agent': executeAwsNotificationAgent,
+    'data_visualization_agent': executeD3Visualization,
+    'onevest_wealth_agent': executeOneVestAgent,
+    'generate_luma_long_form_video': executeLongFormVideoCompiler,
 };

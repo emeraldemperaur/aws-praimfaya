@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { ToolExecutionContext } from './types';
 
 const TIMEOUT_MS = 15000;
-const MAX_RESULTS = 20;
+const MAX_RESULTS = 25;
 
 const safeJsonObject = (data: any): Record<string, any> => {
     if (!data) return {};
@@ -37,18 +37,37 @@ const formatAxiosError = (err: any): string => {
     return err.message || 'Unknown network error occurred while reaching Square API.';
 };
 
+const projectRecord = (record: Record<string, any>): Record<string, any> => {
+    if (!record || typeof record !== 'object') return record;
+    const projected: Record<string, any> = {};
+    const IGNORED_KEYS = new Set(['updated_at', 'created_at', 'version', 'is_deleted', 'present_at_all_locations', 'tax_ids']);
+
+    for (const [key, value] of Object.entries(record)) {
+        if (IGNORED_KEYS.has(key) || value === null || value === undefined || value === '') continue;
+        if (typeof value === 'object' && !Array.isArray(value)) {
+            projected[key] = value.name || value.id || '[Object]';
+        } else if (Array.isArray(value)) {
+            projected[key] = `[Array (${value.length} items)]`;
+        } else {
+            projected[key] = value;
+        }
+    }
+    return projected;
+};
+
 const slimSquareResponse = (data: any, maxItems = MAX_RESULTS) => {
     if (!data || typeof data !== 'object') return data;
-    
     const slimmed = { ...data };
     
     for (const key of Object.keys(slimmed)) {
-        if (Array.isArray(slimmed[key]) && slimmed[key].length > maxItems) {
-            slimmed[key] = slimmed[key].slice(0, maxItems);
-            slimmed[`_metadata_${key}_truncated`] = `Truncated from ${data[key].length} to ${maxItems} items to save context.`;
+        if (Array.isArray(slimmed[key])) {
+            const rawArray = slimmed[key];
+            slimmed[key] = rawArray.slice(0, maxItems).map(i => projectRecord(i));
+            if (rawArray.length > maxItems) {
+                slimmed[`_metadata_${key}_truncated`] = `Truncated from ${rawArray.length} to ${maxItems} items to save context.`;
+            }
         }
     }
-    
     return slimmed;
 };
 
@@ -66,7 +85,8 @@ export const executeSquareAgent = async ({ toolInput, ephemeralSecrets }: ToolEx
 
     try {
         const { action, method = 'GET', endpoint, payload, queryParams } = toolInput;
-        
+        const baseCost = { action: `SQUARE_${action}`, creditsToDeduct: method.toUpperCase() === 'GET' ? 10 : 25 };
+
         const headers = {
             'Authorization': `Bearer ${SQUARE_ACCESS_TOKEN}`,
             'Square-Version': '2024-06-04',
@@ -82,9 +102,10 @@ export const executeSquareAgent = async ({ toolInput, ephemeralSecrets }: ToolEx
             return { 
                 status: "Success", 
                 businessSummary: {
-                    locations: locations.data?.locations || [],
+                    locations: slimSquareResponse({ locs: locations.data?.locations || [] }).locs,
                     catalogInfo: catalog.data || {}
-                }
+                },
+                billingMetrics: { action: "SQUARE_BUSINESS_SUMMARY", creditsToDeduct: 15 }
             };
         }
         else if (action === 'EXECUTE_SQUARE_API') {
@@ -92,7 +113,6 @@ export const executeSquareAgent = async ({ toolInput, ephemeralSecrets }: ToolEx
 
             const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
             const fullUrl = `${baseUrl}${cleanEndpoint}`;
-
             let parsedPayload = safeJsonObject(payload);
 
             const isPost = method.toUpperCase() === 'POST';
@@ -111,7 +131,7 @@ export const executeSquareAgent = async ({ toolInput, ephemeralSecrets }: ToolEx
                 timeout: TIMEOUT_MS
             });
 
-            return { status: "Success", data: slimSquareResponse(res.data) };
+            return { status: "Success", data: slimSquareResponse(res.data), billingMetrics: baseCost };
         }
 
         return { error: `Unsupported Square action: ${action}` };
