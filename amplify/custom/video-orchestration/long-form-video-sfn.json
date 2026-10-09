@@ -5,7 +5,7 @@
     "AgentWritesScriptAndScenes": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Lambda uses Amazon Nova to write a continuous script and split it into an array of 5-second Luma Ray prompts.",
+      "Comment": "Lambda uses Amazon Nova to write an SSML script and split it into an array of 5-second Luma Ray prompts.",
       "Parameters": {
         "FunctionName": "SCRIPT_WRITER_LAMBDA_ARN",
         "Payload.$": "$"
@@ -23,10 +23,11 @@
             "StartPollyMasterAudio": {
               "Type": "Task",
               "Resource": "arn:aws:states:::aws-sdk:polly:startSpeechSynthesisTask",
-              "Comment": "Async Polly job for long-form text -> S3",
+              "Comment": "Async Polly job for long-form SSML -> S3",
               "Parameters": {
                 "Engine": "generative",
                 "OutputFormat": "mp3",
+                "TextType": "ssml",
                 "Text.$": "$.ScriptData.Payload.FullScriptText",
                 "VoiceId.$": "$.voiceId",
                 "OutputS3BucketName.$": "$.outputBucket",

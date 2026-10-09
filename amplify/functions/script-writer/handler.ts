@@ -8,11 +8,14 @@ export const handler = async (event: any) => {
     const { topic, targetDurationMinutes, totalClipsToGenerate, outputBucket, style } = event;
     const safeClipsCount = Math.min(totalClipsToGenerate, 150);
     const systemPrompt = `You are a Hollywood director. The user wants a ${targetDurationMinutes}-minute video about: "${topic}". Style: ${style}.
-    Write a continuous voiceover script (roughly ${safeClipsCount * 12} words).
+    Write a continuous voiceover script (roughly ${safeClipsCount * 12} words). 
+    CRITICAL: Format the 'voiceoverText' strictly as valid SSML wrapped in <speak> tags. To use multiple actors, wrap their dialogue in <voice name="[PollyVoiceId]"> tags. Use voices like "Matthew", "Ruth", "Stephen", or "Danielle".
+    Example: <speak><voice name="Matthew">Welcome back.</voice><voice name="Ruth">Thanks for having me.</voice></speak>
+    
     Then, describe ${safeClipsCount} sequential visual scenes (5 seconds each) that match the script.
     Respond ONLY in this strict JSON format:
     {
-        "voiceoverText": "Full narration text here...",
+        "voiceoverText": "<speak>...</speak>",
         "scenes": [
             { "prompt": "Visual description for scene 1..." },
             { "prompt": "Visual description for scene 2..." }
