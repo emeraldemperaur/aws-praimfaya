@@ -48,7 +48,7 @@
                 "ReaderConfig": {
                   "InputType": "JSON"
                 },
-                "ItemLocation": {
+                "Parameters": {
                   "Bucket.$": "$.outputBucket",
                   "Key.$": "$.ScriptData.Payload.SceneArrayS3Key"
                 }
