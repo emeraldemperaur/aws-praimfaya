@@ -418,8 +418,7 @@ new cdk.CfnOutput(customStack, 'StripeWebhookUrl', {
 
 const videoEngine = new VideoOrchestration(
   backend.createStack('VideoOrchestrationStack'), 
-  'VideoOrchestration',
-  { scriptWriterLambdaArn: scriptWriterLambda.functionArn }
+  'VideoOrchestration'
 );
 
 const startExecutionPolicy = new iam.PolicyStatement({

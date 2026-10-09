@@ -7,7 +7,7 @@
       "Resource": "arn:aws:states:::lambda:invoke",
       "Comment": "Lambda uses Amazon Nova to write an SSML script and split it into an array of 5-second Luma Ray prompts.",
       "Parameters": {
-        "FunctionName": "SCRIPT_WRITER_LAMBDA_ARN",
+        "FunctionName": "vanguard-script-writer",
         "Payload.$": "$"
       },
       "ResultPath": "$.ScriptData",
@@ -89,7 +89,7 @@
     "WaitForAsyncBedrockCompletion": {
       "Type": "Wait",
       "Seconds": 180,
-      "Comment": "Allow time for Luma and Polly async queues to clear. Usually handled via EventBridge callbacks in prod.",
+      "Comment": "Allow time for Luma and Polly async queues to clear.",
       "Next": "StitchWithMediaConvert"
     },
     "StitchWithMediaConvert": {

@@ -10,17 +10,12 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export interface VideoOrchestrationProps {
-    scriptWriterLambdaArn: string;
-}
-
 export class VideoOrchestration extends Construct {
     public readonly stateMachineArn: string;
 
-    constructor(scope: Construct, id: string, props: VideoOrchestrationProps) {
+    constructor(scope: Construct, id: string) {
         super(scope, id);
         const stack = cdk.Stack.of(this);
-
         const alertsTopic = new sns.Topic(this, 'VanguardVideoAlerts', {
             topicName: 'VanguardVideoAlertsTopic',
             displayName: 'Vanguard Video Engine Alerts'
@@ -63,7 +58,6 @@ export class VideoOrchestration extends Construct {
         let aslDefinition = fs.readFileSync(aslFilePath, 'utf8');
 
         aslDefinition = aslDefinition
-            .replace(/SCRIPT_WRITER_LAMBDA_ARN/g, props.scriptWriterLambdaArn)
             .replace(/MEDIACONVERT_ROLE_ARN/g, mediaConvertRole.roleArn)
             .replace(/SNS_TOPIC_ARN/g, alertsTopic.topicArn)
             .replace(/ACCOUNT_ID/g, stack.account)
